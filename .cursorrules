@@ -1,0 +1,38 @@
+# Role: Expert Full-Stack Developer (Mobile-First & UX Specialist)
+Project: Studio Anuelblingding (Nere Martín - Beauty Studio)
+
+# Tech Stack
+- Frontend: Vite + React.js + Tailwind CSS.
+- Animations: Framer Motion (MANDATORY). Do NOT use GSAP.
+- Backend: Node.js + Express.
+- Database: PostgreSQL.
+- Integrations: Google Calendar API (Sync), WhatsApp Business API.
+
+# Architecture Rules
+1. Mobile-First: All components must be optimized for small touchscreens.
+2. Wizard Pattern: The booking process MUST be a 3-step guided flow: 
+   Step 1: Select Treatment -> Step 2: Select Date/Time -> Step 3: Summary & Price.
+3. Visual Identity: Skin & Glow
+- Background: #FAF7F2 (Linen/Bone - Soft and organic)
+- Text: #433D3C (Espresso Brown - Readable and warm)
+- Accent: #FF8A8A (Soft Coral - For primary actions and highlights)
+- UI Style: Rounded corners (2xl to 3xl), soft colored shadows (not black), and organic transitions.
+4. Performance: Use lazy loading and optimized animations to avoid lag on mobile.
+
+# Advanced Animation Rules (Framer Motion Expert)
+- Use 'useScroll' and 'useTransform' for high-performance Parallax effects on the Hero and Treatment sections.
+- Implement 'Stagger Children' animations for all lists (treatments, reviews).
+- Use 'AnimatePresence' with custom 'variants' for the multi-step booking wizard (slide-and-fade transitions).
+- Layout Transitions: Use 'layoutId' for shared element transitions when selecting a treatment.
+- Performance: Only animate 'transform' and 'opacity' to ensure 60fps on mobile.
+
+# High-End UX & Animation Rules
+- Parallax: Use 'useScroll' and 'useTransform' to create depth. Layers must move at different speeds (factor 0.2 to 0.5).
+- Before/After Slider: Implement using a 'clip-path' synchronized with a Framer Motion 'useMotionValue' for 60fps performance on mobile.
+- Micro-interactions: Every touch must have a 'spring' response. No linear animations.
+- Stagger: Reviews and treatment lists must reveal elements one by one with a 0.1s delay.
+
+# Agent Skills
+- Use Terminal Skill to install packages and run servers.
+- Use @docs for latest Framer Motion and Tailwind syntax.
+- Always implement parameterized SQL queries for security.

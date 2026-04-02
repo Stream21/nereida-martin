@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  /* Skin & Glow — Nereida Martín palette */
+  --color-background: #FAF7F2;
+  --color-on-background: #433D3C;
+  --color-surface: #FAF7F2;
+  --color-on-surface: #433D3C;
+  --color-on-surface-variant: #6B6462;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #F5F0EA;
+  --color-surface-container: #EFEBE5;
+  --color-surface-container-high: #EAE6E0;
+  --color-surface-container-highest: #E4E0DA;
+  --color-surface-dim: #DBD8D3;
+  --color-primary: #FF8A8A;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #FFB5B5;
+  --color-on-primary-container: #5C2020;
+  --color-primary-fixed: #FFD7D7;
+  --color-primary-fixed-dim: #FF8A8A;
+  --color-secondary: #C9887A;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #FFDAD1;
+  --color-on-secondary-container: #6B3A30;
+  --color-tertiary: #8B7D6B;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #D4C4AE;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-outline: #9E9490;
+  --color-outline-variant: #D8CEC8;
+  --color-inverse-surface: #433D3C;
+  --color-inverse-on-surface: #FAF7F2;
+  --color-inverse-primary: #FFB5B5;
+
+  /* Font families */
+  --font-headline: "Cormorant Garamond", serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-label: "DM Sans", sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 24;
+}
+
+.coral-gradient {
+  background: linear-gradient(135deg, #FF8A8A, #FFB5B5);
+}
+
+.editorial-shadow {
+  box-shadow: 0 20px 40px rgba(255, 138, 138, 0.08);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer-overlay {
+  background: linear-gradient(
+    120deg,
+    transparent 25%,
+    rgba(255, 138, 138, 0.10) 50%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.5s ease-in-out infinite;
+}

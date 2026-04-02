@@ -1,0 +1,65 @@
+const { Router } = require('express');
+const { query } = require('../db/pool');
+
+const router = Router();
+
+router.get('/reminders', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const expected = `Bearer ${process.env.CRON_SECRET}`;
+
+  if (!process.env.CRON_SECRET || authHeader !== expected) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const now = new Date();
+    const sixAndHalfHours = new Date(now.getTime() + 6.5 * 60 * 60 * 1000);
+
+    const result = await query(
+      `SELECT b.id, b.start_time, b.end_time,
+              c.name AS client_name, c.email AS client_email,
+              t.name AS treatment_name, t.tag AS treatment_tag
+       FROM bookings b
+       JOIN clients c ON b.client_id = c.id
+       JOIN treatments t ON b.treatment_id = t.id
+       WHERE b.status = 'confirmed'
+         AND b.reminder_sent = false
+         AND b.start_time > $1
+         AND b.start_time <= $2`,
+      [now.toISOString(), sixAndHalfHours.toISOString()]
+    );
+
+    let sent = 0;
+    const errors = [];
+
+    for (const row of result.rows) {
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendReminder({
+          to: row.client_email,
+          clientName: row.client_name,
+          treatment: { name: row.treatment_name, tag: row.treatment_tag },
+          startTime: new Date(row.start_time),
+          endTime: new Date(row.end_time),
+        });
+
+        await query('UPDATE bookings SET reminder_sent = true WHERE id = $1', [row.id]);
+        sent++;
+      } catch (err) {
+        errors.push({ bookingId: row.id, error: err.message });
+      }
+    }
+
+    res.json({
+      processed: result.rows.length,
+      sent,
+      errors: errors.length > 0 ? errors : undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Cron reminders error:', err);
+    res.status(500).json({ error: 'Error procesando recordatorios' });
+  }
+});
+
+module.exports = router;
