@@ -37,7 +37,7 @@ function AnimatedCheck({ isSelected }) {
     <div
       className={`relative w-7 h-7 rounded-full shrink-0 transition-all duration-300 ${
         isSelected
-          ? 'bg-linear-to-br from-primary to-primary/80 shadow-[0_2px_8px_rgba(255,138,138,0.4)] scale-105'
+          ? 'bg-linear-to-br from-primary to-primary/80 shadow-[0_2px_8px_rgba(183,139,125,0.4)] scale-105'
           : 'border-2 border-outline-variant/30 group-hover:border-primary/40'
       }`}
     >
@@ -183,7 +183,7 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
                 onClick={() => onSelect(treatment)}
                 className={`group w-full text-left px-5 py-4 rounded-2xl transition-colors duration-300 ${
                   isSelected
-                    ? 'bg-primary/8 ring-2 ring-primary/25 shadow-[0_2px_12px_rgba(255,138,138,0.12)]'
+                    ? 'bg-primary/8 ring-2 ring-primary/25 shadow-[0_2px_12px_rgba(183,139,125,0.14)]'
                     : 'bg-surface-container-lowest hover:bg-surface-container-low border border-outline-variant/10'
                 }`}
               >

@@ -33,11 +33,11 @@ export default function BookingCTA() {
               decoding="async"
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-linear-to-t md:bg-linear-to-r from-surface-container-highest/90 via-surface-container-highest/40 to-transparent md:from-transparent md:via-transparent md:to-surface-container-highest/90" />
+            <div className="absolute inset-0 bg-linear-to-t md:bg-linear-to-r from-primary-container/90 via-primary-container/35 to-transparent md:from-transparent md:via-transparent md:to-primary-container/90" />
           </div>
 
-          {/* Content side */}
-          <div className="bg-surface-container-highest p-10 md:p-14 flex flex-col justify-center relative">
+          {/* Content side — marrón marca muy suave, texto oscuro */}
+          <div className="bg-primary-container p-10 md:p-14 flex flex-col justify-center relative">
             <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
 
             <h2 className="font-headline text-3xl md:text-4xl mb-4 text-on-surface relative z-10">

@@ -9,11 +9,11 @@ import { useNavigate } from 'react-router-dom'
 import GoldButton from '../ui/GoldButton'
 
 const floatingShapes = [
-  { size: 320, top: '-8%', right: '-5%', delay: 0, duration: 20, color: 'rgba(255,138,138,0.07)' },
-  { size: 260, bottom: '5%', left: '-8%', delay: 3, duration: 24, color: 'rgba(201,136,122,0.06)' },
-  { size: 180, top: '55%', right: '20%', delay: 5, duration: 18, color: 'rgba(255,181,181,0.08)' },
-  { size: 220, top: '10%', left: '25%', delay: 1.5, duration: 22, color: 'rgba(255,215,215,0.07)' },
-  { size: 120, bottom: '25%', right: '35%', delay: 4, duration: 16, color: 'rgba(255,138,138,0.05)' },
+  { size: 320, top: '-8%', right: '-5%', delay: 0, duration: 20, color: 'rgba(183,139,125,0.07)' },
+  { size: 260, bottom: '5%', left: '-8%', delay: 3, duration: 24, color: 'rgba(143,114,106,0.06)' },
+  { size: 180, top: '55%', right: '20%', delay: 5, duration: 18, color: 'rgba(212,181,170,0.08)' },
+  { size: 220, top: '10%', left: '25%', delay: 1.5, duration: 22, color: 'rgba(197,168,158,0.07)' },
+  { size: 120, bottom: '25%', right: '35%', delay: 4, duration: 16, color: 'rgba(183,139,125,0.05)' },
 ]
 
 const services = [
@@ -87,9 +87,9 @@ export default function HeroSection() {
     >
       {/* Background layers */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_40%,rgba(255,138,138,0.08),transparent_70%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_15%_80%,rgba(201,136,122,0.06),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_85%_20%,rgba(255,215,215,0.10),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_40%,rgba(183,139,125,0.08),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_15%_80%,rgba(143,114,106,0.06),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_85%_20%,rgba(229,212,206,0.12),transparent_55%)]" />
       </div>
 
       {/* Floating blobs */}
@@ -101,7 +101,7 @@ export default function HeroSection() {
       <div
         className="absolute inset-0 z-0 opacity-[0.025] pointer-events-none"
         style={{
-          backgroundImage: 'radial-gradient(circle, rgba(67,61,60,0.5) 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(circle, rgba(28,25,23,0.45) 1px, transparent 1px)',
           backgroundSize: '32px 32px',
         }}
       />

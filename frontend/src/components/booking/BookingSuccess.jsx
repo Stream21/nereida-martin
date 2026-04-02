@@ -44,7 +44,7 @@ export default function BookingSuccess({ bookingData, onClose }) {
         variants={circleVariants}
         initial="hidden"
         animate="visible"
-        className="w-20 h-20 mx-auto mb-6 rounded-full bg-linear-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_8px_24px_rgba(255,138,138,0.35)]"
+        className="w-20 h-20 mx-auto mb-6 rounded-full bg-linear-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_8px_24px_rgba(183,139,125,0.35)]"
       >
         <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
           <motion.path

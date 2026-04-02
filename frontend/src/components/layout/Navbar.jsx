@@ -133,8 +133,8 @@ export default function Navbar() {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               style={{
                 boxShadow: scrolled
-                  ? '0 8px 20px rgba(255, 138, 138, 0.06)'
-                  : '0 16px 40px rgba(255, 138, 138, 0.10)',
+                  ? '0 8px 20px rgba(183, 139, 125, 0.08)'
+                  : '0 16px 40px rgba(183, 139, 125, 0.12)',
               }}
             >
               <motion.img

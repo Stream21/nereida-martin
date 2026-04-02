@@ -216,7 +216,7 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
                       !slot.available
                         ? 'bg-surface-container-low/50 text-outline/30 cursor-not-allowed line-through'
                         : isActive
-                          ? 'bg-primary-container text-on-primary-container font-bold shadow-[0_10px_20px_rgba(212,175,55,0.2)]'
+                          ? 'bg-primary-container text-on-primary-container font-bold shadow-[0_10px_20px_rgba(183,139,125,0.22)]'
                           : 'border border-outline-variant/20 text-on-surface hover:bg-surface-container-high'
                     }`}
                   >

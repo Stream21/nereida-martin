@@ -1,39 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  /* Skin & Glow — Nereida Martín palette */
-  --color-background: #FAF7F2;
-  --color-on-background: #433D3C;
-  --color-surface: #FAF7F2;
-  --color-on-surface: #433D3C;
-  --color-on-surface-variant: #6B6462;
+  /* Editorial — blanco / negro / marca #B78B7D */
+  --color-background: #FAFAF9;
+  --color-on-background: #1C1917;
+  --color-surface: #FAFAF9;
+  --color-on-surface: #1C1917;
+  --color-on-surface-variant: #57534E;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #F5F0EA;
-  --color-surface-container: #EFEBE5;
-  --color-surface-container-high: #EAE6E0;
-  --color-surface-container-highest: #E4E0DA;
-  --color-surface-dim: #DBD8D3;
-  --color-primary: #FF8A8A;
+  --color-surface-container-low: #F5F5F4;
+  --color-surface-container: #EFEEED;
+  --color-surface-container-high: #E7E5E4;
+  --color-surface-container-highest: #D6D3D1;
+  --color-surface-dim: #CCC9C6;
+  --color-primary: #B78B7D;
   --color-on-primary: #ffffff;
-  --color-primary-container: #FFB5B5;
-  --color-on-primary-container: #5C2020;
-  --color-primary-fixed: #FFD7D7;
-  --color-primary-fixed-dim: #FF8A8A;
-  --color-secondary: #C9887A;
+  --color-primary-container: #E5D4CE;
+  --color-on-primary-container: #3D2B24;
+  --color-primary-fixed: #F0E6E2;
+  --color-primary-fixed-dim: #C9A89C;
+  --color-secondary: #8F726A;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #FFDAD1;
-  --color-on-secondary-container: #6B3A30;
-  --color-tertiary: #8B7D6B;
+  --color-secondary-container: #E0D5D1;
+  --color-on-secondary-container: #2D2420;
+  --color-tertiary: #6B6460;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #D4C4AE;
+  --color-tertiary-container: #D4D1CE;
   --color-error: #ba1a1a;
   --color-on-error: #ffffff;
   --color-error-container: #ffdad6;
-  --color-outline: #9E9490;
-  --color-outline-variant: #D8CEC8;
-  --color-inverse-surface: #433D3C;
-  --color-inverse-on-surface: #FAF7F2;
-  --color-inverse-primary: #FFB5B5;
+  --color-outline: #A8A29E;
+  --color-outline-variant: #D6D3D1;
+  --color-inverse-surface: #1C1917;
+  --color-inverse-on-surface: #FAFAF9;
+  --color-inverse-primary: #D4B5AA;
 
   /* Font families */
   --font-headline: "Cormorant Garamond", serif;
@@ -58,12 +58,13 @@ body {
   font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 24;
 }
 
+/* Clase histórica: mismo nombre para no tocar todos los imports; ahora es gradiente marca */
 .coral-gradient {
-  background: linear-gradient(135deg, #FF8A8A, #FFB5B5);
+  background: linear-gradient(135deg, #B78B7D, #D4B5AA);
 }
 
 .editorial-shadow {
-  box-shadow: 0 20px 40px rgba(255, 138, 138, 0.08);
+  box-shadow: 0 20px 40px rgba(183, 139, 125, 0.1);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -83,7 +84,7 @@ body {
   background: linear-gradient(
     120deg,
     transparent 25%,
-    rgba(255, 138, 138, 0.10) 50%,
+    rgba(183, 139, 125, 0.12) 50%,
     transparent 75%
   );
   background-size: 200% 100%;
