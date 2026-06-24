@@ -28,11 +28,12 @@ router.get('/reminders', async (req, res) => {
               t.name AS treatment_name, t.tag AS treatment_tag
        FROM bookings b
        JOIN clients c ON b.client_id = c.id
-       JOIN treatments t ON b.treatment_id = t.id
+       LEFT JOIN treatments t ON b.treatment_id = t.id
        WHERE b.status = 'confirmed'
          AND b.reminder_sent = false
          AND b.start_time > $1
-         AND b.start_time <= $2`,
+         AND b.start_time <= $2
+         AND c.email != 'imported@studio.local'`,
       [now.toISOString(), sixAndHalfHours.toISOString()]
     );
 

@@ -423,7 +423,7 @@ router.get('/:id/calendar', async (req, res) => {
     const result = await query(
       `SELECT b.start_time, b.end_time, t.name, t.tag, c.name AS client_name
        FROM bookings b
-       JOIN treatments t ON b.treatment_id = t.id
+       LEFT JOIN treatments t ON b.treatment_id = t.id
        JOIN clients c ON b.client_id = c.id
        WHERE b.id = $1`,
       [req.params.id]
@@ -436,7 +436,7 @@ router.get('/:id/calendar', async (req, res) => {
     const row = result.rows[0];
     const calendarFile = require('../services/calendarFile');
     const icsContent = calendarFile.generateICS({
-      title: `${row.name} – Studio Anuelblingding`,
+      title: `${row.name || 'Cita'} – Studio Anuelblingding`,
       startTime: new Date(row.start_time),
       endTime: new Date(row.end_time),
       description: `${row.name}: ${row.tag}`,

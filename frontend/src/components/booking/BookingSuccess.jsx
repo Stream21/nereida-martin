@@ -24,7 +24,7 @@ const circleVariants = {
 export default function BookingSuccess({ bookingData, onClose }) {
   if (!bookingData) return null
 
-  const { booking, icsUrl, googleCalendarUrl, client } = bookingData
+  const { booking, icsUrl, googleCalendarUrl, client, cancelUrl, cancellationDeadline } = bookingData
   const startDate = new Date(booking.startTime)
   const endDate = new Date(booking.endTime)
   const dateLabel = format(startDate, "EEEE, d 'de' MMMM", { locale: es })
@@ -133,6 +133,30 @@ export default function BookingSuccess({ bookingData, onClose }) {
           <span className="text-sm font-medium">Descargar .ics (iPhone / Outlook)</span>
         </a>
       </motion.div>
+
+      {(cancelUrl || cancellationDeadline) && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.88, duration: 0.4 }}
+          className="mt-6 bg-primary/5 rounded-2xl p-5 border border-primary/10 text-left"
+        >
+          <p className="text-xs text-on-surface-variant leading-relaxed mb-3">
+            Puedes cancelar hasta el día anterior a tu cita, a la misma hora.
+            {cancellationDeadline && (
+              <> Plazo límite: <strong>{cancellationDeadline}</strong>.</>
+            )}
+          </p>
+          {cancelUrl && (
+            <a
+              href={cancelUrl}
+              className="text-sm font-medium text-primary underline underline-offset-2"
+            >
+              Cancelar esta cita
+            </a>
+          )}
+        </motion.div>
+      )}
 
       {/* Back button */}
       <motion.div

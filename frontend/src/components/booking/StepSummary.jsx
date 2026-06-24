@@ -178,8 +178,8 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
             <Icon name="info" className="text-primary shrink-0 mt-0.5 text-lg" />
             <div>
               <p className="text-sm text-on-surface-variant leading-relaxed">
-                Recibirás un email de confirmación y un recordatorio 6 horas antes de tu cita.
-                Puedes cancelar o reprogramar sin cargo hasta 24 horas antes.
+                Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita.
+                Puedes cancelar hasta el día anterior a tu cita, a la misma hora. Ejemplo: cita el sábado a las 16:00 → cancelación hasta el viernes a las 16:00.
               </p>
             </div>
           </div>

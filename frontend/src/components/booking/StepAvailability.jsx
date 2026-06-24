@@ -36,8 +36,19 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   const [currentMonth, setCurrentMonth] = useState(() => selectedDate || new Date())
   const [slots, setSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [bookingStartDate, setBookingStartDate] = useState(null)
 
   const today = startOfDay(new Date())
+  const goLiveDay = bookingStartDate ? startOfDay(new Date(`${bookingStartDate}T12:00:00`)) : today
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/settings/public`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.bookingStartDate) setBookingStartDate(data.bookingStartDate)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!selectedDate || !treatmentId) {
@@ -130,8 +141,9 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
             const inMonth = isSameMonth(day, currentMonth)
             const isSelected = selectedDate && isSameDay(day, selectedDate)
             const isPast = isBefore(day, today)
+            const isBeforeGoLive = isBefore(day, goLiveDay)
             const isWeekendDay = isWeekend(day)
-            const isDisabled = !inMonth || isPast || isWeekendDay
+            const isDisabled = !inMonth || isPast || isBeforeGoLive || isWeekendDay
 
             return (
               <motion.button

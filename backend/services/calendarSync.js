@@ -5,6 +5,7 @@ const studioSettings = require('./studioSettings');
 const {
   buildWebBookingSummary,
   buildWebBookingDescription,
+  isWebBookingEvent,
 } = require('../utils/webCalendarEvent');
 
 const OPEN_HOUR = 10;
@@ -71,6 +72,23 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
   const existing = await getBookingByGoogleEventId(event.id);
   const cancelled = isCancelledEvent(event);
   const googleUpdatedAt = event.updated ? new Date(event.updated) : null;
+
+  const webBookingId = event.extendedProperties?.private?.bookingId;
+  if (!existing && webBookingId && isWebBookingEvent(event)) {
+    const webBooking = await query('SELECT * FROM bookings WHERE id = $1', [webBookingId]);
+    if (webBooking.rows.length > 0) {
+      if (dryRun) {
+        return { action: 'would_link_web', eventId: event.id, bookingId: webBookingId };
+      }
+      await query(
+        `UPDATE bookings SET google_event_id = $1, google_etag = $2, google_updated_at = $3,
+         last_sync_source = 'google', updated_at = NOW()
+         WHERE id = $4 AND google_event_id IS NULL`,
+        [event.id, event.etag || null, googleUpdatedAt?.toISOString() || null, webBookingId]
+      );
+      return { action: 'linked_web', eventId: event.id, bookingId: webBookingId };
+    }
+  }
 
   if (existing && shouldSkipAntiLoop(existing)) {
     return { action: 'skipped', reason: 'anti_loop', eventId: event.id };

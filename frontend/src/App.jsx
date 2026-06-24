@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 
 const Home = lazy(() => import('./pages/Home'))
 const Booking = lazy(() => import('./pages/Booking'))
+const CancelBooking = lazy(() => import('./pages/CancelBooking'))
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/reservar" element={<Booking />} />
+        <Route path="/cancelar/:token" element={<CancelBooking />} />
       </Routes>
     </Suspense>
   )
