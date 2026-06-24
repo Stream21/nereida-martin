@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { query } = require('../db/pool');
+const studioSettings = require('../services/studioSettings');
 
 const router = Router();
 
@@ -15,14 +16,20 @@ router.get('/', async (req, res) => {
       return res.status(400).json({ error: 'date y treatmentId son obligatorios' });
     }
 
-    const parsedDate = new Date(date);
+    const parsedDate = new Date(`${date}T12:00:00`);
     if (isNaN(parsedDate.getTime())) {
       return res.status(400).json({ error: 'Fecha inválida' });
     }
 
+    const bookingStartDate = await studioSettings.getBookingStartDate();
+    const bookingStart = new Date(`${bookingStartDate}T00:00:00`);
+    if (parsedDate < bookingStart) {
+      return res.json({ slots: [], date, treatmentId, bookingStartDate });
+    }
+
     const day = parsedDate.getDay();
     if (day === 0 || day === 6) {
-      return res.json({ slots: [] });
+      return res.json({ slots: [], date, treatmentId, bookingStartDate });
     }
 
     const treatmentResult = await query(
@@ -37,7 +44,7 @@ router.get('/', async (req, res) => {
     const treatment = treatmentResult.rows[0];
     const blockDuration = treatment.duration_max || treatment.duration_min;
 
-    const dateStr = parsedDate.toISOString().split('T')[0];
+    const dateStr = date;
     const dayStart = new Date(`${dateStr}T${String(OPEN_HOUR).padStart(2, '0')}:00:00`);
     const dayEnd = new Date(`${dateStr}T${String(CLOSE_HOUR).padStart(2, '0')}:00:00`);
 
@@ -88,7 +95,7 @@ router.get('/', async (req, res) => {
       cursor.setMinutes(cursor.getMinutes() + SLOT_INCREMENT);
     }
 
-    res.json({ slots, date: dateStr, treatmentId });
+    res.json({ slots, date: dateStr, treatmentId, bookingStartDate });
   } catch (err) {
     console.error('Error fetching availability:', err);
     res.status(500).json({ error: 'Error al obtener disponibilidad' });

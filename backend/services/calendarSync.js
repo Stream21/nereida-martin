@@ -375,7 +375,11 @@ async function reconcileMissingGoogleEvents() {
 }
 
 async function ensureWatchChannel() {
-  const webhookUrl = process.env.GOOGLE_WEBHOOK_URL;
+  const webhookUrl =
+    process.env.GOOGLE_WEBHOOK_URL ||
+    (process.env.BACKEND_URL
+      ? `${process.env.BACKEND_URL.replace(/\/$/, '')}/api/webhooks/google-calendar`
+      : null);
   if (!webhookUrl) {
     console.warn('GOOGLE_WEBHOOK_URL not set — calendar push notifications disabled');
     return null;

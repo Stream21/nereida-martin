@@ -1,4 +1,6 @@
-function validateBooking(req, res, next) {
+const studioSettings = require('../services/studioSettings');
+
+async function validateBooking(req, res, next) {
   const { treatmentId, startTime, clientName, clientEmail } = req.body;
 
   const errors = [];
@@ -33,6 +35,17 @@ function validateBooking(req, res, next) {
 
     if (date <= new Date()) {
       errors.push('La fecha debe ser futura');
+    }
+
+    try {
+      const bookingStartDate = await studioSettings.getBookingStartDate();
+      const bookingStart = new Date(`${bookingStartDate}T00:00:00`);
+      const appointmentDay = new Date(date.toISOString().split('T')[0] + 'T00:00:00');
+      if (appointmentDay < bookingStart) {
+        errors.push(`Las reservas online están disponibles a partir del ${bookingStartDate}`);
+      }
+    } catch {
+      // continue if settings unavailable
     }
   }
 
