@@ -172,7 +172,17 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
           exit="exit"
           className="space-y-3"
         >
-          {filteredTreatments.map((treatment) => {
+          {filteredTreatments.length === 0 ? (
+            <motion.div
+              variants={cardVariants}
+              className="text-center py-12 px-4 rounded-2xl bg-surface-container-low border border-outline-variant/10"
+            >
+              <Icon name="spa" className="text-3xl text-on-surface-variant/40 mb-3" />
+              <p className="text-sm text-on-surface-variant">
+                No hay tratamientos en esta categoría
+              </p>
+            </motion.div>
+          ) : filteredTreatments.map((treatment) => {
             const isSelected = selectedTreatment?.id === treatment.id
 
             return (

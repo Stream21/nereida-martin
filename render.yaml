@@ -1,0 +1,71 @@
+# Render Blueprint — Studio Anuelblingding
+# Deploy: Dashboard → New → Blueprint → conectar repo
+
+databases:
+  - name: nere-db
+    plan: free
+    databaseName: nere_studio
+    user: nere
+
+services:
+  - type: web
+    name: nere-studio
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: >-
+      cd frontend && npm ci && npm run build &&
+      cd ../backend && npm ci
+    startCommand: cd backend && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nere-db
+          property: connectionString
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: nere-studio
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: nere-studio
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true
+
+  - type: cron
+    name: nere-reminders
+    runtime: node
+    schedule: "*/30 * * * *"
+    buildCommand: cd backend && npm ci
+    startCommand: node scripts/trigger-reminders.js
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: nere-studio
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: nere-studio
+          envVarKey: CRON_SECRET

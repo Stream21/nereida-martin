@@ -40,22 +40,34 @@ export default function Booking() {
 
   const [treatments, setTreatments] = useState([])
   const [loadingTreatments, setLoadingTreatments] = useState(true)
+  const [treatmentsError, setTreatmentsError] = useState(null)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [bookingResult, setBookingResult] = useState(null)
   const [bookingError, setBookingError] = useState(null)
 
-  useEffect(() => {
+  const loadTreatments = useCallback(() => {
+    setLoadingTreatments(true)
+    setTreatmentsError(null)
     fetch(`${API_URL}/api/treatments`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        if (!res.ok) throw new Error('fetch failed')
+        const data = await res.json()
+        if (!Array.isArray(data)) throw new Error('invalid data')
         setTreatments(data)
-        setLoadingTreatments(false)
       })
       .catch(() => {
+        setTreatments([])
+        setTreatmentsError('No se pudieron cargar los tratamientos. Comprueba que el servidor esté en marcha.')
+      })
+      .finally(() => {
         setLoadingTreatments(false)
       })
   }, [])
+
+  useEffect(() => {
+    loadTreatments()
+  }, [loadTreatments])
 
   const canAdvance =
     (step === 0 && selectedTreatment) ||
@@ -217,6 +229,18 @@ export default function Booking() {
                 <div className="flex items-center justify-center py-20">
                   <div className="w-8 h-8 rounded-full border-2 border-primary-container border-t-transparent animate-spin" />
                 </div>
+              ) : treatmentsError ? (
+                <div className="text-center py-16 px-4">
+                  <Icon name="cloud_off" className="text-4xl text-on-surface-variant/50 mb-4" />
+                  <p className="text-sm text-on-surface-variant mb-6">{treatmentsError}</p>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={loadTreatments}
+                    className="px-6 py-3 rounded-2xl bg-primary text-white text-sm font-label font-bold tracking-wide"
+                  >
+                    Reintentar
+                  </motion.button>
+                </div>
               ) : (
                 <StepTreatments
                   treatments={treatments}
@@ -274,6 +298,11 @@ export default function Booking() {
             transition={{ duration: 0.4, delay: 0.2 }}
             className="mt-8"
           >
+            {step === 0 && !selectedTreatment && treatments.length > 0 && (
+              <p className="text-center text-xs text-on-surface-variant mb-3">
+                Toca un tratamiento de la lista para continuar
+              </p>
+            )}
             <motion.button
               whileTap={canAdvance ? { scale: 0.97 } : {}}
               onClick={goNext}

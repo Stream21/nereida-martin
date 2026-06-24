@@ -1,15 +1,22 @@
 const { Router } = require('express');
 const { query } = require('../db/pool');
+const calendarSync = require('../services/calendarSync');
 
 const router = Router();
 
-router.get('/reminders', async (req, res) => {
+function authorizeCron(req, res) {
   const authHeader = req.headers.authorization;
   const expected = `Bearer ${process.env.CRON_SECRET}`;
 
   if (!process.env.CRON_SECRET || authHeader !== expected) {
-    return res.status(401).json({ error: 'No autorizado' });
+    res.status(401).json({ error: 'No autorizado' });
+    return false;
   }
+  return true;
+}
+
+router.get('/reminders', async (req, res) => {
+  if (!authorizeCron(req, res)) return;
 
   try {
     const now = new Date();
@@ -59,6 +66,33 @@ router.get('/reminders', async (req, res) => {
   } catch (err) {
     console.error('Cron reminders error:', err);
     res.status(500).json({ error: 'Error procesando recordatorios' });
+  }
+});
+
+router.get('/calendar-sync', async (req, res) => {
+  if (!authorizeCron(req, res)) return;
+
+  try {
+    const syncResult = await calendarSync.syncIncremental();
+    await calendarSync.reconcilePendingGoogleDeletes();
+    await calendarSync.reconcileMissingGoogleEvents();
+
+    let watchRenewed = false;
+    try {
+      const channel = await calendarSync.ensureWatchChannel();
+      watchRenewed = !!channel;
+    } catch (err) {
+      console.error('Watch renewal failed:', err.message);
+    }
+
+    res.json({
+      sync: syncResult,
+      watchRenewed,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Cron calendar-sync error:', err);
+    res.status(500).json({ error: 'Error en sincronización de calendario' });
   }
 });
 
