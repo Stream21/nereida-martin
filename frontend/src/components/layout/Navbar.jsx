@@ -8,9 +8,9 @@ const NAV_LINKS = [
   { label: 'Inicio', href: '#hero', icon: 'home' },
   { label: 'Sobre mí', href: '#about', icon: 'person' },
   { label: 'Servicios', href: '#treatments', icon: 'auto_awesome' },
-  { label: 'Resultados', href: '#before-after', icon: 'compare' },
+  { label: 'Galería', href: '#gallery', icon: 'photo_library' },
   { label: 'Reseñas', href: '#reviews', icon: 'reviews' },
-  { label: 'Contacto', href: '#contact', icon: 'location_on' },
+  { label: 'Contacto', href: '#contact', icon: 'contact_mail' },
 ]
 
 const overlayVariants = {
@@ -76,11 +76,14 @@ export default function Navbar() {
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
 
-          <button onClick={() => scrollTo('#hero')} className="flex items-center">
+          <button
+            onClick={() => scrollTo('#hero')}
+            className={`flex items-center transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          >
             <img
-              src="/logo-transparent-svg.svg"
-              alt="Nereida Martín"
-              className="h-14 w-auto"
+              src="/logo2.png"
+              alt="Nereida Martín — Brow Artist"
+              className="h-10 w-auto"
             />
           </button>
 
@@ -117,34 +120,16 @@ export default function Navbar() {
             ))}
           </div>
 
-          {/* Crescent logo — overflows below the bar */}
+          {/* Center logo — fades in once the hero logo scrolls away */}
           <button
             onClick={() => scrollTo('#hero')}
-            className="absolute left-1/2 -translate-x-1/2 top-0 flex flex-col items-center z-10"
+            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
-            <motion.div
-              className="relative flex items-center justify-center rounded-b-[50%] bg-background/95 backdrop-blur-xl"
-              animate={{
-                paddingLeft: scrolled ? 32 : 56,
-                paddingRight: scrolled ? 32 : 56,
-                paddingTop: scrolled ? 6 : 10,
-                paddingBottom: scrolled ? 14 : 40,
-              }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              style={{
-                boxShadow: scrolled
-                  ? '0 8px 20px rgba(183, 139, 125, 0.08)'
-                  : '0 16px 40px rgba(183, 139, 125, 0.12)',
-              }}
-            >
-              <motion.img
-                src="/logo-transparent-svg.svg"
-                alt="Nereida Martín"
-                className="w-auto"
-                animate={{ height: scrolled ? 80 : 160 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              />
-            </motion.div>
+            <img
+              src="/logo2.png"
+              alt="Nereida Martín — Brow Artist"
+              className="h-10 w-auto"
+            />
           </button>
 
           {/* Right links + CTA */}
@@ -179,18 +164,18 @@ export default function Navbar() {
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-60 bg-background flex flex-col lg:hidden"
           >
-            {/* Menu header */}
-            <div className="flex items-center justify-between px-6 py-4">
+            {/* Menu header — logo centered */}
+            <div className="relative flex items-center justify-center px-6 py-4">
               <button onClick={() => scrollTo('#hero')} className="flex items-center">
                 <img
-                  src="/logo-transparent-svg.svg"
-                  alt="Nereida Martín"
-                  className="h-16 w-auto"
+                  src="/logo2.png"
+                  alt="Nereida Martín — Brow Artist"
+                  className="h-12 w-auto"
                 />
               </button>
               <button
                 onClick={() => setMenuOpen(false)}
-                className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform"
+                className="absolute right-6 w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform"
                 aria-label="Cerrar menú"
               >
                 <Icon name="close" />
@@ -242,7 +227,7 @@ export default function Navbar() {
                 variants={prefersReducedMotion ? {} : menuItemVariants}
                 className="mt-8 text-center space-y-2"
               >
-                <p className="text-xs text-on-surface-variant">+34 650 86 38 42</p>
+                <p className="text-xs text-on-surface-variant">+34 641 61 36 14</p>
               </motion.div>
             </motion.nav>
           </motion.div>

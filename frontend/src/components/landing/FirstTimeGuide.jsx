@@ -3,7 +3,7 @@ import useScrollReveal from '../../hooks/useScrollReveal'
 import Icon from '../ui/Icon'
 import GoldButton from '../ui/GoldButton'
 
-const WHATSAPP_URL = 'https://wa.me/34600000000'
+const WHATSAPP_URL = 'https://wa.me/34641613614'
 
 const recommendations = [
   {

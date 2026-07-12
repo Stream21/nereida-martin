@@ -302,9 +302,150 @@ async function sendReminder({ to, clientName, treatment, startTime, endTime }) {
   });
 }
 
+function getOwnerEmail() {
+  return process.env.OWNER_EMAIL || process.env.GMAIL_USER;
+}
+
+function ownerAlertHTML({ title, body, actions }) {
+  const actionButtons = (actions || [])
+    .map(
+      (a) =>
+        `<a href="${a.url}" style="display:inline-block;margin:8px 6px;background:${a.danger ? '#c45c5c' : E.accent};color:${E.white};text-decoration:none;padding:12px 24px;border-radius:12px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${a.label}</a>`
+    )
+    .join('');
+
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"></head>
+  <body style="margin:0;padding:0;background:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
+    <h1 style="color:${E.text};font-size:20px;">${title}</h1>
+    <div style="background:${E.white};border-radius:16px;padding:24px;box-shadow:0 2px 12px ${E.shadow};">
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.6;color:${E.text};margin:0;">${body}</pre>
+      ${actionButtons ? `<div style="text-align:center;margin-top:20px;">${actionButtons}</div>` : ''}
+    </div>
+  </div></body></html>`;
+}
+
+async function sendOwnerAlert({ subject, title, body, actions }) {
+  const to = getOwnerEmail();
+  if (!to) return;
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    to,
+    subject,
+    html: ownerAlertHTML({ title, body, actions }),
+  });
+}
+
+async function sendOwnerFirstVisitAlert(payload) {
+  await sendOwnerAlert({
+    subject: `⭐ Primera visita – ${payload.clientName} | Studio`,
+    title: 'Nueva primera visita al estudio',
+    body: payload.body,
+  });
+}
+
+async function sendOwnerTreatmentFirstAlert(payload) {
+  await sendOwnerAlert({
+    subject: `🆕 Nuevo tratamiento – ${payload.clientName} | Studio`,
+    title: 'Primera vez en un tratamiento',
+    body: payload.body,
+  });
+}
+
+async function sendOwnerFlaggedAlert(payload) {
+  await sendOwnerAlert({
+    subject: `⚠️ Cuestionario marcado – ${payload.clientName} | Studio`,
+    title: 'Revisar cuestionario de aptitud',
+    body: payload.body,
+  });
+}
+
+async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath }) {
+  const to = getOwnerEmail();
+  if (!to) return;
+  const transport = getTransporter();
+  const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+  const attachments = photoPath
+    ? [{ filename: 'cejas-valoracion.jpg', path: require('path').join(__dirname, '..', 'uploads', photoPath) }]
+    : [];
+
+  await transport.sendMail({
+    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `📷 Valoración Henna pendiente | Studio`,
+    html: ownerAlertHTML({
+      title: 'Nueva valoración Brow Henna',
+      body,
+      actions: [
+        { label: 'Aprobar', url: approveUrl },
+        { label: 'Rechazar y cancelar', url: rejectUrl, danger: true },
+      ],
+    }),
+    attachments,
+  });
+}
+
+async function sendClientHennaPending({ to, clientName, treatment, startTime, endTime }) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `⏳ Cita pendiente de valoración – ${treatment.name} | Studio`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${clientName}</strong>,</p>
+        <p>Hemos recibido tu solicitud de <strong>${treatment.name}</strong> para el ${formatDate(startTime)} a las ${formatTime(startTime)}.</p>
+        <p>Tu cita está <strong>pendiente de valoración</strong>. Revisaremos la foto de tus cejas y te confirmaremos por email si eres apta para el tratamiento.</p>
+        <p style="color:${E.muted};font-size:13px;">Si no eres apta, cancelaremos la cita y te lo comunicaremos.</p>
+      </div></body></html>`,
+  });
+}
+
+async function sendClientHennaApproved({ to, clientName, treatment, startTime, endTime }) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `✅ Valoración aprobada – ${treatment.name} | Studio`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${clientName}</strong>,</p>
+        <p>¡Buenas noticias! Tras revisar tu foto, confirmamos que eres apta para <strong>${treatment.name}</strong>.</p>
+        <p>Tu cita del ${formatDate(startTime)} a las ${formatTime(startTime)} queda <strong>confirmada</strong>. Recibirás también el email de confirmación con los detalles.</p>
+      </div></body></html>`,
+  });
+}
+
+async function sendClientHennaRejected({ to, clientName, treatment, startTime }) {
+  const transport = getTransporter();
+  const dateLine = startTime
+    ? ` del ${formatDate(startTime)} a las ${formatTime(startTime)}`
+    : '';
+  await transport.sendMail({
+    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `Valoración Henna – no apta | Studio Anuelblingding`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${clientName}</strong>,</p>
+        <p>Tras valorar la foto de tus cejas, lamentamos informarte que <strong>no eres apta</strong> para el tratamiento de ${treatment.name} en este momento.</p>
+        <p>Tu cita${dateLine} ha sido <strong>cancelada</strong>.</p>
+        <p style="color:${E.muted};font-size:13px;">Si tienes dudas o quieres asesoramiento, escríbenos por WhatsApp. Estaremos encantadas de ayudarte.</p>
+      </div></body></html>`,
+  });
+}
+
 module.exports = {
   sendConfirmation,
   sendCancellationConfirmation,
   sendGoogleChangeNotice,
   sendReminder,
+  sendOwnerFirstVisitAlert,
+  sendOwnerTreatmentFirstAlert,
+  sendOwnerFlaggedAlert,
+  sendOwnerHennaAssessment,
+  sendClientHennaPending,
+  sendClientHennaApproved,
+  sendClientHennaRejected,
 };

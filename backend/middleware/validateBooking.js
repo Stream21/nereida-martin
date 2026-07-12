@@ -1,7 +1,16 @@
 const studioSettings = require('../services/studioSettings');
+const { isOnGrid, SLOT_MINUTES } = require('../utils/slotGrid');
+const { isWeekendDay, slotFitsInWorkWindows, STUDIO_HOURS_LABEL } = require('../utils/studioHours');
+const { formatStudioDate } = require('../utils/studioTimezone');
+
+function isValidPhone(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 9;
+}
 
 async function validateBooking(req, res, next) {
-  const { treatmentId, startTime, clientName, clientEmail } = req.body;
+  const { treatmentId, startTime, clientName, clientEmail, clientPhone } = req.body;
 
   const errors = [];
 
@@ -21,16 +30,27 @@ async function validateBooking(req, res, next) {
     errors.push('clientEmail debe ser un email válido');
   }
 
+  if (!isValidPhone(clientPhone)) {
+    errors.push('clientPhone es obligatorio (mínimo 9 dígitos)');
+  }
+
   if (startTime) {
     const date = new Date(startTime);
-    const day = date.getDay();
-    if (day === 0 || day === 6) {
+    const dateStr = formatStudioDate(date);
+
+    if (isWeekendDay(dateStr)) {
       errors.push('No se aceptan reservas en fin de semana');
     }
 
-    const hours = date.getHours();
-    if (hours < 10 || hours >= 20) {
-      errors.push('El horario laboral es de 10:00 a 20:00');
+    if (!isOnGrid(date)) {
+      errors.push(
+        `La hora debe estar en bloques de ${SLOT_MINUTES} minutos (ej. 10:00, 10:15, 10:30)`
+      );
+    }
+
+    const endProbe = new Date(date.getTime() + SLOT_MINUTES * 60000);
+    if (!slotFitsInWorkWindows(dateStr, date.getTime(), endProbe.getTime())) {
+      errors.push(`El horario laboral es ${STUDIO_HOURS_LABEL}`);
     }
 
     if (date <= new Date()) {
@@ -39,9 +59,7 @@ async function validateBooking(req, res, next) {
 
     try {
       const bookingStartDate = await studioSettings.getBookingStartDate();
-      const bookingStart = new Date(`${bookingStartDate}T00:00:00`);
-      const appointmentDay = new Date(date.toISOString().split('T')[0] + 'T00:00:00');
-      if (appointmentDay < bookingStart) {
+      if (dateStr < bookingStartDate) {
         errors.push(`Las reservas online están disponibles a partir del ${bookingStartDate}`);
       }
     } catch {

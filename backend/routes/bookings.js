@@ -2,11 +2,27 @@ const { Router } = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { query, getClient } = require('../db/pool');
 const validateBooking = require('../middleware/validateBooking');
+const { blockDurationMinutes } = require('../utils/slotGrid');
+const availabilityService = require('../services/availabilityService');
+const { formatStudioDate, formatStudioTime } = require('../utils/studioTimezone');
 const { canCancel, formatDeadlineSpanish, POLICY_TEXT } = require('../utils/cancellationPolicy');
 const {
-  buildWebBookingSummary,
-  buildWebBookingDescription,
+  buildBookingSummary,
+  buildBookingDescription,
+  getEventColorId,
+  formatIntakeSummary,
 } = require('../utils/webCalendarEvent');
+const {
+  isFirstStudioVisit,
+  hasTreatmentBefore,
+  resolveVisitContext,
+} = require('../services/clientService');
+const {
+  evaluateIntakeFlags,
+  getStudioQuestions,
+  getTreatmentQuestions,
+} = require('../config/intakeQuestions');
+const { createOwnerActionToken, buildOwnerActionUrl } = require('../utils/ownerTokens');
 
 const router = Router();
 
@@ -186,17 +202,21 @@ router.patch('/:id', async (req, res) => {
       });
     }
 
-    const blockDuration = booking.duration_max || booking.duration_min || 60;
+    const blockDuration = blockDurationMinutes(
+      booking.duration_max || booking.duration_min || 60
+    );
     const end = new Date(start.getTime() + blockDuration * 60000);
 
-    const conflictResult = await query(
-      `SELECT id FROM bookings
-       WHERE status = 'confirmed' AND id != $1
-         AND start_time < $3 AND end_time > $2`,
-      [booking.id, start.toISOString(), end.toISOString()]
+    const dateStr = formatStudioDate(start);
+    const timeStr = formatStudioTime(start);
+    const slotAvailable = await availabilityService.hasSlotAvailable(
+      dateStr,
+      timeStr,
+      blockDuration,
+      booking.id
     );
 
-    if (conflictResult.rows.length > 0) {
+    if (!slotAvailable) {
       return res.status(409).json({ error: 'Horario no disponible' });
     }
 
@@ -213,8 +233,11 @@ router.patch('/:id', async (req, res) => {
       try {
         const googleCalendar = require('../services/googleCalendar');
         const event = await googleCalendar.updateEvent(booking.google_event_id, {
-          summary: buildWebBookingSummary(booking.treatment_name || 'Cita', booking.client_name),
-          description: buildWebBookingDescription({
+          summary: buildBookingSummary({
+            treatmentName: booking.treatment_name || 'Cita',
+            clientName: booking.client_name,
+          }),
+          description: buildBookingDescription({
             treatmentName: booking.treatment_name || 'Cita',
             treatmentTag: booking.treatment_tag || '',
             clientName: booking.client_name,
@@ -257,11 +280,27 @@ router.post('/', validateBooking, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { treatmentId, startTime, clientName, clientEmail, clientPhone } = req.body;
+    const {
+      treatmentId,
+      startTime,
+      clientName,
+      clientEmail,
+      clientPhone,
+      declaredProfile,
+      consents,
+      intakeAnswers,
+      intakeType,
+      intakeSignature,
+      hennaAssessmentId,
+    } = req.body;
+
+    const requiredConsents = ['privacy', 'booking_terms'];
+    let consentList = Array.isArray(consents) ? [...consents] : [];
+
     const cancelToken = uuidv4();
 
     const treatmentResult = await client.query(
-      'SELECT id, name, tag, duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
+      'SELECT id, name, tag, category, duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
       [treatmentId]
     );
 
@@ -271,20 +310,17 @@ router.post('/', validateBooking, async (req, res) => {
     }
 
     const treatment = treatmentResult.rows[0];
-    const blockDuration = treatment.duration_max || treatment.duration_min;
+    const isHenna = treatmentId === 'brow-henna';
+    const blockDuration = blockDurationMinutes(treatment.duration_max || treatment.duration_min);
 
     const start = new Date(startTime);
     const end = new Date(start.getTime() + blockDuration * 60000);
 
-    const conflictResult = await client.query(
-      `SELECT id FROM bookings
-       WHERE status = 'confirmed'
-         AND start_time < $2
-         AND end_time > $1`,
-      [start.toISOString(), end.toISOString()]
-    );
+    const dateStr = formatStudioDate(start);
+    const timeStr = formatStudioTime(start);
+    const slotAvailable = await availabilityService.hasSlotAvailable(dateStr, timeStr, blockDuration);
 
-    if (conflictResult.rows.length > 0) {
+    if (!slotAvailable) {
       await client.query('ROLLBACK');
       return res.status(409).json({
         error: 'Horario no disponible',
@@ -293,42 +329,220 @@ router.post('/', validateBooking, async (req, res) => {
     }
 
     const clientResult = await client.query(
-      `INSERT INTO clients (name, email, phone)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET name = $1, phone = COALESCE($3, clients.phone)
+      `INSERT INTO clients (name, email, phone, declared_profile)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET
+         name = $1,
+         phone = COALESCE($3, clients.phone),
+         declared_profile = COALESCE($4, clients.declared_profile)
        RETURNING id`,
-      [clientName.trim(), clientEmail.trim().toLowerCase(), clientPhone || null]
+      [
+        clientName.trim(),
+        clientEmail.trim().toLowerCase(),
+        clientPhone.trim(),
+        declaredProfile || null,
+      ]
     );
     const clientId = clientResult.rows[0].id;
 
+    const existingConsents = await client.query(
+      'SELECT consent_type FROM client_consents WHERE client_id = $1',
+      [clientId]
+    );
+    const mergedConsents = [
+      ...new Set([
+        ...consentList,
+        ...existingConsents.rows.map((r) => r.consent_type),
+      ]),
+    ];
+
+    for (const c of requiredConsents) {
+      if (!mergedConsents.includes(c)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Debes aceptar la política de privacidad y las condiciones de reserva' });
+      }
+    }
+    consentList = mergedConsents;
+
+    for (const consentType of consentList) {
+      await client.query(
+        `INSERT INTO client_consents (client_id, consent_type)
+         VALUES ($1, $2)
+         ON CONFLICT (client_id, consent_type) DO UPDATE SET accepted_at = NOW()`,
+        [clientId, consentType]
+      );
+    }
+
+    const firstStudio = await isFirstStudioVisit(clientId);
+    const firstTreatment = !(await hasTreatmentBefore(clientId, treatmentId));
+    const visitContext = resolveVisitContext({ isFirstStudio: firstStudio, isFirstTreatment: firstTreatment });
+
+    let intakeId = null;
+    let flagged = false;
+    let flagReason = null;
+    let intakeSummary = null;
+    let signatureSignerName = null;
+
+    if (intakeAnswers && intakeType) {
+      const questions =
+        intakeType === 'studio'
+          ? getStudioQuestions()
+          : getTreatmentQuestions(treatment.category, treatmentId);
+
+      if (!intakeSignature?.dataUrl || typeof intakeSignature.dataUrl !== 'string') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Debes firmar el cuestionario de aptitud',
+          code: 'SIGNATURE_REQUIRED',
+        });
+      }
+
+      if (!intakeSignature.dataUrl.startsWith('data:image/png;base64,')) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Formato de firma no válido',
+          code: 'INVALID_SIGNATURE',
+        });
+      }
+
+      const signerName = (intakeSignature.signerName || clientName || '').trim();
+      if (signerName.length < 2) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Nombre del firmante requerido',
+          code: 'SIGNER_NAME_REQUIRED',
+        });
+      }
+
+      const flags = evaluateIntakeFlags(questions, intakeAnswers);
+      flagged = flags.length > 0;
+      flagReason = flags.join('; ');
+      intakeSummary = formatIntakeSummary(intakeAnswers);
+
+      if (!consentList.includes('treatment_consent_signed')) {
+        consentList.push('treatment_consent_signed');
+      }
+      if (!consentList.includes('health_data')) {
+        consentList.push('health_data');
+      }
+
+      signatureSignerName = signerName;
+
+      const intakeResult = await client.query(
+        `INSERT INTO booking_intakes (
+           client_id, treatment_id, intake_type, answers, flagged, flag_reason,
+           signature_data, signer_name, signed_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         RETURNING id`,
+        [
+          clientId,
+          treatmentId,
+          intakeType,
+          JSON.stringify(intakeAnswers),
+          flagged,
+          flagReason,
+          intakeSignature.dataUrl,
+          signerName,
+        ]
+      );
+      intakeId = intakeResult.rows[0].id;
+
+      for (const extraConsent of ['treatment_consent_signed', 'health_data']) {
+        await client.query(
+          `INSERT INTO client_consents (client_id, consent_type)
+           VALUES ($1, $2)
+           ON CONFLICT (client_id, consent_type) DO UPDATE SET accepted_at = NOW()`,
+          [clientId, extraConsent]
+        );
+      }
+    }
+
+    const bookingStatus = isHenna ? 'pending_review' : 'confirmed';
+    const reviewType = isHenna ? 'henna_photo' : null;
+
     const bookingResult = await client.query(
-      `INSERT INTO bookings (client_id, treatment_id, start_time, end_time, status, source, cancel_token)
-       VALUES ($1, $2, $3, $4, 'confirmed', 'web', $5)
+      `INSERT INTO bookings (client_id, treatment_id, start_time, end_time, status, source, cancel_token, visit_context, review_type, intake_id)
+       VALUES ($1, $2, $3, $4, $5, 'web', $6, $7, $8, $9)
        RETURNING id, start_time, end_time, status, cancel_token, created_at`,
-      [clientId, treatmentId, start.toISOString(), end.toISOString(), cancelToken]
+      [
+        clientId,
+        treatmentId,
+        start.toISOString(),
+        end.toISOString(),
+        bookingStatus,
+        cancelToken,
+        visitContext,
+        reviewType,
+        intakeId,
+      ]
     );
     const booking = bookingResult.rows[0];
 
+    if (isHenna && hennaAssessmentId) {
+      await client.query(
+        `UPDATE henna_assessments SET booking_id = $1 WHERE id = $2 AND client_id = $3`,
+        [booking.id, hennaAssessmentId, clientId]
+      );
+    }
+
+    await client.query(
+      `UPDATE clients SET
+         first_booking_at = COALESCE(first_booking_at, NOW()),
+         last_booking_at = NOW()
+       WHERE id = $1`,
+      [clientId]
+    );
+
     await client.query('COMMIT');
+
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+    let hennaPhotoUrl = null;
+    if (isHenna && hennaAssessmentId) {
+      const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
+      if (photoRes.rows[0]) {
+        hennaPhotoUrl = `${backendUrl}/uploads/${photoRes.rows[0].photo_path}`;
+      }
+    }
+
+    const pendingReview = bookingStatus === 'pending_review';
+    const summary = buildBookingSummary({
+      treatmentName: treatment.name,
+      clientName,
+      visitContext,
+      reviewType,
+      pendingReview,
+    });
+    const description = buildBookingDescription({
+      treatmentName: treatment.name,
+      treatmentTag: treatment.tag,
+      clientName,
+      clientEmail,
+      clientPhone,
+      bookingId: booking.id,
+      visitContext,
+      reviewType,
+      pendingReview,
+      intakeSummary,
+      signatureSignerName,
+      flagged,
+      flagReason,
+      hennaPhotoUrl,
+    });
+    const colorId = getEventColorId({ visitContext, reviewType, pendingReview, flagged });
 
     let googleEventId = null;
     try {
       const googleCalendar = require('../services/googleCalendar');
       const event = await googleCalendar.createEvent({
-        summary: buildWebBookingSummary(treatment.name, clientName),
-        description: buildWebBookingDescription({
-          treatmentName: treatment.name,
-          treatmentTag: treatment.tag,
-          clientName,
-          clientEmail,
-          clientPhone,
-          bookingId: booking.id,
-        }),
+        summary,
+        description,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         clientEmail,
         isWebBooking: true,
         bookingId: booking.id,
+        colorId,
       });
 
       googleEventId = event.id;
@@ -356,24 +570,74 @@ router.post('/', validateBooking, async (req, res) => {
     let emailSent = false;
     try {
       const emailService = require('../services/emailService');
-      await emailService.sendConfirmation({
-        to: clientEmail,
-        clientName,
-        treatment,
-        startTime: start,
-        endTime: end,
-        bookingId: booking.id,
-        cancelUrl,
-        cancellationDeadline: formatDeadlineSpanish(start),
-      });
-      emailSent = true;
 
-      await query(
-        'UPDATE bookings SET confirmation_sent = true WHERE id = $1',
-        [booking.id]
-      );
+      const ownerBody = [
+        `Cliente: ${clientName}`,
+        `Email: ${clientEmail}`,
+        `Tel: ${clientPhone || 'N/A'}`,
+        `Tratamiento: ${treatment.name} (${treatment.tag})`,
+        `Fecha: ${formatStudioDate(start)} ${formatStudioTime(start)}`,
+        `Perfil declarado: ${declaredProfile || 'N/A'}`,
+        `Contexto: ${visitContext}`,
+        intakeSummary ? `\nCuestionario:\n${intakeSummary}` : '',
+        signatureSignerName ? `\nFirmado por: ${signatureSignerName}` : '',
+      ].join('\n');
+
+      if (visitContext === 'first_studio_visit') {
+        await emailService.sendOwnerFirstVisitAlert({ clientName, body: ownerBody });
+      }
+      if (visitContext === 'first_treatment') {
+        await emailService.sendOwnerTreatmentFirstAlert({ clientName, body: ownerBody });
+      }
+      if (flagged) {
+        await emailService.sendOwnerFlaggedAlert({
+          clientName,
+          body: `${ownerBody}\n\n⚠️ Motivo: ${flagReason}`,
+        });
+      }
+
+      if (isHenna && hennaAssessmentId) {
+        const approveToken = await createOwnerActionToken({
+          action: 'henna_approve',
+          entityType: 'henna_assessment',
+          entityId: hennaAssessmentId,
+        });
+        const rejectToken = await createOwnerActionToken({
+          action: 'henna_reject',
+          entityType: 'henna_assessment',
+          entityId: hennaAssessmentId,
+        });
+        const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
+        await emailService.sendOwnerHennaAssessment({
+          body: ownerBody,
+          approveUrl: buildOwnerActionUrl(approveToken, 'approve'),
+          rejectUrl: buildOwnerActionUrl(rejectToken, 'reject'),
+          photoPath: photoRes.rows[0]?.photo_path,
+        });
+        await emailService.sendClientHennaPending({
+          to: clientEmail,
+          clientName,
+          treatment,
+          startTime: start,
+          endTime: end,
+        });
+        emailSent = true;
+      } else {
+        await emailService.sendConfirmation({
+          to: clientEmail,
+          clientName,
+          treatment,
+          startTime: start,
+          endTime: end,
+          bookingId: booking.id,
+          cancelUrl,
+          cancellationDeadline: formatDeadlineSpanish(start),
+        });
+        emailSent = true;
+        await query('UPDATE bookings SET confirmation_sent = true WHERE id = $1', [booking.id]);
+      }
     } catch (err) {
-      console.error('Confirmation email failed (non-blocking):', err.message);
+      console.error('Email failed (non-blocking):', err.message);
     }
 
     const calendarFile = require('../services/calendarFile');
@@ -390,14 +654,17 @@ router.post('/', validateBooking, async (req, res) => {
         id: booking.id,
         treatmentName: treatment.name,
         treatmentTag: treatment.tag,
+        treatmentId: treatment.id,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         status: booking.status,
+        visitContext,
+        pendingReview: isHenna,
       },
       client: { name: clientName, email: clientEmail },
       cancelUrl,
       cancellationDeadline: formatDeadlineSpanish(start),
-      icsUrl: `${process.env.FRONTEND_URL || ''}/api/bookings/${booking.id}/calendar`,
+      icsUrl: `${frontendUrl}/api/bookings/${booking.id}/calendar`,
       googleCalendarUrl,
       emailSent,
     });

@@ -37,6 +37,7 @@ async function createEvent({
   clientEmail,
   isWebBooking = false,
   bookingId,
+  colorId,
 }) {
   const calendar = getCalendar();
   const calendarId = getCalendarId();
@@ -56,7 +57,7 @@ async function createEvent({
   };
 
   if (isWebBooking && bookingId) {
-    event.colorId = getWebEventColorId();
+    event.colorId = colorId || getWebEventColorId();
     event.extendedProperties = getWebEventExtendedProperties(bookingId);
   }
 
@@ -81,6 +82,7 @@ async function updateEvent(eventId, {
   clientEmail,
   isWebBooking = false,
   bookingId,
+  colorId,
 }) {
   const calendar = getCalendar();
   const calendarId = getCalendarId();
@@ -93,7 +95,7 @@ async function updateEvent(eventId, {
   };
 
   if (isWebBooking && bookingId) {
-    event.colorId = getWebEventColorId();
+    event.colorId = colorId || getWebEventColorId();
     event.extendedProperties = getWebEventExtendedProperties(bookingId);
   }
 

@@ -10,6 +10,9 @@ node_modules/
 # Build output
 frontend/dist/
 
+# Uploaded assessment photos
+backend/uploads/
+
 # Logs
 *.log
 

@@ -1,6 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Icon from '../ui/Icon'
+import {
+  BROW_DESIGN_PRIMERA,
+  BROW_DESIGN_SEGUIMIENTO,
+  filterTreatmentsForClient,
+  hasAnyBrowDesignHistory,
+  sortTreatmentsForDisplay,
+} from '../../utils/browDesign'
 
 const listVariants = {
   hidden: { opacity: 0 },
@@ -23,69 +30,62 @@ const cardVariants = {
   },
 }
 
-const checkPathVariants = {
-  hidden: { pathLength: 0, opacity: 0 },
-  visible: {
-    pathLength: 1,
-    opacity: 1,
-    transition: { duration: 0.3, ease: 'easeOut', delay: 0.1 },
-  },
-}
-
-function AnimatedCheck({ isSelected }) {
-  return (
-    <div
-      className={`relative w-7 h-7 rounded-full shrink-0 transition-all duration-300 ${
-        isSelected
-          ? 'bg-linear-to-br from-primary to-primary/80 shadow-[0_2px_8px_rgba(183,139,125,0.4)] scale-105'
-          : 'border-2 border-outline-variant/30 group-hover:border-primary/40'
-      }`}
-    >
-      <AnimatePresence>
-        {isSelected && (
-          <motion.svg
-            key="check"
-            viewBox="0 0 24 24"
-            fill="none"
-            className="absolute inset-0 w-full h-full p-1.5"
-            initial="hidden"
-            animate="visible"
-            exit="hidden"
-          >
-            <motion.path
-              d="M5 13l4 4L19 7"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              variants={checkPathVariants}
-            />
-          </motion.svg>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-export default function StepTreatments({ treatments, categories, selectedTreatment, onSelect }) {
+export default function StepTreatments({ treatments, categories, onSelect, clientProfile }) {
   const [activeCategory, setActiveCategory] = useState(categories[0].id)
   const tabsRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
-  const filteredTreatments = treatments.filter((t) => t.category === activeCategory)
+  const treatmentIds = clientProfile?.treatmentIds || []
+  const declaredPriorTreatments = clientProfile?.declaredPriorTreatments || []
+  const dbDoneIds = new Set(treatmentIds)
+  const declaredOnlyIds = new Set(
+    declaredPriorTreatments.filter((id) => !dbDoneIds.has(id) && id !== 'brow-design')
+  )
+
+  const visibleTreatments = useMemo(
+    () => filterTreatmentsForClient(treatments, { treatmentIds, declaredPriorTreatments }),
+    [treatments, treatmentIds, declaredPriorTreatments]
+  )
+
+  const filteredTreatments = visibleTreatments.filter((t) => t.category === activeCategory)
+
+  const sortedTreatments = useMemo(
+    () => sortTreatmentsForDisplay(filteredTreatments, treatments),
+    [filteredTreatments, treatments]
+  )
+
+  const isKnownReturning = clientProfile?.isKnownClient || (clientProfile?.visitCount > 0)
+  const hasBrowHistory = hasAnyBrowDesignHistory(treatmentIds, declaredPriorTreatments)
+  const isFirstBrowVisit = !hasBrowHistory
+
+  const getTreatmentMeta = (treatment) => {
+    const badges = []
+    if (dbDoneIds.has(treatment.id)) {
+      badges.push({ label: 'Ya lo has reservado antes', tone: 'muted' })
+    } else if (
+      declaredOnlyIds.has(treatment.id)
+      || (treatment.id === BROW_DESIGN_SEGUIMIENTO && declaredPriorTreatments.includes('brow-design'))
+    ) {
+      badges.push({ label: 'Indicaste que ya lo hiciste', tone: 'muted' })
+    }
+    if (isFirstBrowVisit && treatment.id === BROW_DESIGN_PRIMERA) {
+      badges.push({ label: 'Recomendado primera vez', tone: 'primary' })
+    }
+    if (hasBrowHistory && treatment.id === BROW_DESIGN_SEGUIMIENTO) {
+      badges.push({ label: 'Ideal para ti', tone: 'primary' })
+    }
+    if (treatment.id === 'brow-henna') {
+      badges.push({ label: 'Requiere valoración con foto', tone: 'warn' })
+    }
+    return badges
+  }
 
   const checkScroll = useCallback(() => {
     const el = tabsRef.current
     if (!el) return
     setCanScrollLeft(el.scrollLeft > 4)
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4)
-  }, [])
-
-  useEffect(() => {
-    if (selectedTreatment) {
-      setActiveCategory(selectedTreatment.category)
-    }
   }, [])
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
       el.removeEventListener('scroll', checkScroll)
       window.removeEventListener('resize', checkScroll)
     }
-  }, [checkScroll])
+  }, [checkScroll, activeCategory, visibleTreatments.length])
 
   const scrollToTab = (catId) => {
     setActiveCategory(catId)
@@ -117,7 +117,9 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
           ¿Qué tratamiento te interesa?
         </h2>
         <p className="mt-2 text-sm text-on-surface-variant">
-          Selecciona una categoría y elige tu tratamiento
+          {isFirstBrowVisit && !isKnownReturning
+            ? 'Te guiamos para elegir el tratamiento ideal en tu primera visita'
+            : 'Selecciona una categoría y elige tu tratamiento'}
         </p>
       </section>
 
@@ -134,7 +136,7 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
         >
           {categories.map((cat) => {
             const isActive = activeCategory === cat.id
-            const count = treatments.filter((t) => t.category === cat.id).length
+            const count = visibleTreatments.filter((t) => t.category === cat.id).length
             return (
               <motion.button
                 key={cat.id}
@@ -172,7 +174,7 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
           exit="exit"
           className="space-y-3"
         >
-          {filteredTreatments.length === 0 ? (
+          {sortedTreatments.length === 0 ? (
             <motion.div
               variants={cardVariants}
               className="text-center py-12 px-4 rounded-2xl bg-surface-container-low border border-outline-variant/10"
@@ -182,20 +184,15 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
                 No hay tratamientos en esta categoría
               </p>
             </motion.div>
-          ) : filteredTreatments.map((treatment) => {
-            const isSelected = selectedTreatment?.id === treatment.id
-
-            return (
+          ) : sortedTreatments.map((treatment) => {
+              const badges = getTreatmentMeta(treatment)
+              return (
               <motion.button
                 key={treatment.id}
                 variants={cardVariants}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => onSelect(treatment)}
-                className={`group w-full text-left px-5 py-4 rounded-2xl transition-colors duration-300 ${
-                  isSelected
-                    ? 'bg-primary/8 ring-2 ring-primary/25 shadow-[0_2px_12px_rgba(183,139,125,0.14)]'
-                    : 'bg-surface-container-lowest hover:bg-surface-container-low border border-outline-variant/10'
-                }`}
+                className="group w-full text-left px-5 py-4 rounded-2xl transition-colors duration-300 border hover:border-primary/20 bg-surface-container-lowest hover:bg-surface-container-low border-outline-variant/10"
               >
                 <div className="flex items-center gap-4">
                   <div className="flex-1 min-w-0">
@@ -205,6 +202,24 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
                     <p className="text-xs text-on-surface-variant mt-0.5 truncate">
                       {treatment.tag}
                     </p>
+                    {badges.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {badges.map((b) => (
+                          <span
+                            key={b.label}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-label font-bold tracking-wide ${
+                              b.tone === 'primary'
+                                ? 'bg-primary/15 text-primary'
+                                : b.tone === 'warn'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-outline-variant/15 text-on-surface-variant'
+                            }`}
+                          >
+                            {b.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 mt-2">
                       <Icon name="schedule" className="text-xs text-primary/70" />
                       <span className="text-xs text-on-surface-variant font-medium">
@@ -213,11 +228,10 @@ export default function StepTreatments({ treatments, categories, selectedTreatme
                     </div>
                   </div>
 
-                  <AnimatedCheck isSelected={isSelected} />
+                  <Icon name="chevron_right" className="text-primary/60 shrink-0" />
                 </div>
               </motion.button>
-            )
-          })}
+            )})}
         </motion.div>
       </AnimatePresence>
     </div>

@@ -7,9 +7,11 @@ const {
   buildWebBookingDescription,
   isWebBookingEvent,
 } = require('../utils/webCalendarEvent');
+const { isGhostBlockEvent } = require('../utils/ghostCalendarEvent');
+const { normalizeImportedEventTimes } = require('../utils/importedEventTimes');
+const { hasOverlapWithRanges } = require('../utils/slotGrid');
+const { getAllDayBlockRange } = require('../utils/studioHours');
 
-const OPEN_HOUR = 10;
-const CLOSE_HOUR = 20;
 const ANTI_LOOP_MS = 30000;
 
 function parseEventTimes(event) {
@@ -26,10 +28,14 @@ function parseEventTimes(event) {
 
   if (event.start?.date && !event.start?.dateTime) {
     const dateStr = event.start.date;
+    const block = getAllDayBlockRange(dateStr);
+    if (!block) {
+      return { skip: true, reason: 'weekend' };
+    }
     return {
       skip: false,
-      startTime: new Date(`${dateStr}T${String(OPEN_HOUR).padStart(2, '0')}:00:00+02:00`),
-      endTime: new Date(`${dateStr}T${String(CLOSE_HOUR).padStart(2, '0')}:00:00+02:00`),
+      startTime: new Date(block.start),
+      endTime: new Date(block.end),
       allDay: true,
     };
   }
@@ -44,6 +50,40 @@ function parseEventTimes(event) {
 
 function isCancelledEvent(event) {
   return event.status === 'cancelled';
+}
+
+function resolveEventTimes(parsed, existing) {
+  if (existing?.source === 'web') {
+    return { startTime: parsed.startTime, endTime: parsed.endTime };
+  }
+
+  return normalizeImportedEventTimes(parsed.startTime, parsed.endTime);
+}
+
+function sortEventsForImport(events) {
+  return [...events].sort((a, b) => {
+    const pa = parseEventTimes(a);
+    const pb = parseEventTimes(b);
+    const startA = pa.skip ? Number.MAX_SAFE_INTEGER : pa.startTime.getTime();
+    const startB = pb.skip ? Number.MAX_SAFE_INTEGER : pb.startTime.getTime();
+    if (startA !== startB) return startA - startB;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+}
+
+async function loadOccupiedRanges(timeMin, timeMax) {
+  const result = await query(
+    `SELECT start_time, end_time FROM bookings
+     WHERE status = 'confirmed'
+       AND start_time < $2
+       AND end_time > $1`,
+    [timeMin, timeMax]
+  );
+
+  return result.rows.map((row) => ({
+    start: new Date(row.start_time).getTime(),
+    end: new Date(row.end_time).getTime(),
+  }));
 }
 
 function shouldSkipAntiLoop(booking) {
@@ -61,8 +101,15 @@ async function getBookingByGoogleEventId(googleEventId) {
   return result.rows[0] || null;
 }
 
-async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'google_import' } = {}) {
+async function upsertFromGoogleEvent(
+  event,
+  { dryRun = false, forceSource = 'google_import', occupiedRanges = null } = {}
+) {
   if (!event.id) return { action: 'skipped', reason: 'no_id' };
+
+  if (isGhostBlockEvent(event)) {
+    return { action: 'skipped', reason: 'ghost_block', eventId: event.id };
+  }
 
   const parsed = parseEventTimes(event);
   if (parsed.skip) {
@@ -70,6 +117,7 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
   }
 
   const existing = await getBookingByGoogleEventId(event.id);
+  const { startTime, endTime } = resolveEventTimes(parsed, existing);
   const cancelled = isCancelledEvent(event);
   const googleUpdatedAt = event.updated ? new Date(event.updated) : null;
 
@@ -90,14 +138,15 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
     }
   }
 
-  if (existing && shouldSkipAntiLoop(existing)) {
+  // Never skip Google-side cancellations — anti-loop only blocks echo updates from web.
+  if (existing && shouldSkipAntiLoop(existing) && !cancelled) {
     return { action: 'skipped', reason: 'anti_loop', eventId: event.id };
   }
 
   if (existing) {
     const timesChanged =
-      new Date(existing.start_time).getTime() !== parsed.startTime.getTime() ||
-      new Date(existing.end_time).getTime() !== parsed.endTime.getTime();
+      new Date(existing.start_time).getTime() !== startTime.getTime() ||
+      new Date(existing.end_time).getTime() !== endTime.getTime();
     const statusChanged =
       (cancelled && existing.status === 'confirmed') ||
       (!cancelled && existing.status === 'cancelled');
@@ -127,8 +176,8 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
          updated_at = NOW()
        WHERE id = $6`,
       [
-        parsed.startTime.toISOString(),
-        parsed.endTime.toISOString(),
+        startTime.toISOString(),
+        endTime.toISOString(),
         newStatus,
         event.etag || null,
         googleUpdatedAt?.toISOString() || null,
@@ -139,8 +188,8 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
     if (existing.source === 'web' && existing.client_id) {
       await notifyClientOfGoogleChange(existing.id, {
         type: cancelled ? 'cancelled' : timesChanged ? 'rescheduled' : 'updated',
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
+        startTime,
+        endTime,
       });
     }
 
@@ -155,30 +204,76 @@ async function upsertFromGoogleEvent(event, { dryRun = false, forceSource = 'goo
     return { action: 'skipped', reason: 'cancelled_new', eventId: event.id };
   }
 
+  if (
+    occupiedRanges &&
+    hasOverlapWithRanges(startTime, endTime, occupiedRanges)
+  ) {
+    return {
+      action: 'skipped',
+      reason: 'overlap',
+      eventId: event.id,
+      summary: event.summary || null,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+    };
+  }
+
   if (dryRun) {
     return { action: 'would_insert', eventId: event.id };
   }
 
   const clientId = await studioSettings.getImportedClientId();
 
-  const inserted = await query(
-    `INSERT INTO bookings (
-       client_id, treatment_id, start_time, end_time, status, source,
-       google_event_id, google_etag, google_updated_at, last_sync_source
-     ) VALUES ($1, 'imported', $2, $3, 'confirmed', $4, $5, $6, $7, 'google')
-     RETURNING id`,
-    [
-      clientId,
-      parsed.startTime.toISOString(),
-      parsed.endTime.toISOString(),
-      forceSource,
-      event.id,
-      event.etag || null,
-      googleUpdatedAt?.toISOString() || null,
-    ]
-  );
+  try {
+    const inserted = await query(
+      `INSERT INTO bookings (
+         client_id, treatment_id, start_time, end_time, status, source,
+         google_event_id, google_etag, google_updated_at, last_sync_source
+       ) VALUES ($1, 'imported', $2, $3, 'confirmed', $4, $5, $6, $7, 'google')
+       RETURNING id`,
+      [
+        clientId,
+        startTime.toISOString(),
+        endTime.toISOString(),
+        forceSource,
+        event.id,
+        event.etag || null,
+        googleUpdatedAt?.toISOString() || null,
+      ]
+    );
 
-  return { action: 'inserted', eventId: event.id, bookingId: inserted.rows[0].id };
+    return { action: 'inserted', eventId: event.id, bookingId: inserted.rows[0].id };
+  } catch (err) {
+    if (err.code === '23P01') {
+      return {
+        action: 'skipped',
+        reason: 'overlap',
+        eventId: event.id,
+        summary: event.summary || null,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      };
+    }
+    throw err;
+  }
+}
+
+function trackOccupiedRange(occupiedRanges, startTime, endTime) {
+  if (!occupiedRanges) return;
+  occupiedRanges.push({
+    start: startTime.getTime(),
+    end: endTime.getTime(),
+  });
+}
+
+function tallyImportResult(stats, result) {
+  if (result.action === 'inserted' || result.action === 'would_insert') stats.inserted++;
+  else if (result.action === 'updated' || result.action === 'would_update') stats.updated++;
+  else if (result.action === 'cancelled' || result.action === 'would_cancel') stats.cancelled++;
+  else if (result.action === 'unchanged') stats.unchanged++;
+  else if (result.reason === 'overlap') stats.fantasmaSkipped++;
+  else if (result.reason === 'ghost_block') stats.ghostSkipped++;
+  else stats.skipped++;
 }
 
 async function notifyClientOfGoogleChange(bookingId, { type, startTime, endTime }) {
@@ -264,18 +359,36 @@ async function importEventsFromGoogle({ timeMin, timeMax, dryRun = false } = {})
     showDeleted: true,
   });
 
-  const stats = { inserted: 0, updated: 0, cancelled: 0, skipped: 0, unchanged: 0 };
+  const stats = {
+    inserted: 0,
+    updated: 0,
+    cancelled: 0,
+    skipped: 0,
+    unchanged: 0,
+    fantasmaSkipped: 0,
+    ghostSkipped: 0,
+  };
   const knownEventIds = [];
+  const occupiedRanges = await loadOccupiedRanges(min, max);
+  const sortedEvents = sortEventsForImport(events);
 
-  for (const event of events) {
+  for (const event of sortedEvents) {
     knownEventIds.push(event.id);
-    const result = await upsertFromGoogleEvent(event, { dryRun, forceSource: 'google_import' });
+    const result = await upsertFromGoogleEvent(event, {
+      dryRun,
+      forceSource: 'google_import',
+      occupiedRanges,
+    });
 
-    if (result.action === 'inserted' || result.action === 'would_insert') stats.inserted++;
-    else if (result.action === 'updated' || result.action === 'would_update') stats.updated++;
-    else if (result.action === 'cancelled' || result.action === 'would_cancel') stats.cancelled++;
-    else if (result.action === 'unchanged') stats.unchanged++;
-    else stats.skipped++;
+    if (result.action === 'inserted' || result.action === 'would_insert') {
+      const parsed = parseEventTimes(event);
+      if (!parsed.skip) {
+        const times = resolveEventTimes(parsed, null);
+        trackOccupiedRange(occupiedRanges, times.startTime, times.endTime);
+      }
+    }
+
+    tallyImportResult(stats, result);
   }
 
   const orphanResults = await cancelOrphanBookings(knownEventIds, { dryRun, timeMin: min });
@@ -301,23 +414,46 @@ async function syncIncremental({ dryRun = false } = {}) {
       showDeleted: true,
     });
 
-    const stats = { inserted: 0, updated: 0, cancelled: 0, skipped: 0, unchanged: 0 };
+    const stats = {
+      inserted: 0,
+      updated: 0,
+      cancelled: 0,
+      skipped: 0,
+      unchanged: 0,
+      fantasmaSkipped: 0,
+      ghostSkipped: 0,
+    };
+    const occupiedRanges = await loadOccupiedRanges(
+      new Date().toISOString(),
+      new Date('2099-12-31').toISOString()
+    );
+    const sortedEvents = sortEventsForImport(events);
 
-    for (const event of events) {
-      const result = await upsertFromGoogleEvent(event, { dryRun, forceSource: 'google_sync' });
+    for (const event of sortedEvents) {
+      const result = await upsertFromGoogleEvent(event, {
+        dryRun,
+        forceSource: 'google_sync',
+        occupiedRanges,
+      });
 
-      if (result.action === 'inserted' || result.action === 'would_insert') stats.inserted++;
-      else if (result.action === 'updated' || result.action === 'would_update') stats.updated++;
-      else if (result.action === 'cancelled' || result.action === 'would_cancel') stats.cancelled++;
-      else if (result.action === 'unchanged') stats.unchanged++;
-      else stats.skipped++;
+      if (result.action === 'inserted') {
+        const parsed = parseEventTimes(event);
+        if (!parsed.skip) {
+          const times = resolveEventTimes(parsed, null);
+          trackOccupiedRange(occupiedRanges, times.startTime, times.endTime);
+        }
+      }
+
+      tallyImportResult(stats, result);
     }
 
     if (!dryRun && nextSyncToken) {
       await studioSettings.updateSyncToken(nextSyncToken);
     }
 
-    return { stats, totalEvents: events.length, mode: 'incremental' };
+    const reconcile = dryRun ? null : await reconcileStaleGoogleBookings();
+
+    return { stats, totalEvents: events.length, mode: 'incremental', reconcile };
   } catch (err) {
     if (err.code === 410 || err.message?.includes('Sync token is no longer valid')) {
       console.warn('Sync token expired, performing full re-import');
@@ -346,6 +482,58 @@ async function reconcilePendingGoogleDeletes() {
       }
     }
   }
+}
+
+async function cancelBookingFromGoogle(bookingId, { notify = true } = {}) {
+  await query(
+    `UPDATE bookings SET status = 'cancelled', last_sync_source = 'google', updated_at = NOW()
+     WHERE id = $1 AND status = 'confirmed'`,
+    [bookingId]
+  );
+
+  if (notify) {
+    await notifyClientOfGoogleChange(bookingId, { type: 'cancelled' });
+  }
+}
+
+/**
+ * Confirmed bookings linked to Google must stay in sync even when the webhook
+ * misses a delete/cancel (common in local dev without GOOGLE_WEBHOOK_URL).
+ */
+async function reconcileStaleGoogleBookings() {
+  const result = await query(
+    `SELECT id, google_event_id, source FROM bookings
+     WHERE status = 'confirmed'
+       AND google_event_id IS NOT NULL
+       AND start_time >= NOW() - INTERVAL '1 day'`
+  );
+
+  const cancelled = [];
+  const errors = [];
+
+  for (const row of result.rows) {
+    try {
+      const event = await googleCalendar.getEvent(row.google_event_id);
+      if (event.status === 'cancelled') {
+        await cancelBookingFromGoogle(row.id, { notify: row.source === 'web' });
+        cancelled.push({ bookingId: row.id, eventId: row.google_event_id, reason: 'cancelled' });
+      }
+    } catch (err) {
+      const notFound =
+        err.code === 404 ||
+        err.status === 404 ||
+        err.message?.includes('Not Found');
+
+      if (notFound) {
+        await cancelBookingFromGoogle(row.id, { notify: row.source === 'web' });
+        cancelled.push({ bookingId: row.id, eventId: row.google_event_id, reason: 'deleted' });
+      } else {
+        errors.push({ bookingId: row.id, eventId: row.google_event_id, error: err.message });
+      }
+    }
+  }
+
+  return { checked: result.rows.length, cancelled, errors };
 }
 
 async function reconcileMissingGoogleEvents() {
@@ -431,6 +619,7 @@ module.exports = {
   upsertFromGoogleEvent,
   cancelOrphanBookings,
   reconcilePendingGoogleDeletes,
+  reconcileStaleGoogleBookings,
   reconcileMissingGoogleEvents,
   ensureWatchChannel,
   parseEventTimes,

@@ -90,6 +90,12 @@ export default function AboutSection() {
           </RevealBlock>
 
           <RevealBlock delay={0.5}>
+            <p className="font-body text-on-surface-variant leading-relaxed mb-4 text-base">
+              No creo en las cejas estándar. Creo en trabajar cada rostro de forma única, respetando su forma natural, su expresión y su esencia. Mi objetivo es que te mires al espejo y te reconozcas, pero con unas cejas más bonitas, más cuidadas y en armonía contigo.
+            </p>
+          </RevealBlock>
+
+          <RevealBlock delay={0.55}>
             <p className="font-body leading-relaxed mb-8 text-base italic text-primary/80">
               Mi objetivo no es cambiar tus cejas, sino realzar lo que ya tienes.
             </p>
@@ -97,7 +103,7 @@ export default function AboutSection() {
 
           <div className="space-y-6">
             {features.map((f, i) => (
-              <RevealBlock key={f.title} delay={0.55 + i * 0.1}>
+              <RevealBlock key={f.title} delay={0.6 + i * 0.1}>
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-full border border-primary/20 flex items-center justify-center shrink-0">
                     <Icon name={f.icon} className="text-primary" />

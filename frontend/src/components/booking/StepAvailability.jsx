@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 import {
   startOfMonth,
   endOfMonth,
@@ -37,6 +37,11 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   const [slots, setSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [bookingStartDate, setBookingStartDate] = useState(null)
+  const [nextSlot, setNextSlot] = useState(null)
+  const [loadingNextSlot, setLoadingNextSlot] = useState(() => !!treatmentId)
+  const [anchorDay, setAnchorDay] = useState(null)
+  const pendingTimeRef = useRef(null)
+  const initialisedRef = useRef(false)
 
   const today = startOfDay(new Date())
   const goLiveDay = bookingStartDate ? startOfDay(new Date(`${bookingStartDate}T12:00:00`)) : today
@@ -51,6 +56,53 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   }, [])
 
   useEffect(() => {
+    if (!treatmentId) {
+      setNextSlot(null)
+      setLoadingNextSlot(false)
+      setAnchorDay(null)
+      initialisedRef.current = false
+      return
+    }
+
+    initialisedRef.current = false
+    setAnchorDay(null)
+    setNextSlot(null)
+
+    let cancelled = false
+    setLoadingNextSlot(true)
+
+    fetch(`${API_URL}/api/availability/next?treatmentId=${treatmentId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data.date && data.time) {
+          setNextSlot(data)
+        } else if (!cancelled) {
+          setNextSlot(null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setNextSlot(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNextSlot(false)
+      })
+
+    return () => { cancelled = true }
+  }, [treatmentId])
+
+  useEffect(() => {
+    if (loadingNextSlot || !nextSlot?.date || !nextSlot?.time || initialisedRef.current) return
+
+    initialisedRef.current = true
+    const [y, m, d] = nextSlot.date.split('-').map(Number)
+    const day = startOfDay(new Date(y, m - 1, d))
+    setAnchorDay(day)
+    pendingTimeRef.current = nextSlot.time
+    setCurrentMonth(day)
+    onSelectDate(day)
+  }, [loadingNextSlot, nextSlot, onSelectDate])
+
+  useEffect(() => {
     if (!selectedDate || !treatmentId) {
       setSlots([])
       return
@@ -60,14 +112,24 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
     let cancelled = false
 
     setLoadingSlots(true)
-    onSelectTime(null)
+    if (!pendingTimeRef.current) {
+      onSelectTime(null)
+    }
 
     fetch(`${API_URL}/api/availability?date=${dateStr}&treatmentId=${treatmentId}`)
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled) {
-          setSlots(data.slots || [])
+          const loadedSlots = data.slots || []
+          setSlots(loadedSlots)
           setLoadingSlots(false)
+
+          const pendingTime = pendingTimeRef.current
+          if (pendingTime) {
+            pendingTimeRef.current = null
+            const match = loadedSlots.find((s) => s.time === pendingTime && s.available)
+            if (match) onSelectTime(pendingTime)
+          }
         }
       })
       .catch(() => {
@@ -95,10 +157,51 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   }
 
   const availableSlots = slots.filter((s) => s.available)
-  const unavailableSlots = slots.filter((s) => !s.available)
+
+  const nextSlotLabel = nextSlot?.date
+    ? format(new Date(`${nextSlot.date}T12:00:00`), "EEEE d 'de' MMMM", { locale: es })
+    : null
+
+  const anchorMonth = anchorDay ? startOfMonth(anchorDay) : null
+  const canGoPrevMonth = !anchorMonth || isBefore(anchorMonth, startOfMonth(currentMonth))
+
+  if (loadingNextSlot) {
+    return (
+      <div className="min-h-[calc(100vh-12rem)] flex flex-col items-center justify-center text-center px-6">
+        <div className="w-12 h-12 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin mb-8" />
+        <span className="font-label text-[10px] tracking-[0.2em] uppercase text-primary font-bold mb-3">
+          Paso 2 de 3
+        </span>
+        <h2 className="font-headline text-2xl md:text-3xl text-on-surface mb-3">
+          Revisando disponibilidad
+        </h2>
+        <p className="text-sm text-on-surface-variant max-w-xs leading-relaxed">
+          Calculando la próxima fecha disponible para tu tratamiento…
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>
+      {nextSlot?.date && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 rounded-2xl bg-primary-container/40 border border-primary/20 text-center"
+        >
+          <p className="text-sm text-on-surface-variant">
+            Próximo hueco disponible:{' '}
+            <span className="font-semibold text-on-surface capitalize">
+              {nextSlotLabel} a las {nextSlot.time}
+            </span>
+          </p>
+          <p className="text-xs text-on-surface-variant/80 mt-2">
+            Puedes elegir esta fecha u otra posterior.
+          </p>
+        </motion.div>
+      )}
+
       <section className="mb-12 text-center">
         <span className="font-label text-[10px] tracking-[0.2em] uppercase text-primary font-bold block mb-2">
           Paso 2 de 3
@@ -116,8 +219,11 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
           <h3 className="font-headline text-xl text-on-surface capitalize">{monthLabel}</h3>
           <div className="flex gap-4">
             <button
-              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
-              className="p-2 hover:bg-surface-container rounded-full transition-colors"
+              onClick={() => canGoPrevMonth && setCurrentMonth((m) => subMonths(m, 1))}
+              disabled={!canGoPrevMonth}
+              className={`p-2 rounded-full transition-colors ${
+                canGoPrevMonth ? 'hover:bg-surface-container' : 'opacity-30 cursor-default'
+              }`}
             >
               <Icon name="chevron_left" className="text-primary" />
             </button>
@@ -142,8 +248,9 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
             const isSelected = selectedDate && isSameDay(day, selectedDate)
             const isPast = isBefore(day, today)
             const isBeforeGoLive = isBefore(day, goLiveDay)
+            const isBeforeAnchor = anchorDay && isBefore(startOfDay(day), anchorDay)
             const isWeekendDay = isWeekend(day)
-            const isDisabled = !inMonth || isPast || isBeforeGoLive || isWeekendDay
+            const isDisabled = !inMonth || isPast || isBeforeGoLive || isBeforeAnchor || isWeekendDay
 
             return (
               <motion.button
@@ -240,21 +347,6 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
           )}
         </motion.section>
       )}
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 0.8 }}
-        className="mt-20 aspect-video overflow-hidden rounded-2xl shadow-sm"
-      >
-        <img
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuA528J5f74nF24GwbMtzysmHLLiJ95dxSp4gnTRo6w5ARq9XqcjoSqJStItg1yt-cxJXFVUk53oiq6-EgB5fbvWf8iG0Sw8gCsCuN-cEZlNCJV3KU8LQXAqKl6lFkyj02Ru4Z_IrST_NODWZQe2imMBTiLdAVgTjOLGPL6dYobH3B7DdRCJvJxNsaTcqsiD2tpd2lOfkK0w-WKzuqUfe-u1uXT-DrXTUXfg2Ux2PzeF28H97Nr7_yUdcMoYXzVQVDEeIcfgr8lqfNs"
-          alt="Smooth river stones and dried lavender on linen"
-          loading="lazy"
-          decoding="async"
-          className="w-full h-full object-cover"
-        />
-      </motion.div>
     </div>
   )
 }

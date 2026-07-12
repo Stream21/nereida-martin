@@ -4,7 +4,7 @@ import HeroSection from '../components/landing/HeroSection'
 import AboutSection from '../components/landing/AboutSection'
 import TreatmentsGrid from '../components/landing/TreatmentsGrid'
 import FirstTimeGuide from '../components/landing/FirstTimeGuide'
-import BeforeAfter from '../components/landing/BeforeAfter'
+import StudioGallery from '../components/landing/StudioGallery'
 import ReviewsCarousel from '../components/landing/ReviewsCarousel'
 import BookingCTA from '../components/landing/BookingCTA'
 import ContactSection from '../components/landing/ContactSection'
@@ -23,7 +23,7 @@ export default function Home() {
         <SectionDivider variant="tilt" fill="surface-container" />
         <FirstTimeGuide />
         <SectionDivider variant="wave" fill="surface-container-low" flip />
-        <BeforeAfter />
+        <StudioGallery />
         <SectionDivider variant="arc" fill="background" flip />
         <ReviewsCarousel />
         <BookingCTA />

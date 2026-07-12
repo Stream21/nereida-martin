@@ -6,20 +6,33 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "calendar:init": "node scripts/sync-calendar-init.js"
+    "calendar:init": "node scripts/sync-calendar-init.js",
+    "calendar:sync": "node scripts/sync-calendar.js",
+    "calendar:audit": "node scripts/calendar-audit-overlaps.js",
+    "db:up": "node scripts/db-up.js",
+    "db:down": "node scripts/db-down.js",
+    "db:bootstrap": "node scripts/db-bootstrap.js",
+    "db:init": "node scripts/db-init.js",
+    "google:auth": "node scripts/google-auth.js",
+    "google:auth:tunnel": "node scripts/google-auth-tunnel.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "googleapis": "^171.4.0",
     "ics": "^3.11.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
     "nodemailer": "^8.0.4",
     "pg": "^8.20.0",
+    "resend": "^6.17.2",
     "uuid": "^13.0.0"
   }
 }

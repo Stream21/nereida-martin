@@ -3,36 +3,33 @@ import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
+import ConsentCheckboxes from './ConsentCheckboxes'
 
-export default function StepSummary({ treatment, date, time, onConfirm, isSubmitting }) {
-  const [clientName, setClientName] = useState('')
-  const [clientEmail, setClientEmail] = useState('')
-  const [clientPhone, setClientPhone] = useState('')
-  const [errors, setErrors] = useState({})
+export default function StepSummary({
+  treatment,
+  date,
+  time,
+  clientInfo,
+  pendingReview,
+  onConfirm,
+  isSubmitting,
+  consents,
+  onConsentsChange,
+}) {
+  const [consentError, setConsentError] = useState(null)
 
-  if (!treatment || !date || !time) return null
+  if (!treatment || !date || !time || !clientInfo) return null
 
   const dateLabel = format(date, "EEEE, d 'de' MMMM", { locale: es })
 
-  const validate = () => {
-    const newErrors = {}
-    if (!clientName.trim() || clientName.trim().length < 2) {
-      newErrors.name = 'El nombre es obligatorio'
-    }
-    if (!clientEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
-      newErrors.email = 'Introduce un email válido'
-    }
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
   const handleSubmit = () => {
-    if (!validate() || isSubmitting) return
-    onConfirm({
-      clientName: clientName.trim(),
-      clientEmail: clientEmail.trim().toLowerCase(),
-      clientPhone: clientPhone.trim() || null,
-    })
+    if (isSubmitting) return
+    if (pendingReview && consents && !consents.includes('photo_consent')) {
+      setConsentError('Debes aceptar el consentimiento de imagen')
+      return
+    }
+    setConsentError(null)
+    onConfirm()
   }
 
   return (
@@ -67,6 +64,12 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
               <div className="flex items-center gap-1.5 mt-2">
                 <Icon name="schedule" className="text-xs text-primary/70" />
                 <span className="text-xs text-on-surface-variant font-medium">{treatment.duration}</span>
+                {treatment.priceLabel && (
+                  <>
+                    <span className="text-xs text-on-surface-variant/40">·</span>
+                    <span className="text-xs font-bold text-primary">{treatment.priceLabel}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -93,14 +96,14 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
           </div>
         </motion.div>
 
-        {/* Client Info Form */}
+        {/* Client */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.4 }}
           className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/10"
         >
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
               <Icon name="person" className="text-primary text-lg" />
             </div>
@@ -108,64 +111,26 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
               Tus datos
             </p>
           </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-1.5">
-                Nombre *
-              </label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => {
-                  setClientName(e.target.value)
-                  if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }))
-                }}
-                placeholder="Tu nombre completo"
-                className={`w-full px-4 py-3 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline-variant/50 text-sm outline-none transition-all focus:ring-2 ${
-                  errors.name ? 'ring-2 ring-red-400/50' : 'focus:ring-primary/30'
-                }`}
-              />
-              {errors.name && (
-                <p className="text-xs text-red-400 mt-1">{errors.name}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-1.5">
-                Email *
-              </label>
-              <input
-                type="email"
-                value={clientEmail}
-                onChange={(e) => {
-                  setClientEmail(e.target.value)
-                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
-                }}
-                placeholder="tu@email.com"
-                className={`w-full px-4 py-3 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline-variant/50 text-sm outline-none transition-all focus:ring-2 ${
-                  errors.email ? 'ring-2 ring-red-400/50' : 'focus:ring-primary/30'
-                }`}
-              />
-              {errors.email && (
-                <p className="text-xs text-red-400 mt-1">{errors.email}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-1.5">
-                Teléfono <span className="text-outline-variant/50">(opcional)</span>
-              </label>
-              <input
-                type="tel"
-                value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
-                placeholder="+34 600 000 000"
-                className="w-full px-4 py-3 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline-variant/50 text-sm outline-none transition-all focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-          </div>
+          <p className="font-medium text-on-surface">{clientInfo.name}</p>
+          <p className="text-sm text-on-surface-variant mt-1">{clientInfo.email}</p>
+          <p className="text-sm text-on-surface-variant">{clientInfo.phone}</p>
         </motion.div>
+
+        {pendingReview && consents && onConsentsChange && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28, duration: 0.4 }}
+            className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/10"
+          >
+            <ConsentCheckboxes
+              consents={consents}
+              onChange={onConsentsChange}
+              showPhoto
+              error={consentError}
+            />
+          </motion.div>
+        )}
 
         {/* Info notice */}
         <motion.div
@@ -178,8 +143,9 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
             <Icon name="info" className="text-primary shrink-0 mt-0.5 text-lg" />
             <div>
               <p className="text-sm text-on-surface-variant leading-relaxed">
-                Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita.
-                Puedes cancelar hasta el día anterior a tu cita, a la misma hora. Ejemplo: cita el sábado a las 16:00 → cancelación hasta el viernes a las 16:00.
+                {pendingReview
+                  ? 'Tu cita quedará pendiente de valoración. Te avisaremos por email cuando confirmemos tu aptitud para Brow Henna.'
+                  : 'Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
               </p>
             </div>
           </div>
@@ -206,7 +172,7 @@ export default function StepSummary({ treatment, date, time, onConfirm, isSubmit
               <span>Reservando...</span>
             </>
           ) : (
-            <span>Confirmar Reserva</span>
+            <span>{pendingReview ? 'Solicitar cita' : 'Confirmar Reserva'}</span>
           )}
         </motion.button>
       </motion.div>

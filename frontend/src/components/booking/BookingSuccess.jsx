@@ -21,10 +21,16 @@ const circleVariants = {
   },
 }
 
-export default function BookingSuccess({ bookingData, onClose }) {
+export default function BookingSuccess({
+  bookingData,
+  onClose,
+  onReserveAnotherDay,
+  onReserveAnotherTreatment,
+}) {
   if (!bookingData) return null
 
   const { booking, icsUrl, googleCalendarUrl, client, cancelUrl, cancellationDeadline } = bookingData
+  const pendingReview = booking.pendingReview || booking.status === 'pending_review'
   const startDate = new Date(booking.startTime)
   const endDate = new Date(booking.endTime)
   const dateLabel = format(startDate, "EEEE, d 'de' MMMM", { locale: es })
@@ -39,24 +45,37 @@ export default function BookingSuccess({ bookingData, onClose }) {
       transition={{ duration: 0.5 }}
       className="text-center"
     >
-      {/* Animated check */}
       <motion.div
         variants={circleVariants}
         initial="hidden"
         animate="visible"
-        className="w-20 h-20 mx-auto mb-6 rounded-full bg-linear-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_8px_24px_rgba(183,139,125,0.35)]"
+        className={`w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(183,139,125,0.35)] ${
+          pendingReview ? 'bg-amber-400' : 'bg-linear-to-br from-primary to-primary/70'
+        }`}
       >
         <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
-          <motion.path
-            d="M5 13l4 4L19 7"
-            stroke="white"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            variants={checkVariants}
-            initial="hidden"
-            animate="visible"
-          />
+          {pendingReview ? (
+            <motion.path
+              d="M12 8v4m0 4h.01"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              variants={checkVariants}
+              initial="hidden"
+              animate="visible"
+            />
+          ) : (
+            <motion.path
+              d="M5 13l4 4L19 7"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              variants={checkVariants}
+              initial="hidden"
+              animate="visible"
+            />
+          )}
         </svg>
       </motion.div>
 
@@ -66,14 +85,15 @@ export default function BookingSuccess({ bookingData, onClose }) {
         transition={{ delay: 0.5, duration: 0.4 }}
       >
         <h2 className="font-headline text-2xl md:text-3xl text-on-surface mb-2">
-          ¡Reserva Confirmada!
+          {pendingReview ? 'Solicitud recibida' : '¡Reserva Confirmada!'}
         </h2>
         <p className="text-sm text-on-surface-variant">
-          Te hemos enviado un email de confirmación a <strong>{client.email}</strong>
+          {pendingReview
+            ? <>Hemos recibido tu solicitud. Te avisaremos a <strong>{client.email}</strong> tras la valoración.</>
+            : <>Te hemos enviado un email de confirmación a <strong>{client.email}</strong></>}
         </p>
       </motion.div>
 
-      {/* Booking details */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -91,7 +111,7 @@ export default function BookingSuccess({ bookingData, onClose }) {
           <div className="h-px bg-outline-variant/10" />
           <div>
             <p className="text-[10px] font-label font-bold tracking-[0.15em] uppercase text-primary mb-1">
-              Fecha y hora
+              Fecha y hora {pendingReview && '(tentativa)'}
             </p>
             <p className="font-headline text-lg text-on-surface capitalize">{dateLabel}</p>
             <p className="text-sm text-on-surface-variant">{timeLabel}</p>
@@ -99,42 +119,43 @@ export default function BookingSuccess({ bookingData, onClose }) {
         </div>
       </motion.div>
 
-      {/* Add to calendar */}
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.4 }}
-        className="mt-6 space-y-3"
-      >
-        <p className="text-xs font-label font-bold tracking-[0.15em] uppercase text-on-surface-variant mb-4">
-          Agregar a tu calendario
-        </p>
-
-        <a
-          href={googleCalendarUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full flex items-center justify-center gap-3 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl py-4 px-6 text-on-surface hover:bg-surface-container-low transition-colors"
+      {!pendingReview && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 0.4 }}
+          className="mt-6 space-y-3"
         >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#4285F4" opacity="0.1"/>
-            <path d="M17.5 7.5H15V6h-1.5v1.5h-3V6H9v1.5H6.5v10h11v-10zM16 16H8v-5h8v5z" fill="#4285F4"/>
-          </svg>
-          <span className="text-sm font-medium">Google Calendar</span>
-          <Icon name="open_in_new" className="text-sm text-outline-variant" />
-        </a>
+          <p className="text-xs font-label font-bold tracking-[0.15em] uppercase text-on-surface-variant mb-4">
+            Agregar a tu calendario
+          </p>
 
-        <a
-          href={`${apiUrl}${icsUrl.startsWith('/') ? '' : '/'}${icsUrl.replace(/^https?:\/\/[^/]+/, '')}`}
-          download
-          className="w-full flex items-center justify-center gap-3 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl py-4 px-6 text-on-surface hover:bg-surface-container-low transition-colors"
-        >
-          <Icon name="download" className="text-lg text-primary" />
-          <span className="text-sm font-medium">Descargar .ics (iPhone / Outlook)</span>
-        </a>
-      </motion.div>
+          <a
+            href={googleCalendarUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-3 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl py-4 px-6 text-on-surface hover:bg-surface-container-low transition-colors"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#4285F4" opacity="0.1"/>
+              <path d="M17.5 7.5H15V6h-1.5v1.5h-3V6H9v1.5H6.5v10h11v-10zM16 16H8v-5h8v5z" fill="#4285F4"/>
+            </svg>
+            <span className="text-sm font-medium">Google Calendar</span>
+            <Icon name="open_in_new" className="text-sm text-outline-variant" />
+          </a>
 
-      {(cancelUrl || cancellationDeadline) && (
+          <a
+            href={`${apiUrl}${icsUrl.startsWith('/') ? '' : '/'}${icsUrl.replace(/^https?:\/\/[^/]+/, '')}`}
+            download
+            className="w-full flex items-center justify-center gap-3 bg-surface-container-lowest border border-outline-variant/15 rounded-2xl py-4 px-6 text-on-surface hover:bg-surface-container-low transition-colors"
+          >
+            <Icon name="download" className="text-lg text-primary" />
+            <span className="text-sm font-medium">Descargar .ics (iPhone / Outlook)</span>
+          </a>
+        </motion.div>
+      )}
+
+      {(cancelUrl || cancellationDeadline) && !pendingReview && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -148,27 +169,41 @@ export default function BookingSuccess({ bookingData, onClose }) {
             )}
           </p>
           {cancelUrl && (
-            <a
-              href={cancelUrl}
-              className="text-sm font-medium text-primary underline underline-offset-2"
-            >
+            <a href={cancelUrl} className="text-sm font-medium text-primary underline underline-offset-2">
               Cancelar esta cita
             </a>
           )}
         </motion.div>
       )}
 
-      {/* Back button */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.95, duration: 0.4 }}
-        className="mt-8"
+        className="mt-8 space-y-3"
       >
+        {onReserveAnotherDay && (
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={onReserveAnotherDay}
+            className="w-full coral-gradient text-white py-4 rounded-2xl font-label text-sm tracking-widest uppercase font-bold editorial-shadow"
+          >
+            Reservar otro día (mismo tratamiento)
+          </motion.button>
+        )}
+        {onReserveAnotherTreatment && (
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={onReserveAnotherTreatment}
+            className="w-full bg-surface-container-lowest border border-outline-variant/15 text-on-surface py-4 rounded-2xl font-label text-sm tracking-widest uppercase font-bold"
+          >
+            Reservar otro tratamiento
+          </motion.button>
+        )}
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={onClose}
-          className="w-full coral-gradient text-white py-4 rounded-2xl font-label text-sm tracking-widest uppercase font-bold editorial-shadow"
+          className="w-full text-on-surface-variant py-3 rounded-2xl font-label text-xs tracking-widest uppercase font-bold"
         >
           Volver al inicio
         </motion.button>

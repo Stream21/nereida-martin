@@ -8,6 +8,12 @@ const availabilityRouter = require('./routes/availability');
 const bookingsRouter = require('./routes/bookings');
 const cronRouter = require('./routes/cron');
 const settingsRouter = require('./routes/settings');
+const clientsRouter = require('./routes/clients');
+const intakeRouter = require('./routes/intake');
+const assessmentsRouter = require('./routes/assessments');
+const ownerRouter = require('./routes/owner');
+const ownerAuthRouter = require('./routes/ownerAuth');
+const ownerDashboardRouter = require('./routes/ownerDashboard');
 const webhooksRouter = require('./routes/webhooks');
 const studioSettings = require('./services/studioSettings');
 const calendarSync = require('./services/calendarSync');
@@ -16,7 +22,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -25,9 +31,17 @@ app.get('/api/health', (req, res) => {
 app.use('/api/treatments', treatmentsRouter);
 app.use('/api/availability', availabilityRouter);
 app.use('/api/bookings', bookingsRouter);
+app.use('/api/clients', clientsRouter);
+app.use('/api/intake', intakeRouter);
+app.use('/api/assessments', assessmentsRouter);
+app.use('/api/owner', ownerRouter);
+app.use('/api/owner', ownerAuthRouter);
+app.use('/api/owner', ownerDashboardRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/webhooks', webhooksRouter);
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const distPath = path.join(__dirname, '..', 'frontend', 'dist');
 app.use(express.static(distPath));

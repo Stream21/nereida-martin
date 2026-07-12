@@ -5,175 +5,145 @@ import useScrollReveal from '../../hooks/useScrollReveal'
 import Icon from '../ui/Icon'
 
 const categories = [
-  { id: 'cejas', label: 'Cejas', icon: 'visibility', image: '/process-brow-mapping.jpeg' },
-  { id: 'pestanas', label: 'Pestañas', icon: 'remove_red_eye', image: '/result-lash-lift.jpeg' },
-  { id: 'rostro', label: 'Rostro', icon: 'spa', image: '/products-skincare.jpeg' },
-  { id: 'depilacion', label: 'Depilación', icon: 'content_cut', image: null },
-  { id: 'smile', label: 'Smile Gem', icon: 'diamond', image: '/smile-gem.jpeg' },
+  { id: 'cejas', label: 'Cejas', icon: 'visibility' },
+  { id: 'pestanas', label: 'Pestañas', icon: 'remove_red_eye' },
+  { id: 'rostro', label: 'Cuidado de la piel', icon: 'spa' },
+  { id: 'depilacion', label: 'Depilación facial', icon: 'content_cut' },
+  { id: 'smile', label: 'Tendencias', icon: 'diamond' },
 ]
 
 const treatments = {
   cejas: {
-    intro: 'Las cejas enmarcan tu mirada. Mi trabajo es diseñarlas y cuidarlas sin perder su naturalidad.',
     items: [
       {
         name: 'Brow Design',
-        tag: 'Perfilado seguimiento',
-        duration: '30 min',
-        forWhom: 'Personas que quieren mejorar la forma de sus cejas manteniendo su naturalidad.',
-        includes: ['Análisis facial', 'Diseño personalizado con visagismo', 'Depilación (hilo/pinza según necesidad)', 'Perfilado limpio y equilibrado'],
-        result: 'Cejas más definidas, limpias y en armonía con tu rostro, sin perder tu esencia.',
+        tag: 'Primera vez',
+        bookingId: 'brow-design-primera',
+        duration: '45 minutos',
+        description:
+          'El punto de partida para transformar tu mirada. Incluye un estudio completo de visajismo personalizado para diseñar la forma ideal según tus facciones, seguido de una epilación limpia y detallada con hilo o pinza.',
       },
       {
         name: 'Brow Design',
-        tag: 'Perfilado primera vez',
-        duration: '60 min',
-        forWhom: 'Personas que quieren mejorar la forma de sus cejas manteniendo su naturalidad.',
-        includes: ['Análisis facial', 'Diseño personalizado', 'Depilación (hilo/pinza según necesidad)', 'Perfilado limpio y equilibrado'],
-        result: 'Cejas más definidas, limpias y en armonía con tu rostro, sin perder tu esencia.',
+        tag: 'Mantenimiento',
+        bookingId: 'brow-design-seguimiento',
+        duration: '45 minutos',
+        description:
+          'Mantén la forma perfecta de tus cejas con nuestro servicio de seguimiento. Realizamos una limpieza y perfilado de alta precisión (hilo o pinza) para conservar la simetría y potenciar tu mirada respetando siempre tu esencia natural.',
       },
       {
         name: 'Brow Define',
-        tag: 'Diseño + tinte + perfilado',
-        duration: '45 min',
-        forWhom: 'Ideal si tienes zonas despobladas o quieres más intensidad sin maquillaje.',
-        includes: ['Diseño de cejas personalizado', 'Peeling', 'Depilación con hilo', 'Aplicación de tinte', 'Acabado definido'],
-        result: 'Cejas más rellenas, definidas y con mayor intensidad de forma natural. Duración en piel de 2-3 días, en pelo hasta un mes.',
-        note: 'Ideal si buscas un resultado más natural.',
+        tag: 'Diseño + Tinte + Perfilado',
+        bookingId: 'brow-define',
+        duration: '60 minutos',
+        description:
+          'Ideal para aportar densidad, rellenar visualmente espacios sombreados y dar color. Combinamos el estudio de visajismo y el perfilado con un tinte personalizado que resalta e intensifica la mirada de forma inmediata.',
       },
       {
         name: 'Brow Lami',
-        tag: 'Laminado + perfilado',
-        duration: '60 min',
-        forWhom: 'Para cejas rebeldes, sin forma o con poco volumen.',
-        includes: ['Laminado (efecto peinado y fijación)', 'Hidratación del vello', 'Diseño y perfilado'],
-        result: 'Cejas más ordenadas, con efecto volumen y mayor definición.',
+        tag: 'Laminado + Perfilado',
+        bookingId: 'brow-lami',
+        duration: '60 minutos',
+        description:
+          'El tratamiento estrella para disciplinar, peinar y dar volumen a las cejas rebeldes o finas. Diseñamos y fijamos la dirección del vello para conseguir un efecto óptico de ceja más poblada, limpia y definida.',
       },
       {
         name: 'Brow Lami Define',
-        tag: 'Laminado + tinte + perfilado',
-        duration: '70 min',
-        forWhom: 'Para quienes buscan un resultado más marcado y duradero.',
-        includes: ['Laminado', 'Tinte', 'Diseño y perfilado', 'Hidratación'],
-        result: 'Cejas con efecto maquillaje, más densas, definidas y estructuradas.',
+        tag: 'Laminado + Perfilado + Tinte',
+        bookingId: 'brow-lami-define',
+        duration: '75 minutos',
+        description:
+          'La transformación absoluta para tus cejas. Un tratamiento integral que combina el moldeado del laminado, la precisión del diseño y la intensidad del tinte. Perfecto para un efecto de ceja densa, peinada y definida de larga duración.',
       },
       {
         name: 'Brow Henna',
-        tag: 'Henna + perfilado',
-        duration: '1 hora',
-        forWhom: 'Para quienes buscan un efecto más duradero sobre la piel y mayor definición.',
-        includes: ['Diseño de cejas', 'Peeling', 'Aplicación de henna', 'Perfilado'],
-        result: 'Efecto maquillaje más marcado, cejas definidas. Duración en piel de 5-7 días (hasta 10 en pieles secas).',
-        note: 'Ideal si buscas un efecto más marcado, tipo maquillaje.',
+        tag: 'Henna + Perfilado',
+        bookingId: 'brow-henna',
+        duration: '60 minutos',
+        description:
+          'Diseño y definición con coloración natural. La henna tiñe tanto el vello como la piel subyacente, creando un efecto sombreado tipo maquillaje ideal para rellenar huecos y dar una definición impecable.',
       },
       {
         name: 'Brow Restored',
-        tag: 'Dermapen en cejas',
-        duration: '50 min',
-        forWhom: 'Para mejorar textura de la piel, manchas, marcas o falta de luminosidad.',
-        includes: ['Preparación de la piel', 'Tratamiento con dermapen', 'Alta frecuencia', 'Aplicación de activos hidratantes', 'Mascarilla'],
-        result: 'Piel más uniforme, renovada y con mejor calidad.',
+        tag: 'Dermapen en Cejas',
+        bookingId: 'brow-restored',
+        duration: '45 minutos',
+        description:
+          'Tratamiento regenerador avanzado para cejas despobladas o debilitadas. Mediante la tecnología Dermapen, estimulamos el folículo piloso y favorecemos el crecimiento del vello desde la raíz, devolviendo la densidad perdida.',
       },
       {
         name: 'Micropigmentación Soft Pixel Brow',
-        tag: 'Efecto sombreado',
-        duration: '2h – 2h 30 min',
-        forWhom: 'Para personas que buscan unas cejas más definidas, rellenas y con efecto maquillaje suave y natural.',
-        includes: ['Estudio y diseño personalizado', 'Elección de forma y tono adaptado al rostro', 'Procedimiento de micropigmentación efecto sombreado', 'Indicaciones de cuidado post tratamiento'],
-        result: 'Cejas más densas, definidas y uniformes, con un efecto polvo natural que realza la mirada sin endurecerla.',
-        isMicro: true,
-      },
-      {
-        name: 'Nanoblading',
-        tag: 'Efecto pelo a pelo',
-        duration: '2h – 2h 30 min',
-        forWhom: 'Ideal si buscas un resultado muy natural imitando el pelo real, especialmente en cejas con poco vello.',
-        includes: ['Diseño personalizado', 'Técnica pelo a pelo', 'Adaptación de forma y color', 'Indicaciones de cuidado'],
-        result: 'Cejas hiper naturales, con efecto de pelitos que se integran perfectamente con el vello natural.',
+        bookingId: 'micropigmentacion-soft-pixel',
+        duration: '2 horas y media',
+        description:
+          'Diseño de cejas semipermanente con una técnica avanzada de efecto polvo o pixelado. Logramos un sombreado suave, difuminado y elegante que aporta una definición perfecta y natural durante meses, olvidándote de maquillarlas a diario.',
         isMicro: true,
       },
     ],
   },
   pestanas: {
-    intro: 'Realza tu mirada sin necesidad de maquillaje.',
     items: [
       {
-        name: 'Lash Lift Korean',
-        tag: 'Lifting de pestañas coreano + tinte',
-        duration: '2 horas',
-        forWhom: 'Si quieres realzar tu mirada sin necesidad de maquillaje.',
-        includes: ['Lifting de pestañas (curvatura y elevación)', 'Tinte', 'Tratamiento nutritivo'],
-        result: 'Pestañas más elevadas, oscuras y definidas. Efecto mirada abierta.',
+        name: 'Korean Lash Lift',
+        tag: 'Lifting Coreano + Tinte',
+        bookingId: 'lash-lift-korean',
+        duration: '60 minutos',
+        description:
+          'El tratamiento definitivo para elevar y curvar tus pestañas naturales desde la raíz. Añadimos un toque de color para intensificar la mirada, logrando un efecto de pestañas visiblemente más largas, oscuras y definidas. Además, incluye una sesión de hidratación profunda que nutre y protege el pelo, garantizando un resultado radiante, sano y de larga duración.',
       },
     ],
   },
   rostro: {
-    intro: 'Una piel cuidada se ve y se siente. Los tratamientos faciales están enfocados en limpiar, equilibrar y devolver luminosidad.',
     items: [
       {
         name: 'Skin Reset',
-        tag: 'Limpieza facial con cosmética coreana',
-        duration: '60-70 min',
-        forWhom: 'Para todo tipo de pieles que necesiten limpiar, renovar y equilibrar la piel.',
-        includes: ['Limpieza profunda', 'Exfoliación', 'Extracción (si es necesario)', 'Mascarilla y masaje', 'Hidratación final', 'Cosmética coreana respetuosa con tu piel'],
-        result: 'Piel más limpia, luminosa y equilibrada desde la primera sesión.',
-      },
-      {
-        name: 'Ritual Glow',
-        tag: 'Tratamiento facial avanzado',
-        duration: '70-75 min',
-        forWhom: 'Para pieles apagadas, deshidratadas o que buscan efecto glow inmediato.',
-        includes: ['Limpieza profunda', 'Exfoliación', 'Tratamiento específico (activo según piel)', 'Masaje facial', 'Hidratación intensiva'],
-        result: 'Piel luminosa, jugosa y revitalizada. Efecto "buena cara" inmediato.',
+        tag: 'Limpieza Facial Coreana',
+        bookingId: 'skin-reset',
+        duration: '75 minutos',
+        description:
+          'Un reinicio completo para tu piel basado en los exigentes estándares de la cosmética coreana. Una limpieza profunda y respetuosa que elimina impurezas, equilibra y aporta una luminosidad inmediata, dejando el rostro radiante y oxigenado.',
       },
       {
         name: 'Skin Boost',
-        tag: 'Dermapen facial',
-        duration: '50 min',
-        forWhom: 'Para mejorar textura, manchas, marcas, reducir arrugas, disminuir poro y producir colágeno.',
-        includes: ['Preparación de la piel', 'Tratamiento con dermapen', 'Alta frecuencia', 'Aplicación de activos hidratantes', 'Mascarilla'],
-        result: 'Piel más uniforme, renovada y con mejor calidad.',
+        tag: 'Dermapen Facial',
+        bookingId: 'skin-boost',
+        duration: '45 minutos',
+        description:
+          'Tratamiento de inducción de colágeno para renovar la piel desde el interior. Atenúa líneas de expresión, minimiza poros y mejora la textura general del rostro mediante microcanales que potencian la absorción de principios activos avanzados.',
       },
     ],
   },
   depilacion: {
-    intro: 'Eliminación de vello para una piel lisa y luminosa.',
     items: [
       {
-        name: 'Labio superior',
-        tag: 'Depilación con hilo',
-        duration: '10 min',
-        forWhom: 'Eliminación de vello en zona del labio.',
-        includes: ['Depilación con hilo'],
-        result: 'Piel limpia por más tiempo y suave.',
+        name: 'Depilación labio superior',
+        bookingId: 'labio-superior',
+        description:
+          'Eliminación del vello de forma rápida y eficaz mediante técnicas de alta precisión para un acabado suave y limpio.',
       },
       {
-        name: 'Depilación facial',
-        tag: 'Depilación completa',
-        duration: '30 min',
-        forWhom: 'Para eliminar vello facial y mejorar la textura de la piel.',
-        includes: ['Depilación facial completa'],
-        result: 'Piel más lisa, uniforme y luminosa.',
+        name: 'Depilación facial completa',
+        bookingId: 'depilacion-facial',
+        description:
+          'Diseño y limpieza del vello facial no deseado, adaptándonos a las necesidades de tu piel para garantizar un resultado terso y libre de irritaciones.',
       },
     ],
   },
   smile: {
-    intro: 'Un toque sutil y elegante para tu sonrisa.',
     items: [
       {
         name: 'Smile Gem',
         tag: 'Swarovski',
-        duration: '30 min',
-        forWhom: 'Para quienes quieren añadir un detalle sutil y elegante a su sonrisa. Diamantes de Swarovski.',
-        includes: ['Preparación del diente', 'Colocación de la gema', 'Sellado seguro', 'Elección de diseño'],
-        result: 'Una sonrisa más llamativa y especial, con un toque brillante. Duración: hasta 1 año.',
-        designs: ['Diamante simple', 'Media mariposa', 'Mariposa completa'],
+        bookingId: 'smile-gem',
+        description:
+          'Añade un toque de brillo único y seguro a tu sonrisa. Aplicamos cristales Swarovski auténticos mediante una técnica de adhesión dental profesional, totalmente indolora y respetuosa con tu esmalte.',
+        note: 'Valorar según diseño.',
       },
     ],
   },
 }
 
-function TreatmentCard({ treatment }) {
+function TreatmentCard({ treatment, onBook }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -188,13 +158,41 @@ function TreatmentCard({ treatment }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h4 className="font-headline text-base font-bold text-on-surface">{treatment.name}</h4>
-            <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-label whitespace-nowrap">
-              {treatment.tag}
-            </span>
+            {treatment.tag && (
+              <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-label whitespace-nowrap">
+                {treatment.tag}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 mt-2">
-            <Icon name="schedule" className="text-sm text-on-surface-variant" />
-            <span className="text-sm text-on-surface-variant">{treatment.duration}</span>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            {treatment.duration && (
+              <div className="flex items-center gap-2">
+                <Icon name="schedule" className="text-sm text-on-surface-variant" />
+                <span className="text-sm text-on-surface-variant">{treatment.duration}</span>
+              </div>
+            )}
+            {treatment.bookingId && (
+              <motion.span
+                whileTap={{ scale: 0.97 }}
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onBook(treatment.bookingId)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onBook(treatment.bookingId)
+                  }
+                }}
+                className="inline-flex items-center gap-1 text-xs font-label font-bold tracking-wide uppercase text-primary hover:text-primary/80 transition-colors"
+              >
+                Reservar
+                <Icon name="arrow_forward" className="text-sm" />
+              </motion.span>
+            )}
           </div>
         </div>
         <Icon
@@ -213,43 +211,21 @@ function TreatmentCard({ treatment }) {
             className="overflow-hidden"
           >
             <div className="px-6 pb-6 space-y-4 border-t border-outline-variant/10 pt-4">
-              <div>
-                <p className="text-xs font-label font-bold text-primary uppercase tracking-widest mb-1">¿Para quién es?</p>
-                <p className="text-sm text-on-surface-variant">{treatment.forWhom}</p>
-              </div>
-
-              <div>
-                <p className="text-xs font-label font-bold text-primary uppercase tracking-widest mb-2">¿Qué incluye?</p>
-                <ul className="space-y-1">
-                  {treatment.includes.map((item) => (
-                    <li key={item} className="text-sm text-on-surface-variant flex items-start gap-2">
-                      <Icon name="check" className="text-primary text-sm shrink-0 mt-0.5" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {treatment.designs && (
-                <div>
-                  <p className="text-xs font-label font-bold text-primary uppercase tracking-widest mb-2">Elige tu diseño</p>
-                  <div className="flex flex-wrap gap-2">
-                    {treatment.designs.map((d) => (
-                      <span key={d} className="text-sm bg-primary/5 text-on-surface px-3 py-1.5 rounded-xl">
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs font-label font-bold text-primary uppercase tracking-widest mb-1">Resultado esperado</p>
-                <p className="text-sm text-on-surface-variant">{treatment.result}</p>
-              </div>
+              <p className="text-sm text-on-surface-variant leading-relaxed">{treatment.description}</p>
 
               {treatment.note && (
                 <p className="text-sm italic text-primary/70">{treatment.note}</p>
+              )}
+
+              {treatment.bookingId && (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => onBook(treatment.bookingId)}
+                  className="w-full flex items-center justify-center gap-2 coral-gradient text-white rounded-2xl py-3.5 font-label text-xs tracking-widest uppercase font-bold editorial-shadow"
+                >
+                  <span>Reservar cita</span>
+                  <Icon name="calendar_month" className="text-base" />
+                </motion.button>
               )}
             </div>
           </motion.div>
@@ -266,7 +242,6 @@ export default function TreatmentsGrid() {
   const tabsRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
-  const activeCat = categories.find((c) => c.id === activeTab)
   const activeData = treatments[activeTab]
   const hasMicro = activeData.items.some((t) => t.isMicro)
 
@@ -298,6 +273,10 @@ export default function TreatmentsGrid() {
       container.scrollTo({ left: offset, behavior: 'smooth' })
     }
   }
+
+  const handleBookTreatment = useCallback((bookingId) => {
+    navigate(`/reservar?treatment=${bookingId}`)
+  }, [navigate])
 
   return (
     <section id="treatments" className="py-24 px-6">
@@ -361,35 +340,14 @@ export default function TreatmentsGrid() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Category image + intro */}
-            {activeCat.image && (
-              <div className="relative rounded-3xl overflow-hidden mb-8 h-48 md:h-64">
-                <img
-                  src={activeCat.image}
-                  alt={activeCat.label}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black/50 to-transparent" />
-                <div className="absolute bottom-6 left-6 right-6">
-                  <h3 className="font-headline text-2xl text-white mb-1">{activeCat.label}</h3>
-                  <p className="text-sm text-white/80">{activeData.intro}</p>
-                </div>
-              </div>
-            )}
-
-            {!activeCat.image && (
-              <div className="bg-surface-container-low rounded-3xl p-6 mb-8">
-                <h3 className="font-headline text-xl text-on-surface mb-2">{activeCat.label}</h3>
-                <p className="text-sm text-on-surface-variant">{activeData.intro}</p>
-              </div>
-            )}
-
             {/* Treatment cards */}
             <div className="space-y-3">
-              {activeData.items.map((treatment, i) => (
-                <TreatmentCard key={`${treatment.name}-${treatment.tag}`} treatment={treatment} />
+              {activeData.items.map((treatment) => (
+                <TreatmentCard
+                  key={treatment.bookingId || `${treatment.name}-${treatment.tag || ''}`}
+                  treatment={treatment}
+                  onBook={handleBookTreatment}
+                />
               ))}
             </div>
 

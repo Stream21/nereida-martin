@@ -75,6 +75,7 @@ router.get('/calendar-sync', async (req, res) => {
 
   try {
     const syncResult = await calendarSync.syncIncremental();
+    const staleReconcile = await calendarSync.reconcileStaleGoogleBookings();
     await calendarSync.reconcilePendingGoogleDeletes();
     await calendarSync.reconcileMissingGoogleEvents();
 
@@ -88,6 +89,7 @@ router.get('/calendar-sync', async (req, res) => {
 
     res.json({
       sync: syncResult,
+      staleReconcile,
       watchRenewed,
       timestamp: new Date().toISOString(),
     });

@@ -23,12 +23,6 @@ const services = [
   'Micropigmentación',
 ]
 
-const stats = [
-  { value: '+5', label: 'Años' },
-  { value: '+2k', label: 'Clientas' },
-  { value: '4.9★', label: 'Valoración' },
-]
-
 const stagger = {
   hidden: {},
   visible: {
@@ -113,23 +107,15 @@ export default function HeroSection() {
       >
         <motion.div variants={stagger} initial="hidden" animate="visible">
 
-          {/* Specialist label */}
-          <motion.p
-            variants={fadeUp}
-            custom={0}
-            className="text-center font-label text-xs sm:text-sm tracking-[0.3em] uppercase text-primary font-bold mb-6 sm:mb-8"
-          >
-            Especialista en Cejas
-          </motion.p>
-
-          {/* Name */}
-          <motion.h1
-            variants={fadeUp}
-            custom={0.15}
-            className="text-center font-headline text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl text-on-surface tracking-tight leading-[0.95] mb-4 sm:mb-5"
-          >
-            Nereida Martín
-          </motion.h1>
+          {/* Logo — brand centerpiece */}
+          <motion.div variants={fadeUp} custom={0} className="flex justify-center mb-6 sm:mb-8">
+            <h1 className="sr-only">Nereida Martín — Brow Artist</h1>
+            <img
+              src="/logo2.png"
+              alt="Nereida Martín — Brow Artist"
+              className="w-[88%] max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl h-auto drop-shadow-[0_12px_32px_rgba(183,139,125,0.25)]"
+            />
+          </motion.div>
 
           {/* Subtitle */}
           <motion.p
@@ -188,36 +174,7 @@ export default function HeroSection() {
               </svg>
             </motion.a>
           </motion.div>
-
-          {/* Stats */}
-          <motion.div
-            variants={fadeUp}
-            custom={0.85}
-            className="flex items-center justify-center gap-8 sm:gap-14"
-          >
-            {stats.map((stat, i) => (
-              <motion.div
-                key={i}
-                className="flex flex-col items-center text-center"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.6,
-                  delay: 1.5 + i * 0.15,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <span className="font-headline text-2xl sm:text-3xl md:text-4xl text-on-surface font-semibold leading-none">
-                  {stat.value}
-                </span>
-                <span className="font-label text-[10px] sm:text-xs tracking-[0.2em] uppercase text-on-surface-variant/70 mt-1.5">
-                  {stat.label}
-                </span>
-              </motion.div>
-            ))}
-          </motion.div>
         </motion.div>
       </motion.div>
-    </section>
-  )
+    </section>  )
 }

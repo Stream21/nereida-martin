@@ -5,19 +5,14 @@ import Icon from '../ui/Icon'
 import WhatsAppIcon from '../ui/WhatsAppIcon'
 import GoldButton from '../ui/GoldButton'
 
-const PHONE = '650 86 38 42'
-const WHATSAPP_URL = 'https://wa.me/34650863842'
+const PHONE = '641 61 36 14'
+const WHATSAPP_URL = 'https://wa.me/34641613614'
 
 const contactInfo = [
   {
-    icon: 'location_on',
-    title: 'Ubicación',
-    lines: ['Dirección del estudio', '(Por confirmar)'],
-  },
-  {
     icon: 'schedule',
     title: 'Horario',
-    lines: ['Lun - Vie: 10:00 - 20:00', 'Sáb: 10:00 - 14:00'],
+    lines: ['Lun - Vie: 10:00 - 14:00 y 15:00 - 18:00', 'Sáb y Dom: cerrado'],
   },
   {
     id: 'whatsapp',
@@ -60,11 +55,11 @@ export default function ContactSection() {
             Contacto
           </span>
           <h2 className="font-headline text-4xl md:text-5xl text-on-surface">
-            Encuéntrame
+            Contacta conmigo
           </h2>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
+        <div className="grid md:grid-cols-2 gap-6 mb-12 max-w-2xl mx-auto">
           {contactInfo.map((info, i) => (
             <RevealBlock key={info.title} delay={i * 0.1}>
               <div
@@ -103,7 +98,7 @@ export default function ContactSection() {
               Reserva tu mantenimiento para mantener el resultado siempre perfecto.
             </p>
             <GoldButton
-              onClick={() => navigate('/reservar')}
+              onClick={() => navigate('/reservar?intent=mantenimiento')}
               className="px-8 py-3 rounded-2xl text-sm"
             >
               Reservar mantenimiento
