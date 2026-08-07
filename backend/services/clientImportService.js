@@ -155,13 +155,13 @@ async function createManualClient({ name, phone, email }) {
   if (phoneNorm) {
     const clash = await query(`SELECT id FROM clients WHERE phone_normalized = $1`, [phoneNorm]);
     if (clash.rows.length) {
-      return { error: 'Ya existe una clienta con ese teléfono', code: 'PHONE_TAKEN', status: 409 };
+      return { error: 'Ya existe un cliente con ese teléfono', code: 'PHONE_TAKEN', status: 409 };
     }
   }
   if (emailValid) {
     const clash = await query(`SELECT id FROM clients WHERE LOWER(email) = $1`, [emailValid]);
     if (clash.rows.length) {
-      return { error: 'Ya existe una clienta con ese email', code: 'EMAIL_TAKEN', status: 409 };
+      return { error: 'Ya existe un cliente con ese email', code: 'EMAIL_TAKEN', status: 409 };
     }
   }
 

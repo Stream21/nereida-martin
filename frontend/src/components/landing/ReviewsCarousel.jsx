@@ -7,19 +7,19 @@ const reviews = [
   {
     initial: 'A',
     name: 'Alejandra R.',
-    label: 'Clienta habitual',
+    label: 'Cliente habitual',
     text: '"No dejo mis cejas en otras manos. Nere tiene un don para encontrar la forma perfecta sin que parezca artificial."',
   },
   {
     initial: 'M',
     name: 'Marta S.',
-    label: 'Clienta habitual',
+    label: 'Cliente habitual',
     text: '"Resultado súper natural. Fui por primera vez y salí encantada. El espacio es precioso y te sientes como en casa."',
   },
   {
     initial: 'L',
     name: 'Laura G.',
-    label: 'Clienta habitual',
+    label: 'Cliente habitual',
     text: '"Llevo años confiando en Nere para mis cejas. Siempre sale perfecta. La recomiendo al 100%."',
   },
   {
@@ -31,7 +31,7 @@ const reviews = [
   {
     initial: 'S',
     name: 'Sofía T.',
-    label: 'Clienta habitual',
+    label: 'Cliente habitual',
     text: '"El lifting de pestañas me cambió la rutina de maquillaje. Me levanto y ya tengo los ojos preciosos. ¡No puedo estar más contenta!"',
   },
   {
@@ -43,7 +43,7 @@ const reviews = [
   {
     initial: 'R',
     name: 'Rocío D.',
-    label: 'Clienta habitual',
+    label: 'Cliente habitual',
     text: '"Siempre salgo feliz del estudio. El ambiente es súper relajante y Nere cuida hasta el último detalle. Mi sitio favorito."',
   },
 ]

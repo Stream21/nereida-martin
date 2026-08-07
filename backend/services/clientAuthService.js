@@ -52,7 +52,7 @@ async function getInvitePreview(token) {
     return { error: 'Esta cuenta está desactivada', code: 'ACCOUNT_DISABLED', status: 403 };
   }
   if (row.account_status === 'active') {
-    return { error: 'Esta clienta ya tiene cuenta. Inicia sesión.', code: 'ALREADY_REGISTERED', status: 409 };
+    return { error: 'Este cliente ya tiene cuenta. Inicia sesión.', code: 'ALREADY_REGISTERED', status: 409 };
   }
 
   return {
@@ -116,7 +116,7 @@ async function registerWithInvite(token, { name, email, phone, password }) {
     }
     if (invite.account_status === 'active') {
       await client.query('ROLLBACK');
-      return { error: 'Esta clienta ya tiene cuenta', code: 'ALREADY_REGISTERED', status: 409 };
+      return { error: 'Este cliente ya tiene cuenta', code: 'ALREADY_REGISTERED', status: 409 };
     }
 
     const emailClash = await client.query(
@@ -263,7 +263,7 @@ async function createInviteForClient(clientId) {
     return { error: 'Reactiva la cuenta antes de invitar', code: 'ACCOUNT_DISABLED', status: 400 };
   }
   if (client.account_status === 'active') {
-    return { error: 'Esta clienta ya está registrada', code: 'ALREADY_REGISTERED', status: 409 };
+    return { error: 'Este cliente ya está registrado', code: 'ALREADY_REGISTERED', status: 409 };
   }
 
   await query(

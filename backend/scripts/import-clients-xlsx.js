@@ -1,5 +1,5 @@
 /**
- * Importa clientas desde un Excel (nombre + teléfono).
+ * Importa clientes desde un Excel (nombre + teléfono).
  * Uso:
  *   node scripts/import-clients-xlsx.js --file "C:\path\CLIENTES.xlsx"
  *   node scripts/import-clients-xlsx.js --file "...\CLIENTES.xlsx" --apply

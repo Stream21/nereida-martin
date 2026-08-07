@@ -56,7 +56,7 @@ export default function ClientLogin() {
       >
         <div className="text-center mb-8">
           <img src="/logo2.png" alt="Nereida Martín" className="h-14 w-auto mx-auto mb-4" />
-          <h1 className="font-headline text-2xl text-on-surface mb-2">Acceso clientas</h1>
+          <h1 className="font-headline text-2xl text-on-surface mb-2">Acceso clientes</h1>
           <p className="text-on-surface-variant text-sm">
             Entra con tu email o teléfono y tu contraseña para reservar.
           </p>
