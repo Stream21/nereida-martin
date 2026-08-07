@@ -14,7 +14,7 @@ services:
     plan: free
     region: frankfurt
     buildCommand: >-
-      cd frontend && npm ci && npm run build &&
+      cd frontend && NPM_CONFIG_PRODUCTION=false npm ci && npm run build &&
       cd ../backend && npm ci
     startCommand: cd backend && npm start
     healthCheckPath: /api/health

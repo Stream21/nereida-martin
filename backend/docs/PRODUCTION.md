@@ -2,6 +2,13 @@
 
 Checklist para desplegar en Render con sync de Google Calendar en vivo.
 
+## Build en Render
+
+El `buildCommand` del blueprint usa `NPM_CONFIG_PRODUCTION=false npm ci` en el frontend
+para instalar `vite` / `@vitejs/plugin-react` (están en `devDependencies`). Sin eso,
+con `NODE_ENV=production` el build falla con `Cannot find package '@vitejs/plugin-react'`.
+
+
 ## Variables de entorno obligatorias
 
 | Variable | Descripción |
