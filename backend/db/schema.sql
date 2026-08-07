@@ -14,10 +14,29 @@ CREATE TABLE treatments (
 CREATE TABLE clients (
   id SERIAL PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
-  email VARCHAR(200) NOT NULL UNIQUE,
+  email VARCHAR(200),
   phone VARCHAR(20),
+  phone_normalized VARCHAR(20),
+  password_hash VARCHAR(255),
+  account_status VARCHAR(20) NOT NULL DEFAULT 'invited',
+  registered_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX clients_email_unique ON clients (email) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX clients_phone_normalized_unique ON clients (phone_normalized) WHERE phone_normalized IS NOT NULL;
+
+CREATE TABLE client_invites (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_client_invites_client ON client_invites(client_id);
+CREATE INDEX idx_client_invites_token ON client_invites(token);
 
 CREATE TABLE bookings (
   id SERIAL PRIMARY KEY,

@@ -165,25 +165,40 @@ async function upsertFromGoogleEvent(
 
     const newStatus = cancelled ? 'cancelled' : 'confirmed';
 
-    await query(
-      `UPDATE bookings SET
-         start_time = $1,
-         end_time = $2,
-         status = $3,
-         google_etag = $4,
-         google_updated_at = $5,
-         last_sync_source = 'google',
-         updated_at = NOW()
-       WHERE id = $6`,
-      [
-        startTime.toISOString(),
-        endTime.toISOString(),
-        newStatus,
-        event.etag || null,
-        googleUpdatedAt?.toISOString() || null,
-        existing.id,
-      ]
-    );
+    try {
+      await query(
+        `UPDATE bookings SET
+           start_time = $1,
+           end_time = $2,
+           status = $3,
+           google_etag = $4,
+           google_updated_at = $5,
+           last_sync_source = 'google',
+           updated_at = NOW()
+         WHERE id = $6`,
+        [
+          startTime.toISOString(),
+          endTime.toISOString(),
+          newStatus,
+          event.etag || null,
+          googleUpdatedAt?.toISOString() || null,
+          existing.id,
+        ]
+      );
+    } catch (err) {
+      if (err.code === '23P01') {
+        return {
+          action: 'skipped',
+          reason: 'overlap',
+          eventId: event.id,
+          bookingId: existing.id,
+          summary: event.summary || null,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        };
+      }
+      throw err;
+    }
 
     if (existing.source === 'web' && existing.client_id) {
       await notifyClientOfGoogleChange(existing.id, {
@@ -309,7 +324,7 @@ async function notifyClientOfGoogleChange(bookingId, { type, startTime, endTime 
   }
 }
 
-async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin } = {}) {
+async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin, timeMax } = {}) {
   const params = [knownEventIds.length > 0 ? knownEventIds : ['__none__']];
   let sql = `
     SELECT id, google_event_id, source FROM bookings
@@ -319,7 +334,11 @@ async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin } =
 
   if (timeMin) {
     params.push(timeMin);
-    sql += ' AND start_time >= $2';
+    sql += ` AND start_time >= $${params.length}`;
+  }
+  if (timeMax) {
+    params.push(timeMax);
+    sql += ` AND start_time < $${params.length}`;
   }
 
   const orphans = await query(sql, params);
@@ -391,7 +410,11 @@ async function importEventsFromGoogle({ timeMin, timeMax, dryRun = false } = {})
     tallyImportResult(stats, result);
   }
 
-  const orphanResults = await cancelOrphanBookings(knownEventIds, { dryRun, timeMin: min });
+  const orphanResults = await cancelOrphanBookings(knownEventIds, {
+    dryRun,
+    timeMin: min,
+    timeMax: max,
+  });
   stats.orphansCancelled = orphanResults.length;
 
   if (!dryRun && nextSyncToken) {
@@ -424,7 +447,7 @@ async function syncIncremental({ dryRun = false } = {}) {
       ghostSkipped: 0,
     };
     const occupiedRanges = await loadOccupiedRanges(
-      new Date().toISOString(),
+      new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString(),
       new Date('2099-12-31').toISOString()
     );
     const sortedEvents = sortEventsForImport(events);

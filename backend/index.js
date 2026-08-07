@@ -14,6 +14,7 @@ const assessmentsRouter = require('./routes/assessments');
 const ownerRouter = require('./routes/owner');
 const ownerAuthRouter = require('./routes/ownerAuth');
 const ownerDashboardRouter = require('./routes/ownerDashboard');
+const clientAuthRouter = require('./routes/clientAuth');
 const webhooksRouter = require('./routes/webhooks');
 const studioSettings = require('./services/studioSettings');
 const calendarSync = require('./services/calendarSync');
@@ -31,6 +32,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/treatments', treatmentsRouter);
 app.use('/api/availability', availabilityRouter);
 app.use('/api/bookings', bookingsRouter);
+app.use('/api/auth', clientAuthRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/intake', intakeRouter);
 app.use('/api/assessments', assessmentsRouter);

@@ -18,6 +18,9 @@ function getTransporter() {
       user: GMAIL_USER,
       pass: GMAIL_APP_PASSWORD,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
   return transporter;

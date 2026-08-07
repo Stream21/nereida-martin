@@ -1,12 +1,27 @@
 const { Router } = require('express');
 const ExcelJS = require('exceljs');
+const multer = require('multer');
 const requireOwnerAuth = require('../middleware/requireOwnerAuth');
 const dashboard = require('../services/ownerDashboardService');
+const clientAuth = require('../services/clientAuthService');
+const clientImport = require('../services/clientImportService');
 const { TIMEZONE, formatStudioDate, formatStudioTime } = require('../utils/studioTimezone');
 
 const router = Router();
 
 router.use(requireOwnerAuth);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok =
+      /sheet|excel|spreadsheet|csv|octet-stream/i.test(file.mimetype) ||
+      /\.(xlsx|xls|csv)$/i.test(file.originalname || '');
+    if (ok) cb(null, true);
+    else cb(new Error('Sube un archivo Excel (.xlsx)'));
+  },
+});
 
 function parsePagination(query) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
@@ -36,6 +51,83 @@ router.get('/clients', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('Owner clients error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients', async (req, res) => {
+  try {
+    const { name, phone, email } = req.body || {};
+    const result = await clientImport.createManualClient({ name, phone, email });
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Owner create client error:', err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Cliente duplicado', code: 'DUPLICATE' });
+    }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients/import', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: 'Archivo requerido', code: 'MISSING_FILE' });
+    }
+    const dryRun = String(req.query.dryRun || req.body?.dryRun || '') === 'true';
+    const rows = await clientImport.parseXlsxBuffer(req.file.buffer);
+    const summary = await clientImport.upsertClientRows(rows, { dryRun });
+    res.json({ dryRun, ...summary });
+  } catch (err) {
+    console.error('Owner import clients error:', err);
+    res.status(500).json({ error: err.message || 'Error al importar' });
+  }
+});
+
+router.post('/clients/:id/invite', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await clientAuth.createInviteForClient(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner invite client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients/:id/disable', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await clientImport.setAccountStatus(id, 'disabled');
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner disable client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients/:id/enable', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await clientImport.setAccountStatus(id, 'active');
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner enable client error:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

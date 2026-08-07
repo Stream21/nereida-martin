@@ -7,15 +7,25 @@ import StepPriorTreatments from '../components/booking/StepPriorTreatments'
 import StepQuestionnaire from '../components/booking/StepQuestionnaire'
 import StepTreatmentConfirm from '../components/booking/StepTreatmentConfirm'
 import StepTreatments from '../components/booking/StepTreatments'
-import { shouldAskPriorHistory, resolveMaintenanceBooking, hasBrowDesignHistoryInDb, BROW_DESIGN_SEGUIMIENTO } from '../utils/browDesign'
+import { shouldAskPriorHistory, resolveMaintenanceBooking, hasBrowDesignHistoryInDb, BROW_DESIGN_SEGUIMIENTO, requiresAptitudeQuestionnaire } from '../utils/browDesign'
 import StepHennaAssessment from '../components/booking/StepHennaAssessment'
 import StepAvailability from '../components/booking/StepAvailability'
 import StepSummary from '../components/booking/StepSummary'
 import BookingSuccess from '../components/booking/BookingSuccess'
 import { saveClientProfile } from '../utils/clientSession'
 import { isValidPhone } from '../utils/validation'
+import { getClientToken, updateClientProfile } from '../utils/clientAuth'
+import { useClientAuth } from '../hooks/useClientAuth'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+function authHeaders(extra = {}) {
+  const token = getClientToken()
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
 
 const CATEGORIES = [
   { id: 'cejas', label: 'Cejas', icon: 'visibility' },
@@ -45,6 +55,8 @@ const stepVariants = {
 function resolveDeclaredProfile(lookupData, studioHabitual) {
   if (lookupData?.isKnownClient || lookupData?.visitCount > 0) return 'returning_known'
   if (studioHabitual === true) return 'returning_declared'
+  if (studioHabitual === false) return 'first_time'
+  if (lookupData?.client?.declaredProfile) return lookupData.client.declaredProfile
   if (lookupData?.client) return 'returning_declared'
   return 'first_time'
 }
@@ -80,6 +92,7 @@ export default function Booking() {
   const [searchParams, setSearchParams] = useSearchParams()
   const preselectedTreatmentId = searchParams.get('treatment')
   const bookingIntent = searchParams.get('intent')
+  const { user: authUser } = useClientAuth()
 
   const [stepIndex, setStepIndex] = useState(0)
   const [direction, setDirection] = useState(1)
@@ -119,7 +132,11 @@ export default function Booking() {
 
   const isHenna = selectedTreatment?.id === 'brow-henna'
   const showConsents = !lookupData?.hasAllBaseConsents
-  const needsPriorHistory = shouldAskPriorHistory(lookupData) && !skipIdentify && bookingIntent !== 'mantenimiento'
+  const needsPriorHistory =
+    shouldAskPriorHistory(lookupData) &&
+    !authUser?.declaredProfile &&
+    !skipIdentify &&
+    bookingIntent !== 'mantenimiento'
 
   const effectiveClientProfile = useMemo(
     () => ({
@@ -148,6 +165,23 @@ export default function Booking() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [stepIndex, bookingResult])
+
+  useEffect(() => {
+    if (!authUser) return
+    setClientInfo({
+      name: authUser.name || '',
+      email: authUser.email || '',
+      phone: authUser.phone || '',
+    })
+    if (authUser.declaredProfile === 'returning_declared') {
+      setStudioHabitual(true)
+    } else if (authUser.declaredProfile === 'first_time') {
+      setStudioHabitual(false)
+    }
+    if (authUser.email) {
+      handleLookup(authUser.email)
+    }
+  }, [authUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (clientInfo.name?.trim() && !signerName) {
@@ -193,13 +227,20 @@ export default function Booking() {
       setStudioHabitual(null)
       setDeclaredPriorTreatments([])
       setPriorHistoryError(null)
+    } else if (data?.client?.declaredProfile === 'returning_declared') {
+      setStudioHabitual(true)
+    } else if (data?.client?.declaredProfile === 'first_time') {
+      setStudioHabitual(false)
     }
   }, [])
 
   const handleLookup = useCallback(async (email) => {
     setIsLookingUp(true)
     try {
-      const res = await fetch(`${API_URL}/api/clients/lookup?email=${encodeURIComponent(email)}`)
+      const res = await fetch(
+        `${API_URL}/api/clients/lookup?email=${encodeURIComponent(email)}`,
+        { headers: authHeaders() }
+      )
       if (!res.ok) return
       const data = await res.json()
       applyLookupData(data)
@@ -227,7 +268,10 @@ export default function Booking() {
     let data = lookupData
     if (!data) {
       try {
-        const res = await fetch(`${API_URL}/api/clients/lookup?email=${encodeURIComponent(clientInfo.email.trim())}`)
+        const res = await fetch(
+          `${API_URL}/api/clients/lookup?email=${encodeURIComponent(clientInfo.email.trim())}`,
+          { headers: authHeaders() }
+        )
         if (res.ok) {
           data = await res.json()
           applyLookupData(data)
@@ -268,6 +312,10 @@ export default function Booking() {
 
     const hasDbBrowHistory = hasBrowDesignHistoryInDb(lookup?.treatmentIds || [])
     if (treatment.id === BROW_DESIGN_SEGUIMIENTO && hasDbBrowHistory) {
+      return { needsTreatmentConfirm: false, needsTreatmentQuestionnaire: false }
+    }
+
+    if (!requiresAptitudeQuestionnaire(treatment.id)) {
       return { needsTreatmentConfirm: false, needsTreatmentQuestionnaire: false }
     }
 
@@ -338,7 +386,10 @@ export default function Booking() {
         let data = lookupData
         if (!data && clientInfo.email?.trim()) {
           try {
-            const res = await fetch(`${API_URL}/api/clients/lookup?email=${encodeURIComponent(clientInfo.email.trim())}`)
+            const res = await fetch(
+              `${API_URL}/api/clients/lookup?email=${encodeURIComponent(clientInfo.email.trim())}`,
+              { headers: authHeaders() }
+            )
             if (res.ok) {
               data = await res.json()
               applyLookupData(data)
@@ -362,6 +413,13 @@ export default function Booking() {
       if (studioHabitual === false) {
         setDeclaredPriorTreatments([])
       }
+
+      const declaredProfile = studioHabitual ? 'returning_declared' : 'first_time'
+      // Persistir ya (no esperar a confirmar la cita). No actualizar lookup/auth aquí:
+      // si el flujo pierde el paso prior_history a mitad, el stepIndex se desincroniza.
+      updateClientProfile({ declaredProfile }).catch(() => {
+        // La reserva también persistirá el perfil; no bloquear el flujo
+      })
     }
 
     if (currentStep === 'calendar' && (!selectedDate || !selectedTime)) return
@@ -505,10 +563,10 @@ export default function Booking() {
     try {
       const res = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
         if (res.status === 409) {
@@ -517,6 +575,8 @@ export default function Booking() {
           setDirection(-1)
           setStepIndex(calIdx >= 0 ? calIdx : 0)
           setSelectedTime(null)
+        } else if (res.status === 401 || res.status === 403) {
+          setBookingError(data.error || 'Tu sesión ha caducado. Vuelve a iniciar sesión.')
         } else {
           setBookingError(data.details?.join(', ') || data.error || 'Error al crear la reserva.')
         }
@@ -525,7 +585,7 @@ export default function Booking() {
 
       setBookingResult(data)
     } catch {
-      setBookingError('Error de conexión. Inténtalo de nuevo.')
+      setBookingError('Error de conexión. Si ya confirmaste, revisa tu email o el calendario del estudio antes de reintentar.')
     } finally {
       setIsSubmitting(false)
     }
@@ -687,6 +747,7 @@ export default function Booking() {
                 isLookingUp={isLookingUp}
                 showConsents={showConsents}
                 consentError={consentError}
+                identityLocked={Boolean(authUser)}
               />
             </motion.div>
           )}

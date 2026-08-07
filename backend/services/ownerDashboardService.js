@@ -265,7 +265,12 @@ async function listClients({ search = '', page = 1, limit = 20 }) {
   let searchClause = '';
 
   if (search.trim()) {
-    searchClause = `WHERE (c.name ILIKE $${idx} OR c.email ILIKE $${idx})`;
+    searchClause = `WHERE (
+      c.name ILIKE $${idx}
+      OR c.email ILIKE $${idx}
+      OR c.phone ILIKE $${idx}
+      OR c.phone_normalized ILIKE $${idx}
+    )`;
     params.push(`%${search.trim()}%`);
     idx += 1;
   }
@@ -281,17 +286,40 @@ async function listClients({ search = '', page = 1, limit = 20 }) {
        c.name,
        c.email,
        c.phone,
+       c.phone_normalized,
+       c.account_status,
        c.created_at,
+       c.registered_at,
        c.first_booking_at,
-       c.last_booking_at,
-       COUNT(b.id)::int AS booking_count,
-       COALESCE(SUM(t.price) FILTER (WHERE b.status = 'confirmed' AND t.price IS NOT NULL), 0)::numeric AS total_spent
+       COUNT(b.id) FILTER (
+         WHERE b.status IN ('confirmed', 'pending_review')
+       )::int AS booking_count,
+       COALESCE(
+         SUM(t.price) FILTER (
+           WHERE b.status IN ('confirmed', 'pending_review') AND t.price IS NOT NULL
+         ),
+         0
+       )::numeric AS total_spent,
+       MAX(b.start_time) FILTER (
+         WHERE b.status IN ('confirmed', 'pending_review')
+       ) AS last_booking_at,
+       (
+         SELECT i.expires_at
+         FROM client_invites i
+         WHERE i.client_id = c.id AND i.used_at IS NULL
+         ORDER BY i.created_at DESC
+         LIMIT 1
+       ) AS invite_expires_at,
+       EXISTS (
+         SELECT 1 FROM client_invites i
+         WHERE i.client_id = c.id AND i.used_at IS NULL AND i.expires_at > NOW()
+       ) AS has_invite
      FROM clients c
      LEFT JOIN bookings b ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
      ${searchClause}
      GROUP BY c.id
-     ORDER BY c.last_booking_at DESC NULLS LAST, c.name ASC
+     ORDER BY last_booking_at DESC NULLS LAST, c.name ASC
      LIMIT $${idx} OFFSET $${idx + 1}`,
     [...params, limit, offset]
   );
@@ -305,11 +333,16 @@ async function listClients({ search = '', page = 1, limit = 20 }) {
       name: row.name,
       email: row.email,
       phone: row.phone,
+      phoneNormalized: row.phone_normalized,
+      accountStatus: row.account_status,
       createdAt: row.created_at,
+      registeredAt: row.registered_at,
       firstBookingAt: row.first_booking_at,
       lastBookingAt: row.last_booking_at,
       bookingCount: row.booking_count,
       totalSpent: Number(row.total_spent) || 0,
+      hasInvite: Boolean(row.has_invite),
+      inviteExpiresAt: row.invite_expires_at,
     })),
   };
 }

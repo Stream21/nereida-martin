@@ -1,13 +1,16 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
+import RequireClientAuth from './components/auth/RequireClientAuth'
 
 const Home = lazy(() => import('./pages/Home'))
 const Booking = lazy(() => import('./pages/Booking'))
 const CancelBooking = lazy(() => import('./pages/CancelBooking'))
+const ClientLogin = lazy(() => import('./pages/ClientLogin'))
+const ClientRegister = lazy(() => import('./pages/ClientRegister'))
 const StudioLogin = lazy(() => import('./pages/StudioLogin'))
 const StudioDashboard = lazy(() => import('./pages/StudioDashboard'))
 
-function App() {
+export default function App() {
   return (
     <Suspense
       fallback={
@@ -18,7 +21,16 @@ function App() {
     >
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/reservar" element={<Booking />} />
+        <Route path="/entrar" element={<ClientLogin />} />
+        <Route path="/registro/:token" element={<ClientRegister />} />
+        <Route
+          path="/reservar"
+          element={
+            <RequireClientAuth>
+              <Booking />
+            </RequireClientAuth>
+          }
+        />
         <Route path="/cancelar/:token" element={<CancelBooking />} />
         <Route path="/studio" element={<StudioLogin />} />
         <Route path="/studio/panel" element={<StudioDashboard />} />
@@ -26,5 +38,3 @@ function App() {
     </Suspense>
   )
 }
-
-export default App

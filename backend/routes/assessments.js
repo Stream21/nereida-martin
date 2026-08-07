@@ -3,6 +3,8 @@ const fs = require('fs');
 const { Router } = require('express');
 const multer = require('multer');
 const { query } = require('../db/pool');
+const requireClientAuth = require('../middleware/requireClientAuth');
+const { normalizePhone } = require('../utils/phone');
 
 const router = Router();
 
@@ -27,7 +29,7 @@ const upload = multer({
   },
 });
 
-router.post('/henna', upload.single('photo'), async (req, res) => {
+router.post('/henna', requireClientAuth, upload.single('photo'), async (req, res) => {
   try {
     const { clientEmail, clientName, clientPhone } = req.body;
 
@@ -40,20 +42,35 @@ router.post('/henna', upload.single('photo'), async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim())) {
       return res.status(400).json({ error: 'clientEmail debe ser un email válido' });
     }
-    const phoneDigits = String(clientPhone).replace(/\D/g, '');
-    if (phoneDigits.length < 9) {
+    const phoneDigits = normalizePhone(clientPhone);
+    if (!phoneDigits) {
       return res.status(400).json({ error: 'clientPhone debe tener al menos 9 dígitos' });
     }
 
-    const email = clientEmail.trim().toLowerCase();
-    const clientResult = await query(
-      `INSERT INTO clients (name, email, phone)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET name = $1, phone = COALESCE($3, clients.phone)
-       RETURNING id`,
-      [clientName.trim(), email, clientPhone.trim()]
+    const authRes = await query(
+      `SELECT id, email, account_status FROM clients WHERE id = $1`,
+      [req.clientAuth.clientId]
     );
-    const clientId = clientResult.rows[0].id;
+    const authClient = authRes.rows[0];
+    if (!authClient || authClient.account_status !== 'active') {
+      return res.status(403).json({ error: 'Cuenta no autorizada', code: 'ACCOUNT_INACTIVE' });
+    }
+
+    const email = clientEmail.trim().toLowerCase();
+    if (authClient.email && email !== String(authClient.email).toLowerCase()) {
+      return res.status(403).json({ error: 'El email no coincide con tu cuenta', code: 'EMAIL_MISMATCH' });
+    }
+
+    await query(
+      `UPDATE clients
+       SET name = $1,
+           email = COALESCE(email, $2),
+           phone = $3,
+           phone_normalized = COALESCE($4, phone_normalized)
+       WHERE id = $5`,
+      [clientName.trim(), email, clientPhone.trim(), phoneDigits, authClient.id]
+    );
+    const clientId = authClient.id;
 
     const relativePath = path.join('henna', req.file.filename).replace(/\\/g, '/');
     const assessmentResult = await query(

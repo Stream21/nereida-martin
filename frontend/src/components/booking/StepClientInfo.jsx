@@ -24,6 +24,7 @@ export default function StepClientInfo({
   isLookingUp,
   showConsents,
   consentError,
+  identityLocked = false,
 }) {
   const [lookupHint, setLookupHint] = useState(null)
   const emailRef = useRef(null)
@@ -31,20 +32,22 @@ export default function StepClientInfo({
   const phoneRef = useRef(null)
 
   const syncAutofill = useCallback((dom) => {
+    if (identityLocked) return
     onChange({
       email: dom.email || clientInfo.email,
       name: dom.name || clientInfo.name,
       phone: dom.phone || clientInfo.phone,
     })
-  }, [clientInfo, onChange])
+  }, [clientInfo, onChange, identityLocked])
 
   useAutofillSync({
     fields: { email: emailRef, name: nameRef, phone: phoneRef },
     onSync: syncAutofill,
-    onEmailReady: onLookup,
+    onEmailReady: identityLocked ? undefined : onLookup,
   })
 
   useEffect(() => {
+    if (identityLocked) return
     const saved = loadClientProfile()
     if (saved && !clientInfo.email) {
       onChange({
@@ -119,7 +122,9 @@ export default function StepClientInfo({
         </span>
         <h2 className="font-headline text-3xl md:text-4xl text-on-surface">Identificación</h2>
         <p className="mt-3 text-sm text-on-surface-variant max-w-xs mx-auto">
-          Tus datos de contacto para gestionar la reserva
+          {identityLocked
+            ? 'Datos de tu cuenta. Revisa los consentimientos si hace falta.'
+            : 'Tus datos de contacto para gestionar la reserva'}
         </p>
       </section>
 
@@ -141,11 +146,12 @@ export default function StepClientInfo({
               value={clientInfo.email}
               onChange={handleChange('email')}
               onInput={handleInput}
-              onBlur={handleEmailBlur}
+              onBlur={identityLocked ? undefined : handleEmailBlur}
               placeholder="tu@email.com"
               autoComplete="email"
               required
-              className="w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+              readOnly={identityLocked}
+              className={`w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all ${identityLocked ? 'opacity-80' : ''}`}
             />
             {isLookingUp && (
               <div className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
@@ -176,7 +182,8 @@ export default function StepClientInfo({
               placeholder="Tu nombre y apellidos"
               autoComplete="name"
               required
-              className="w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+              readOnly={identityLocked}
+              className={`w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all ${identityLocked ? 'opacity-80' : ''}`}
             />
           </div>
         </motion.div>
@@ -201,7 +208,8 @@ export default function StepClientInfo({
               placeholder="Ej: 612 345 678"
               autoComplete="tel"
               required
-              className="w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+              readOnly={identityLocked}
+              className={`w-full pl-12 pr-5 py-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/15 text-on-surface placeholder:text-outline-variant/50 font-body text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all ${identityLocked ? 'opacity-80' : ''}`}
             />
           </div>
         </motion.div>

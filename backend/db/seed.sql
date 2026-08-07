@@ -19,8 +19,10 @@ INSERT INTO treatments (id, category, name, tag, duration_min, duration_max, pri
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO clients (name, email)
-VALUES ('Importado Google', 'imported@studio.local')
-ON CONFLICT (email) DO NOTHING;
+SELECT 'Importado Google', 'imported@studio.local'
+WHERE NOT EXISTS (
+  SELECT 1 FROM clients WHERE email = 'imported@studio.local'
+);
 
 INSERT INTO studio_settings (id, booking_start_date)
 VALUES (1, CURRENT_DATE)

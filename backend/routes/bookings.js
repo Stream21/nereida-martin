@@ -23,6 +23,8 @@ const {
   getTreatmentQuestions,
 } = require('../config/intakeQuestions');
 const { createOwnerActionToken, buildOwnerActionUrl } = require('../utils/ownerTokens');
+const requireClientAuth = require('../middleware/requireClientAuth');
+const { normalizePhone } = require('../utils/phone');
 
 const router = Router();
 
@@ -274,7 +276,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-router.post('/', validateBooking, async (req, res) => {
+router.post('/', requireClientAuth, validateBooking, async (req, res) => {
   const client = await getClient();
 
   try {
@@ -293,6 +295,19 @@ router.post('/', validateBooking, async (req, res) => {
       intakeSignature,
       hennaAssessmentId,
     } = req.body;
+
+    const authClientId = req.clientAuth.clientId;
+
+    const authClientRes = await client.query(
+      `SELECT id, name, email, phone, account_status
+       FROM clients WHERE id = $1 FOR UPDATE`,
+      [authClientId]
+    );
+    const authClient = authClientRes.rows[0];
+    if (!authClient || authClient.account_status !== 'active') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Cuenta no autorizada para reservar', code: 'ACCOUNT_INACTIVE' });
+    }
 
     const requiredConsents = ['privacy', 'booking_terms'];
     let consentList = Array.isArray(consents) ? [...consents] : [];
@@ -328,22 +343,29 @@ router.post('/', validateBooking, async (req, res) => {
       });
     }
 
-    const clientResult = await client.query(
-      `INSERT INTO clients (name, email, phone, declared_profile)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO UPDATE SET
-         name = $1,
-         phone = COALESCE($3, clients.phone),
-         declared_profile = COALESCE($4, clients.declared_profile)
-       RETURNING id`,
-      [
-        clientName.trim(),
-        clientEmail.trim().toLowerCase(),
-        clientPhone.trim(),
-        declaredProfile || null,
-      ]
+    const emailNorm = String(clientEmail).trim().toLowerCase();
+    if (authClient.email && emailNorm !== String(authClient.email).toLowerCase()) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        error: 'El email no coincide con tu cuenta',
+        code: 'EMAIL_MISMATCH',
+      });
+    }
+
+    const phoneNorm = normalizePhone(clientPhone);
+    const nameTrim = String(clientName).trim();
+
+    await client.query(
+      `UPDATE clients
+       SET name = $1,
+           email = COALESCE(email, $2),
+           phone = $3,
+           phone_normalized = COALESCE($4, phone_normalized),
+           declared_profile = COALESCE($5, declared_profile)
+       WHERE id = $6`,
+      [nameTrim, emailNorm, String(clientPhone).trim(), phoneNorm, declaredProfile || null, authClientId]
     );
-    const clientId = clientResult.rows[0].id;
+    const clientId = authClientId;
 
     const existingConsents = await client.query(
       'SELECT consent_type FROM client_consents WHERE client_id = $1',
@@ -497,148 +519,9 @@ router.post('/', validateBooking, async (req, res) => {
     await client.query('COMMIT');
 
     const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
-    let hennaPhotoUrl = null;
-    if (isHenna && hennaAssessmentId) {
-      const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
-      if (photoRes.rows[0]) {
-        hennaPhotoUrl = `${backendUrl}/uploads/${photoRes.rows[0].photo_path}`;
-      }
-    }
-
-    const pendingReview = bookingStatus === 'pending_review';
-    const summary = buildBookingSummary({
-      treatmentName: treatment.name,
-      clientName,
-      visitContext,
-      reviewType,
-      pendingReview,
-    });
-    const description = buildBookingDescription({
-      treatmentName: treatment.name,
-      treatmentTag: treatment.tag,
-      clientName,
-      clientEmail,
-      clientPhone,
-      bookingId: booking.id,
-      visitContext,
-      reviewType,
-      pendingReview,
-      intakeSummary,
-      signatureSignerName,
-      flagged,
-      flagReason,
-      hennaPhotoUrl,
-    });
-    const colorId = getEventColorId({ visitContext, reviewType, pendingReview, flagged });
-
-    let googleEventId = null;
-    try {
-      const googleCalendar = require('../services/googleCalendar');
-      const event = await googleCalendar.createEvent({
-        summary,
-        description,
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
-        clientEmail,
-        isWebBooking: true,
-        bookingId: booking.id,
-        colorId,
-      });
-
-      googleEventId = event.id;
-
-      if (googleEventId) {
-        await query(
-          `UPDATE bookings SET google_event_id = $1, google_etag = $2, google_updated_at = $3,
-           last_sync_source = 'web', updated_at = NOW()
-           WHERE id = $4`,
-          [
-            googleEventId,
-            event.etag || null,
-            event.updated ? new Date(event.updated).toISOString() : null,
-            booking.id,
-          ]
-        );
-      }
-    } catch (err) {
-      console.error('Google Calendar event creation failed (non-blocking):', err.message);
-    }
-
     const frontendUrl = process.env.FRONTEND_URL || '';
     const cancelUrl = `${frontendUrl}/cancelar/${cancelToken}`;
-
-    let emailSent = false;
-    try {
-      const emailService = require('../services/emailService');
-
-      const ownerBody = [
-        `Cliente: ${clientName}`,
-        `Email: ${clientEmail}`,
-        `Tel: ${clientPhone || 'N/A'}`,
-        `Tratamiento: ${treatment.name} (${treatment.tag})`,
-        `Fecha: ${formatStudioDate(start)} ${formatStudioTime(start)}`,
-        `Perfil declarado: ${declaredProfile || 'N/A'}`,
-        `Contexto: ${visitContext}`,
-        intakeSummary ? `\nCuestionario:\n${intakeSummary}` : '',
-        signatureSignerName ? `\nFirmado por: ${signatureSignerName}` : '',
-      ].join('\n');
-
-      if (visitContext === 'first_studio_visit') {
-        await emailService.sendOwnerFirstVisitAlert({ clientName, body: ownerBody });
-      }
-      if (visitContext === 'first_treatment') {
-        await emailService.sendOwnerTreatmentFirstAlert({ clientName, body: ownerBody });
-      }
-      if (flagged) {
-        await emailService.sendOwnerFlaggedAlert({
-          clientName,
-          body: `${ownerBody}\n\n⚠️ Motivo: ${flagReason}`,
-        });
-      }
-
-      if (isHenna && hennaAssessmentId) {
-        const approveToken = await createOwnerActionToken({
-          action: 'henna_approve',
-          entityType: 'henna_assessment',
-          entityId: hennaAssessmentId,
-        });
-        const rejectToken = await createOwnerActionToken({
-          action: 'henna_reject',
-          entityType: 'henna_assessment',
-          entityId: hennaAssessmentId,
-        });
-        const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
-        await emailService.sendOwnerHennaAssessment({
-          body: ownerBody,
-          approveUrl: buildOwnerActionUrl(approveToken, 'approve'),
-          rejectUrl: buildOwnerActionUrl(rejectToken, 'reject'),
-          photoPath: photoRes.rows[0]?.photo_path,
-        });
-        await emailService.sendClientHennaPending({
-          to: clientEmail,
-          clientName,
-          treatment,
-          startTime: start,
-          endTime: end,
-        });
-        emailSent = true;
-      } else {
-        await emailService.sendConfirmation({
-          to: clientEmail,
-          clientName,
-          treatment,
-          startTime: start,
-          endTime: end,
-          bookingId: booking.id,
-          cancelUrl,
-          cancellationDeadline: formatDeadlineSpanish(start),
-        });
-        emailSent = true;
-        await query('UPDATE bookings SET confirmation_sent = true WHERE id = $1', [booking.id]);
-      }
-    } catch (err) {
-      console.error('Email failed (non-blocking):', err.message);
-    }
+    const pendingReview = bookingStatus === 'pending_review';
 
     const calendarFile = require('../services/calendarFile');
     const googleCalendarUrl = calendarFile.generateGoogleCalendarUrl({
@@ -649,6 +532,7 @@ router.post('/', validateBooking, async (req, res) => {
       location: 'Studio Anuelblingding',
     });
 
+    // Responder al instante: Google/email no deben bloquear la UX del cliente
     res.status(201).json({
       booking: {
         id: booking.id,
@@ -666,8 +550,149 @@ router.post('/', validateBooking, async (req, res) => {
       cancellationDeadline: formatDeadlineSpanish(start),
       icsUrl: `${frontendUrl}/api/bookings/${booking.id}/calendar`,
       googleCalendarUrl,
-      emailSent,
+      emailSent: false,
     });
+
+    setImmediate(async () => {
+      let hennaPhotoUrl = null;
+      try {
+        if (isHenna && hennaAssessmentId) {
+          const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
+          if (photoRes.rows[0]) {
+            hennaPhotoUrl = `${backendUrl}/uploads/${photoRes.rows[0].photo_path}`;
+          }
+        }
+
+        const summary = buildBookingSummary({
+          treatmentName: treatment.name,
+          clientName,
+          visitContext,
+          reviewType,
+          pendingReview,
+        });
+        const description = buildBookingDescription({
+          treatmentName: treatment.name,
+          treatmentTag: treatment.tag,
+          clientName,
+          clientEmail,
+          clientPhone,
+          bookingId: booking.id,
+          visitContext,
+          reviewType,
+          pendingReview,
+          intakeSummary,
+          signatureSignerName,
+          flagged,
+          flagReason,
+          hennaPhotoUrl,
+        });
+        const colorId = getEventColorId({ visitContext, reviewType, pendingReview, flagged });
+
+        try {
+          const googleCalendar = require('../services/googleCalendar');
+          const event = await googleCalendar.createEvent({
+            summary,
+            description,
+            startTime: start.toISOString(),
+            endTime: end.toISOString(),
+            clientEmail,
+            isWebBooking: true,
+            bookingId: booking.id,
+            colorId,
+          });
+
+          if (event?.id) {
+            await query(
+              `UPDATE bookings SET google_event_id = $1, google_etag = $2, google_updated_at = $3,
+               last_sync_source = 'web', updated_at = NOW()
+               WHERE id = $4 AND google_event_id IS NULL`,
+              [
+                event.id,
+                event.etag || null,
+                event.updated ? new Date(event.updated).toISOString() : null,
+                booking.id,
+              ]
+            );
+          }
+        } catch (err) {
+          console.error('Google Calendar event creation failed (non-blocking):', err.message);
+        }
+
+        try {
+          const emailService = require('../services/emailService');
+
+          const ownerBody = [
+            `Cliente: ${clientName}`,
+            `Email: ${clientEmail}`,
+            `Tel: ${clientPhone || 'N/A'}`,
+            `Tratamiento: ${treatment.name} (${treatment.tag})`,
+            `Fecha: ${formatStudioDate(start)} ${formatStudioTime(start)}`,
+            `Perfil declarado: ${declaredProfile || 'N/A'}`,
+            `Contexto: ${visitContext}`,
+            intakeSummary ? `\nCuestionario:\n${intakeSummary}` : '',
+            signatureSignerName ? `\nFirmado por: ${signatureSignerName}` : '',
+          ].join('\n');
+
+          if (visitContext === 'first_studio_visit') {
+            await emailService.sendOwnerFirstVisitAlert({ clientName, body: ownerBody });
+          }
+          if (visitContext === 'first_treatment') {
+            await emailService.sendOwnerTreatmentFirstAlert({ clientName, body: ownerBody });
+          }
+          if (flagged) {
+            await emailService.sendOwnerFlaggedAlert({
+              clientName,
+              body: `${ownerBody}\n\n⚠️ Motivo: ${flagReason}`,
+            });
+          }
+
+          if (isHenna && hennaAssessmentId) {
+            const approveToken = await createOwnerActionToken({
+              action: 'henna_approve',
+              entityType: 'henna_assessment',
+              entityId: hennaAssessmentId,
+            });
+            const rejectToken = await createOwnerActionToken({
+              action: 'henna_reject',
+              entityType: 'henna_assessment',
+              entityId: hennaAssessmentId,
+            });
+            const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
+            await emailService.sendOwnerHennaAssessment({
+              body: ownerBody,
+              approveUrl: buildOwnerActionUrl(approveToken, 'approve'),
+              rejectUrl: buildOwnerActionUrl(rejectToken, 'reject'),
+              photoPath: photoRes.rows[0]?.photo_path,
+            });
+            await emailService.sendClientHennaPending({
+              to: clientEmail,
+              clientName,
+              treatment,
+              startTime: start,
+              endTime: end,
+            });
+          } else {
+            await emailService.sendConfirmation({
+              to: clientEmail,
+              clientName,
+              treatment,
+              startTime: start,
+              endTime: end,
+              bookingId: booking.id,
+              cancelUrl,
+              cancellationDeadline: formatDeadlineSpanish(start),
+            });
+            await query('UPDATE bookings SET confirmation_sent = true WHERE id = $1', [booking.id]);
+          }
+        } catch (err) {
+          console.error('Email failed (non-blocking):', err.message);
+        }
+      } catch (err) {
+        console.error('Post-booking side effects failed:', err.message);
+      }
+    });
+
+    return;
   } catch (err) {
     await client.query('ROLLBACK');
 

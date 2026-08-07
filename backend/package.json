@@ -13,6 +13,7 @@
     "db:down": "node scripts/db-down.js",
     "db:bootstrap": "node scripts/db-bootstrap.js",
     "db:init": "node scripts/db-init.js",
+    "clients:import": "node scripts/import-clients-xlsx.js",
     "google:auth": "node scripts/google-auth.js",
     "google:auth:tunnel": "node scripts/google-auth-tunnel.js"
   },

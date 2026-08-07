@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../ui/Icon'
 import GoldButton from '../ui/GoldButton'
+import { useClientAuth } from '../../hooks/useClientAuth'
 
 const NAV_LINKS = [
   { label: 'Inicio', href: '#hero', icon: 'home' },
@@ -28,11 +29,148 @@ const menuItemVariants = {
   open: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
 }
 
+function clientInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+}
+
+function firstName(name) {
+  return String(name || '').trim().split(/\s+/).filter(Boolean)[0] || ''
+}
+
+/** Soft account control — Soft UI Evolution + brand Skin & Glow */
+function AccountControl({
+  isAuthenticated,
+  user,
+  onLogout,
+  onLogin,
+  compact = false,
+  className = '',
+}) {
+  const prefersReducedMotion = useReducedMotion()
+  const label = firstName(user?.name)
+
+  if (isAuthenticated) {
+    return (
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        <div
+          className={`flex items-center gap-2 rounded-full bg-surface-container-low/90 shadow-[0_2px_8px_rgba(67,61,60,0.06)] ${
+            compact ? 'pl-1 pr-2.5 py-1' : 'pl-1.5 pr-3 py-1.5'
+          }`}
+          title={user?.name || 'Cuenta'}
+        >
+          <span
+            className={`inline-flex items-center justify-center rounded-full bg-primary/15 text-primary font-label font-semibold ${
+              compact ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 text-[11px]'
+            }`}
+            aria-hidden
+          >
+            {clientInitials(user?.name)}
+          </span>
+          {!compact && label && (
+            <span className="font-label text-xs tracking-wide text-on-surface max-w-28 truncate">
+              {label}
+            </span>
+          )}
+        </div>
+        <motion.button
+          type="button"
+          whileTap={prefersReducedMotion ? {} : { scale: 0.94 }}
+          onClick={onLogout}
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+          className="cursor-pointer inline-flex items-center justify-center min-w-11 min-h-11 w-11 h-11 rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
+        >
+          <Icon name="logout" className="text-[22px]" />
+        </motion.button>
+      </div>
+    )
+  }
+
+  return (
+    <motion.button
+      type="button"
+      whileHover={prefersReducedMotion ? {} : { scale: 1.03 }}
+      whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+      onClick={onLogin}
+      aria-label="Entrar a tu cuenta"
+      className={`cursor-pointer inline-flex items-center justify-center gap-2 min-h-11 rounded-full bg-surface-container-low/90 text-on-surface shadow-[0_2px_8px_rgba(67,61,60,0.06)] hover:bg-primary/10 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200 ${
+        compact ? 'w-11 px-0' : 'px-3.5 py-2'
+      } ${className}`}
+    >
+      <Icon name="login" className="text-[22px]" />
+      {!compact && (
+        <span className="font-label text-xs font-medium tracking-widest uppercase">
+          Entrar
+        </span>
+      )}
+    </motion.button>
+  )
+}
+
+function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
+  const prefersReducedMotion = useReducedMotion()
+
+  if (isAuthenticated) {
+    return (
+      <div className="rounded-2xl bg-surface-container-low p-4 flex items-center gap-3 shadow-[0_4px_16px_rgba(67,61,60,0.06)]">
+        <span
+          className="shrink-0 w-12 h-12 rounded-full bg-primary/15 text-primary font-label font-semibold text-sm flex items-center justify-center"
+          aria-hidden
+        >
+          {clientInitials(user?.name)}
+        </span>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="font-label text-sm font-medium text-on-surface truncate">
+            {user?.name || 'Tu cuenta'}
+          </p>
+          <p className="text-xs text-on-surface-variant mt-0.5">Sesión iniciada</p>
+        </div>
+        <motion.button
+          type="button"
+          whileTap={prefersReducedMotion ? {} : { scale: 0.95 }}
+          onClick={onLogout}
+          className="cursor-pointer shrink-0 inline-flex items-center gap-1.5 min-h-11 px-3 rounded-full text-on-surface-variant hover:text-primary hover:bg-background/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
+          aria-label="Cerrar sesión"
+        >
+          <Icon name="logout" className="text-[20px]" />
+          <span className="font-label text-[11px] tracking-wide uppercase">Salir</span>
+        </motion.button>
+      </div>
+    )
+  }
+
+  return (
+    <motion.button
+      type="button"
+      whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}
+      onClick={onLogin}
+      className="cursor-pointer w-full rounded-2xl bg-surface-container-low p-4 flex items-center gap-3 text-left shadow-[0_4px_16px_rgba(67,61,60,0.06)] hover:bg-surface-container active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
+    >
+      <span className="shrink-0 w-12 h-12 rounded-full bg-primary-container/15 flex items-center justify-center">
+        <Icon name="login" className="text-primary text-[24px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-label text-sm font-medium text-on-surface">
+          Entrar a tu cuenta
+        </span>
+        <span className="block text-xs text-on-surface-variant mt-0.5">
+          Accede para reservar citas
+        </span>
+      </span>
+      <Icon name="chevron_right" className="text-on-surface-variant text-[22px]" />
+    </motion.button>
+  )
+}
+
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const prefersReducedMotion = useReducedMotion()
   const navigate = useNavigate()
+  const { isAuthenticated, user, logout } = useClientAuth()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -54,6 +192,16 @@ export default function Navbar() {
     }
   }
 
+  const handleLogin = () => {
+    setMenuOpen(false)
+    navigate('/entrar')
+  }
+
+  const handleLogout = () => {
+    logout()
+    setMenuOpen(false)
+  }
+
   return (
     <>
       <motion.header
@@ -66,19 +214,21 @@ export default function Navbar() {
             : 'bg-background/80 backdrop-blur-xl'
         }`}
       >
-        {/* Mobile / Tablet navbar (<lg) — logo centered, no crescent */}
-        <nav className="flex lg:hidden items-center justify-between w-full px-6 py-2">
+        {/* Mobile / Tablet navbar (<lg) */}
+        <nav className="flex lg:hidden items-center justify-between w-full px-5 py-2 gap-2">
           <button
+            type="button"
             onClick={() => setMenuOpen(!menuOpen)}
-            className="text-primary hover:opacity-70 transition-opacity"
+            className="cursor-pointer inline-flex items-center justify-center min-w-11 min-h-11 text-primary hover:opacity-70 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
           >
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
 
           <button
+            type="button"
             onClick={() => scrollTo('#hero')}
-            className={`flex items-center transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`cursor-pointer flex items-center transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <img
               src="/logo2.png"
@@ -87,7 +237,23 @@ export default function Navbar() {
             />
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <AccountControl
+              compact
+              className="sm:hidden"
+              isAuthenticated={isAuthenticated}
+              user={user}
+              onLogout={handleLogout}
+              onLogin={handleLogin}
+            />
+            <div className="hidden sm:block">
+              <AccountControl
+                isAuthenticated={isAuthenticated}
+                user={user}
+                onLogout={handleLogout}
+                onLogin={handleLogin}
+              />
+            </div>
             <GoldButton
               onClick={() => navigate('/reservar')}
               className="px-5 py-2 rounded-full text-xs hidden sm:inline-flex"
@@ -96,8 +262,9 @@ export default function Navbar() {
             </GoldButton>
 
             <button
+              type="button"
               onClick={() => navigate('/reservar')}
-              className="sm:hidden text-primary hover:opacity-70 transition-opacity"
+              className="cursor-pointer sm:hidden inline-flex items-center justify-center min-w-11 min-h-11 text-primary hover:opacity-70 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="Reservar cita"
             >
               <Icon name="calendar_today" />
@@ -105,25 +272,25 @@ export default function Navbar() {
           </div>
         </nav>
 
-        {/* Desktop navbar (lg+) — flex bar with crescent overflowing below */}
+        {/* Desktop navbar (lg+) */}
         <nav className="hidden lg:flex justify-between items-center w-full h-16 px-8 max-w-[1400px] mx-auto relative">
-          {/* Left links */}
           <div className="flex items-center gap-7 z-20">
             {NAV_LINKS.slice(0, 3).map((link) => (
               <button
+                type="button"
                 key={link.href}
                 onClick={() => scrollTo(link.href)}
-                className="font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors"
+                className="cursor-pointer font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 {link.label}
               </button>
             ))}
           </div>
 
-          {/* Center logo — fades in once the hero logo scrolls away */}
           <button
+            type="button"
             onClick={() => scrollTo('#hero')}
-            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`cursor-pointer absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <img
               src="/logo2.png"
@@ -132,17 +299,23 @@ export default function Navbar() {
             />
           </button>
 
-          {/* Right links + CTA */}
-          <div className="flex items-center gap-7 z-20">
+          <div className="flex items-center gap-5 z-20">
             {NAV_LINKS.slice(3).map((link) => (
               <button
+                type="button"
                 key={link.href}
                 onClick={() => scrollTo(link.href)}
-                className="font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors"
+                className="cursor-pointer font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 {link.label}
               </button>
             ))}
+            <AccountControl
+              isAuthenticated={isAuthenticated}
+              user={user}
+              onLogout={handleLogout}
+              onLogin={handleLogin}
+            />
             <GoldButton
               onClick={() => navigate('/reservar')}
               className="px-6 py-2 rounded-full text-xs"
@@ -164,9 +337,8 @@ export default function Navbar() {
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-60 bg-background flex flex-col lg:hidden"
           >
-            {/* Menu header — logo centered */}
             <div className="relative flex items-center justify-center px-6 py-4">
-              <button onClick={() => scrollTo('#hero')} className="flex items-center">
+              <button type="button" onClick={() => scrollTo('#hero')} className="cursor-pointer flex items-center">
                 <img
                   src="/logo2.png"
                   alt="Nereida Martín — Brow Artist"
@@ -174,8 +346,9 @@ export default function Navbar() {
                 />
               </button>
               <button
+                type="button"
                 onClick={() => setMenuOpen(false)}
-                className="absolute right-6 w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform"
+                className="cursor-pointer absolute right-6 w-11 h-11 rounded-full bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-transform focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 aria-label="Cerrar menú"
               >
                 <Icon name="close" />
@@ -184,20 +357,32 @@ export default function Navbar() {
 
             <div className="h-px bg-outline-variant/15 mx-6" />
 
-            {/* Navigation grid */}
             <motion.nav
               variants={menuContainerVariants}
               initial="closed"
               animate="open"
               className="flex-1 px-6 py-8 overflow-y-auto"
             >
+              <motion.div
+                variants={prefersReducedMotion ? {} : menuItemVariants}
+                className="mb-6"
+              >
+                <MobileAccountCard
+                  isAuthenticated={isAuthenticated}
+                  user={user}
+                  onLogout={handleLogout}
+                  onLogin={handleLogin}
+                />
+              </motion.div>
+
               <div className="grid grid-cols-2 gap-3">
                 {NAV_LINKS.map((link) => (
                   <motion.button
+                    type="button"
                     key={link.href}
                     variants={prefersReducedMotion ? {} : menuItemVariants}
                     onClick={() => scrollTo(link.href)}
-                    className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl bg-surface-container-low hover:bg-surface-container active:scale-[0.97] transition-all text-center"
+                    className="cursor-pointer flex flex-col items-center justify-center gap-3 p-6 rounded-2xl bg-surface-container-low hover:bg-surface-container active:scale-[0.97] transition-all text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   >
                     <div className="w-12 h-12 rounded-full bg-primary-container/15 flex items-center justify-center">
                       <Icon name={link.icon} className="text-primary" />
@@ -209,7 +394,6 @@ export default function Navbar() {
                 ))}
               </div>
 
-              {/* CTA */}
               <motion.div
                 variants={prefersReducedMotion ? {} : menuItemVariants}
                 className="mt-8"
@@ -222,7 +406,6 @@ export default function Navbar() {
                 </GoldButton>
               </motion.div>
 
-              {/* Contact info */}
               <motion.div
                 variants={prefersReducedMotion ? {} : menuItemVariants}
                 className="mt-8 text-center space-y-2"

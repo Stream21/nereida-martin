@@ -35,8 +35,10 @@ VALUES ('imported', 'general', 'Cita importada', 'Importada desde Google Calenda
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO clients (name, email)
-VALUES ('Importado Google', 'imported@studio.local')
-ON CONFLICT (email) DO NOTHING;
+SELECT 'Importado Google', 'imported@studio.local'
+WHERE NOT EXISTS (
+  SELECT 1 FROM clients WHERE email = 'imported@studio.local'
+);
 
 UPDATE studio_settings
 SET booking_start_date = COALESCE(
