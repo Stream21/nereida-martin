@@ -1,5 +1,8 @@
 const { query } = require('../db/pool');
-const { getGhostBlockRangesForDate } = require('./ghostBlockRanges');
+const {
+  getGhostBlockRangesForDate,
+  getGhostBlockRangesInRange,
+} = require('./ghostBlockRanges');
 const {
   SLOT_MINUTES,
   blockDurationMinutes,
@@ -200,11 +203,109 @@ async function findNextAvailableSlot(treatmentId, fromDateStr = null) {
   return { date: null, time: null, blockMinutes, treatmentId };
 }
 
+function monthDateBounds(year, month) {
+  const mm = String(month).padStart(2, '0');
+  const firstDate = `${year}-${mm}-01`;
+  const lastDayNum = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const lastDate = `${year}-${mm}-${String(lastDayNum).padStart(2, '0')}`;
+  const windowsFirst = getWorkWindowsForDate(firstDate);
+  const windowsLast = getWorkWindowsForDate(lastDate);
+
+  // Use noon bounds if weekend (no windows); still cover full calendar days for busy queries
+  const rangeStart = windowsFirst.length
+    ? getWindowBounds(firstDate, windowsFirst[0]).start
+    : studioLocalToDate(firstDate, 0, 0);
+  const rangeEnd = windowsLast.length
+    ? getWindowBounds(lastDate, windowsLast[windowsLast.length - 1]).end
+    : studioLocalToDate(lastDate, 23, 59);
+
+  return { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd };
+}
+
+function rangesOverlappingDay(allRanges, dateStr) {
+  const windows = getWorkWindowsForDate(dateStr);
+  if (windows.length === 0) return [];
+
+  const dayStart = getWindowBounds(dateStr, windows[0]).start.getTime();
+  const dayEnd = getWindowBounds(dateStr, windows[windows.length - 1]).end.getTime();
+
+  return allRanges.filter((r) => r.start < dayEnd && r.end > dayStart);
+}
+
+async function getAvailableDatesForMonth(year, month, treatmentId) {
+  const treatmentResult = await query(
+    'SELECT duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
+    [treatmentId]
+  );
+
+  if (treatmentResult.rows.length === 0) {
+    return { error: 'not_found' };
+  }
+
+  const treatment = treatmentResult.rows[0];
+  const blockMinutes = blockDurationMinutes(
+    treatment.duration_max || treatment.duration_min
+  );
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  const { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd } = monthDateBounds(
+    year,
+    month
+  );
+
+  const bookedResult = await query(
+    `SELECT start_time, end_time FROM bookings
+     WHERE status IN ('confirmed', 'pending_review')
+       AND start_time < $2
+       AND end_time > $1`,
+    [rangeStart.toISOString(), rangeEnd.toISOString()]
+  );
+
+  const bookedRanges = bookedResult.rows.map((row) => ({
+    start: new Date(row.start_time).getTime(),
+    end: new Date(row.end_time).getTime(),
+  }));
+
+  let ghostRanges = [];
+  try {
+    ghostRanges = await getGhostBlockRangesInRange(
+      rangeStart.toISOString(),
+      rangeEnd.toISOString()
+    );
+  } catch (err) {
+    console.warn(`Ghost blocks skipped for ${year}-${month}:`, err.message);
+  }
+
+  const allBusy = [...bookedRanges, ...ghostRanges];
+  const dates = [];
+
+  for (let day = 1; day <= lastDayNum; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (dateStr < bookingStartDate || isWeekendDay(dateStr)) continue;
+    if (dateStr < firstDate || dateStr > lastDate) continue;
+
+    const busyRanges = rangesOverlappingDay(allBusy, dateStr);
+    const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges);
+    if (slots.some((s) => s.available)) {
+      dates.push(dateStr);
+    }
+  }
+
+  return {
+    year,
+    month,
+    treatmentId,
+    bookingStartDate,
+    dates,
+    blockMinutes,
+  };
+}
+
 module.exports = {
   getBookedRangesForDate,
   getBusyRangesForDate,
   getSlotsForDate,
   getAvailabilityForDate,
+  getAvailableDatesForMonth,
   hasSlotAvailable,
   findNextAvailableSlot,
 };

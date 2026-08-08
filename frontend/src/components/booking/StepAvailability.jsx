@@ -40,6 +40,8 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   const [nextSlot, setNextSlot] = useState(null)
   const [loadingNextSlot, setLoadingNextSlot] = useState(() => !!treatmentId)
   const [anchorDay, setAnchorDay] = useState(null)
+  const [openDates, setOpenDates] = useState(() => new Set())
+  const [loadingMonthDates, setLoadingMonthDates] = useState(false)
   const pendingTimeRef = useRef(null)
   const initialisedRef = useRef(false)
 
@@ -141,6 +143,35 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
 
     return () => { cancelled = true }
   }, [selectedDate, treatmentId])
+
+  useEffect(() => {
+    if (!treatmentId) {
+      setOpenDates(new Set())
+      setLoadingMonthDates(false)
+      return
+    }
+
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth() + 1
+    let cancelled = false
+
+    setLoadingMonthDates(true)
+
+    fetch(`${API_URL}/api/availability/month?year=${year}&month=${month}&treatmentId=${treatmentId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        setOpenDates(new Set(Array.isArray(data.dates) ? data.dates : []))
+      })
+      .catch(() => {
+        if (!cancelled) setOpenDates(new Set())
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMonthDates(false)
+      })
+
+    return () => { cancelled = true }
+  }, [treatmentId, currentMonth])
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth)
@@ -250,7 +281,18 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
             const isBeforeGoLive = isBefore(day, goLiveDay)
             const isBeforeAnchor = anchorDay && isBefore(startOfDay(day), anchorDay)
             const isWeekendDay = isWeekend(day)
-            const isDisabled = !inMonth || isPast || isBeforeGoLive || isBeforeAnchor || isWeekendDay
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const hasOpenSlots = openDates.has(dateStr)
+            const blockedByBusy =
+              inMonth &&
+              !isPast &&
+              !isBeforeGoLive &&
+              !isBeforeAnchor &&
+              !isWeekendDay &&
+              !loadingMonthDates &&
+              !hasOpenSlots
+            const isDisabled =
+              !inMonth || isPast || isBeforeGoLive || isBeforeAnchor || isWeekendDay || blockedByBusy
 
             return (
               <motion.button

@@ -3,7 +3,8 @@
 
 databases:
   - name: nere-db
-    plan: free
+    # Debe coincidir con el plan real en Render (no se puede bajar de paid → free vía Blueprint)
+    plan: basic-256mb
     databaseName: nere_studio
     user: nere
 

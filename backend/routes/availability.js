@@ -24,6 +24,33 @@ router.get('/next', async (req, res) => {
   }
 });
 
+router.get('/month', async (req, res) => {
+  try {
+    const { year, month, treatmentId } = req.query;
+
+    if (!treatmentId) {
+      return res.status(400).json({ error: 'treatmentId es obligatorio' });
+    }
+
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+      return res.status(400).json({ error: 'year y month son obligatorios (month 1-12)' });
+    }
+
+    const result = await availabilityService.getAvailableDatesForMonth(y, m, treatmentId);
+
+    if (result.error === 'not_found') {
+      return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching month availability:', err);
+    res.status(500).json({ error: 'Error al obtener disponibilidad del mes' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const { date, treatmentId } = req.query;
