@@ -191,8 +191,7 @@ function GalleryTile({ item, index, aspect, onOpen, reducedMotion }) {
       className={`relative w-full ${aspect} rounded-2xl md:rounded-3xl overflow-hidden editorial-shadow group text-left border border-outline-variant/8`}
       aria-label={item.type === 'compare' ? `Ver comparativa: ${item.label}` : `Ampliar: ${item.label}`}
     >
-      <motion.img
-        layoutId={`gallery-img-${item.id}`}
+      <img
         src={src}
         alt=""
         loading="lazy"
@@ -247,7 +246,7 @@ function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="fixed inset-0 z-100 flex items-center justify-center p-4 sm:p-8"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-on-surface/75 backdrop-blur-xl" />
@@ -287,9 +286,8 @@ function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }) {
       )}
 
       <motion.div
-        layoutId={isCompare ? undefined : `gallery-img-${item.id}`}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-4xl max-h-[82vh] rounded-3xl overflow-hidden editorial-shadow bg-surface-container-lowest"
+        className="relative z-10 w-full max-w-4xl max-h-[82vh] rounded-3xl editorial-shadow bg-surface-container-lowest overflow-hidden"
       >
         {isCompare ? (
           <>
@@ -320,11 +318,10 @@ function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }) {
             </div>
           </>
         ) : (
-          <motion.img
-            layoutId={`gallery-img-${item.id}`}
+          <img
             src={item.src}
-            alt=""
-            className="w-full max-h-[82vh] object-contain"
+            alt={item.label || ''}
+            className="block w-full max-h-[82vh] object-contain bg-surface-container-lowest"
             draggable={false}
           />
         )}
