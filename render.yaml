@@ -59,7 +59,7 @@ services:
     runtime: node
     schedule: "*/30 * * * *"
     buildCommand: cd backend && npm ci
-    startCommand: node scripts/trigger-reminders.js
+    startCommand: cd backend && node scripts/trigger-reminders.js
     envVars:
       - key: BACKEND_URL
         fromService:
