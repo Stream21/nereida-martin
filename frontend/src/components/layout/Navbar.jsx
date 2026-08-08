@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../ui/Icon'
@@ -51,15 +51,43 @@ function AccountControl({
 }) {
   const prefersReducedMotion = useReducedMotion()
   const label = firstName(user?.name)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) {
+        setMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
 
   if (isAuthenticated) {
     return (
-      <div className={`flex items-center gap-1.5 ${className}`}>
-        <div
-          className={`flex items-center gap-2 rounded-full bg-surface-container-low/90 shadow-[0_2px_8px_rgba(67,61,60,0.06)] ${
-            compact ? 'pl-1 pr-2.5 py-1' : 'pl-1.5 pr-3 py-1.5'
-          }`}
+      <div ref={rootRef} className={`relative ${className}`}>
+        <motion.button
+          type="button"
+          whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={`Cuenta de ${user?.name || 'cliente'}`}
           title={user?.name || 'Cuenta'}
+          className={`cursor-pointer flex items-center gap-2 rounded-full bg-surface-container-low/90 shadow-[0_2px_8px_rgba(67,61,60,0.06)] hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200 ${
+            compact ? 'pl-1 pr-2 py-1' : 'pl-1.5 pr-2.5 py-1.5'
+          }`}
         >
           <span
             className={`inline-flex items-center justify-center rounded-full bg-primary/15 text-primary font-label font-semibold ${
@@ -74,17 +102,49 @@ function AccountControl({
               {label}
             </span>
           )}
-        </div>
-        <motion.button
-          type="button"
-          whileTap={prefersReducedMotion ? {} : { scale: 0.94 }}
-          onClick={onLogout}
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
-          className="cursor-pointer inline-flex items-center justify-center min-w-11 min-h-11 w-11 h-11 rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
-        >
-          <Icon name="logout" className="text-[22px]" />
+          <Icon
+            name="expand_more"
+            className={`text-on-surface-variant text-[18px] transition-transform duration-200 ${
+              menuOpen ? 'rotate-180' : ''
+            }`}
+          />
         </motion.button>
+
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              role="menu"
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="absolute right-0 top-[calc(100%+0.5rem)] z-70 min-w-48 rounded-2xl bg-background border border-outline-variant/15 shadow-[0_12px_32px_rgba(67,61,60,0.12)] p-1.5"
+            >
+              <div className="px-3 py-2 border-b border-outline-variant/10 mb-1">
+                <p className="font-label text-xs font-medium text-on-surface truncate">
+                  {user?.name || 'Tu cuenta'}
+                </p>
+                {user?.email && (
+                  <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                    {user.email}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onLogout()
+                }}
+                className="cursor-pointer w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <Icon name="logout" className="text-[20px]" />
+                <span className="font-label text-xs tracking-wide">Cerrar sesión</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -115,28 +175,32 @@ function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
 
   if (isAuthenticated) {
     return (
-      <div className="rounded-2xl bg-surface-container-low p-4 flex items-center gap-3 shadow-[0_4px_16px_rgba(67,61,60,0.06)]">
-        <span
-          className="shrink-0 w-12 h-12 rounded-full bg-primary/15 text-primary font-label font-semibold text-sm flex items-center justify-center"
-          aria-hidden
-        >
-          {clientInitials(user?.name)}
-        </span>
-        <div className="min-w-0 flex-1 text-left">
-          <p className="font-label text-sm font-medium text-on-surface truncate">
-            {user?.name || 'Tu cuenta'}
-          </p>
-          <p className="text-xs text-on-surface-variant mt-0.5">Sesión iniciada</p>
+      <div className="rounded-2xl bg-surface-container-low p-4 shadow-[0_4px_16px_rgba(67,61,60,0.06)]">
+        <div className="flex items-center gap-3">
+          <span
+            className="shrink-0 w-12 h-12 rounded-full bg-primary/15 text-primary font-label font-semibold text-sm flex items-center justify-center"
+            aria-hidden
+          >
+            {clientInitials(user?.name)}
+          </span>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="font-label text-sm font-medium text-on-surface truncate">
+              {user?.name || 'Tu cuenta'}
+            </p>
+            <p className="text-xs text-on-surface-variant mt-0.5 truncate">
+              {user?.email || 'Sesión iniciada'}
+            </p>
+          </div>
         </div>
         <motion.button
           type="button"
-          whileTap={prefersReducedMotion ? {} : { scale: 0.95 }}
+          whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}
           onClick={onLogout}
-          className="cursor-pointer shrink-0 inline-flex items-center gap-1.5 min-h-11 px-3 rounded-full text-on-surface-variant hover:text-primary hover:bg-background/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
+          className="cursor-pointer mt-3 w-full inline-flex items-center justify-center gap-2 min-h-11 px-3 rounded-xl bg-background/80 text-on-surface-variant hover:text-primary hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors duration-200"
           aria-label="Cerrar sesión"
         >
           <Icon name="logout" className="text-[20px]" />
-          <span className="font-label text-[11px] tracking-wide uppercase">Salir</span>
+          <span className="font-label text-[11px] tracking-wide uppercase">Cerrar sesión</span>
         </motion.button>
       </div>
     )

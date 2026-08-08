@@ -92,11 +92,13 @@ export default function Booking() {
   const [searchParams, setSearchParams] = useSearchParams()
   const preselectedTreatmentId = searchParams.get('treatment')
   const bookingIntent = searchParams.get('intent')
-  const { user: authUser } = useClientAuth()
+  const { user: authUser, loading: authLoading } = useClientAuth()
 
   const [stepIndex, setStepIndex] = useState(0)
   const [direction, setDirection] = useState(1)
   const [skipIdentify, setSkipIdentify] = useState(false)
+  const [skipPriorHistoryFlag, setSkipPriorHistoryFlag] = useState(false)
+  const [identityBootstrapped, setIdentityBootstrapped] = useState(false)
   const [skipTreatment, setSkipTreatment] = useState(false)
   const [skipQuestionnaires, setSkipQuestionnaires] = useState(false)
   const [skipHenna, setSkipHenna] = useState(false)
@@ -133,9 +135,9 @@ export default function Booking() {
   const isHenna = selectedTreatment?.id === 'brow-henna'
   const showConsents = !lookupData?.hasAllBaseConsents
   const needsPriorHistory =
+    !skipPriorHistoryFlag &&
     shouldAskPriorHistory(lookupData) &&
     !authUser?.declaredProfile &&
-    !skipIdentify &&
     bookingIntent !== 'mantenimiento'
 
   const effectiveClientProfile = useMemo(
@@ -165,23 +167,6 @@ export default function Booking() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [stepIndex, bookingResult])
-
-  useEffect(() => {
-    if (!authUser) return
-    setClientInfo({
-      name: authUser.name || '',
-      email: authUser.email || '',
-      phone: authUser.phone || '',
-    })
-    if (authUser.declaredProfile === 'returning_declared') {
-      setStudioHabitual(true)
-    } else if (authUser.declaredProfile === 'first_time') {
-      setStudioHabitual(false)
-    }
-    if (authUser.email) {
-      handleLookup(authUser.email)
-    }
-  }, [authUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (clientInfo.name?.trim() && !signerName) {
@@ -250,6 +235,76 @@ export default function Booking() {
       setIsLookingUp(false)
     }
   }, [applyLookupData])
+
+  useEffect(() => {
+    if (authLoading) return
+
+    if (!authUser) {
+      setIdentityBootstrapped(true)
+      return
+    }
+
+    let cancelled = false
+
+    setClientInfo({
+      name: authUser.name || '',
+      email: authUser.email || '',
+      phone: authUser.phone || '',
+    })
+    if (authUser.declaredProfile === 'returning_declared') {
+      setStudioHabitual(true)
+    } else if (authUser.declaredProfile === 'first_time') {
+      setStudioHabitual(false)
+    }
+
+    const bootstrapIdentity = async () => {
+      setIsLookingUp(true)
+      try {
+        let data = null
+        if (authUser.email) {
+          const res = await fetch(
+            `${API_URL}/api/clients/lookup?email=${encodeURIComponent(authUser.email)}`,
+            { headers: authHeaders() }
+          )
+          if (res.ok) data = await res.json()
+        }
+        if (cancelled) return
+
+        if (data) applyLookupData(data)
+
+        const profileComplete =
+          Boolean(authUser.name?.trim()) &&
+          Boolean(authUser.email?.trim()) &&
+          Boolean(authUser.phone?.trim())
+
+        if (profileComplete && data?.hasAllBaseConsents) {
+          const accepted = data.acceptedConsents?.length
+            ? data.acceptedConsents
+            : ['privacy', 'booking_terms']
+          setConsents(accepted)
+          setSkipIdentify(true)
+          saveClientProfile({
+            name: authUser.name.trim(),
+            email: authUser.email.trim().toLowerCase(),
+            phone: authUser.phone.trim(),
+            consents: accepted,
+          })
+        }
+      } catch {
+        // Keep identify step if lookup fails
+      } finally {
+        if (!cancelled) {
+          setIsLookingUp(false)
+          setIdentityBootstrapped(true)
+        }
+      }
+    }
+
+    bootstrapIdentity()
+    return () => {
+      cancelled = true
+    }
+  }, [authUser, authLoading, applyLookupData])
 
   const advanceFromIdentify = useCallback(async () => {
     if (!clientInfo.name?.trim() || clientInfo.name.trim().length < 2) {
@@ -348,6 +403,9 @@ export default function Booking() {
     setInfoNotice(route.notice)
     setSearchParams({}, { replace: true })
 
+    setSkipIdentify(true)
+    setSkipPriorHistoryFlag(true)
+
     const nextFlow = buildFlow({
       needsTreatmentConfirm: needConfirm,
       needsTreatmentQuestionnaire: needQ,
@@ -355,7 +413,7 @@ export default function Booking() {
       skipTreatment: true,
       skipQuestionnaires: route.skipQuestionnaire,
       skipHenna: true,
-      skipIdentify: false,
+      skipIdentify: true,
       skipPriorHistory: true,
     })
 
@@ -369,6 +427,24 @@ export default function Booking() {
     resolveTreatmentFlow,
     clientInfo.name,
     setSearchParams,
+  ])
+
+  // Logged-in + mantenimiento: apply without waiting for Identificación
+  useEffect(() => {
+    if (!identityBootstrapped || !skipIdentify) return
+    if (bookingIntent !== 'mantenimiento') return
+    if (loadingTreatments || treatments.length === 0) return
+    if (selectedTreatment) return
+    applyMaintenanceIntent(lookupData)
+  }, [
+    identityBootstrapped,
+    skipIdentify,
+    bookingIntent,
+    loadingTreatments,
+    treatments.length,
+    selectedTreatment,
+    lookupData,
+    applyMaintenanceIntent,
   ])
 
   const goNext = useCallback(async () => {
@@ -599,6 +675,7 @@ export default function Booking() {
     setSelectedDate(null)
     setSelectedTime(null)
     setSkipIdentify(true)
+    setSkipPriorHistoryFlag(true)
     setSkipQuestionnaires(true)
     setSkipHenna(true)
     setSkipTreatment(true)
@@ -624,6 +701,7 @@ export default function Booking() {
     setSelectedDate(null)
     setSelectedTime(null)
     setSkipIdentify(true)
+    setSkipPriorHistoryFlag(true)
     setSkipQuestionnaires(false)
     setSkipHenna(true)
     setSkipTreatment(false)
@@ -712,6 +790,13 @@ export default function Booking() {
       </motion.header>
 
       <main className="pt-24 pb-12 px-5 max-w-2xl mx-auto min-h-screen">
+        {!identityBootstrapped ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-24 text-on-surface-variant">
+            <div className="w-8 h-8 rounded-full border-2 border-primary-container border-t-transparent animate-spin" />
+            <p className="font-label text-sm tracking-wide">Preparando tu reserva…</p>
+          </div>
+        ) : (
+          <>
         {infoNotice && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -874,6 +959,8 @@ export default function Booking() {
               <Icon name="arrow_forward" className="text-lg" />
             </motion.button>
           </motion.div>
+        )}
+          </>
         )}
       </main>
     </div>

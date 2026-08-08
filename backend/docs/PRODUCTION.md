@@ -65,7 +65,7 @@ Cuando Nereida crea/edita una cita en Google, el backend debe recibir notificaci
 1. Desplegar backend con URL HTTPS pública (Render).
 2. Configurar en Render:
    ```
-   GOOGLE_WEBHOOK_URL=https://TU-DOMINIO.onrender.com/api/webhooks/google-calendar
+   GOOGLE_WEBHOOK_URL=https://www.nerebrowroom.es/api/webhooks/google-calendar
    GOOGLE_WEBHOOK_SECRET=<valor aleatorio>
    ```
 3. Al arrancar, el servidor registra `events.watch` automáticamente ([`calendarSync.ensureWatchChannel`](services/calendarSync.js)).
@@ -84,15 +84,17 @@ Google Calendar → POST /api/webhooks/google-calendar
 
 ## Cron jobs (Render)
 
+Definidos en `render.yaml`:
+
 | Job | Schedule | Comando |
 |-----|----------|---------|
 | `nere-reminders` | `*/30 * * * *` | `node scripts/trigger-reminders.js` |
-| Calendar reconcile | Recomendado cada 15-30 min | `POST /api/cron/calendar-sync` con header `Authorization: Bearer $CRON_SECRET` |
+| `nere-calendar-sync` | `*/15 * * * *` | `node scripts/trigger-calendar-sync.js` |
 
 El cron de calendar-sync cubre:
 - Sync incremental si el webhook falló
 - Renovación del canal watch
-- Reconciliación de eventos web ↔ Google
+- Reconciliación de eventos web ↔ Google (cancelaciones, huérfanos, faltantes)
 
 ## Migración inicial de citas
 

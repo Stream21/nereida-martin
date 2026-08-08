@@ -9,6 +9,7 @@
     "calendar:init": "node scripts/sync-calendar-init.js",
     "calendar:sync": "node scripts/sync-calendar.js",
     "calendar:audit": "node scripts/calendar-audit-overlaps.js",
+    "cron:calendar-sync": "node scripts/trigger-calendar-sync.js",
     "db:up": "node scripts/db-up.js",
     "db:down": "node scripts/db-down.js",
     "db:bootstrap": "node scripts/db-bootstrap.js",
