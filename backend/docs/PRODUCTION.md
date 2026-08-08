@@ -98,11 +98,26 @@ El cron de calendar-sync cubre:
 
 ## Migración inicial de citas
 
-Antes del go-live, en el servidor o local contra BD de producción:
+Una sola vez (o cuando quieras reimportar el año). En Render:
+
+**One-off Job** (Dashboard → nere-studio → Manual Deploy / Jobs → One-off Job)  
+o **Shell** del web service:
+
+```bash
+cd backend && node scripts/sync-calendar-init.js --year=2026
+```
+
+Dry-run primero (recomendado):
+
+```bash
+cd backend && node scripts/sync-calendar-init.js --year=2026 --dry-run
+```
+
+Local contra prod (con `.env` apuntando a `DATABASE_URL` de Render):
 
 ```bash
 cd backend
-npm run calendar:init -- --from=2026-01-01 --to=2026-12-31
+npm run calendar:init:year
 ```
 
 ## Convenciones Google Calendar (Nereida)

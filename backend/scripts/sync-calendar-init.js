@@ -1,16 +1,40 @@
 #!/usr/bin/env node
+/**
+ * Importación inicial / anual de citas desde Google Calendar → BD.
+ *
+ * Uso local:
+ *   npm run calendar:init:year
+ *   npm run calendar:init -- --from=2026-01-01 --to=2026-12-31
+ *   npm run calendar:init -- --year=2026 --dry-run
+ *
+ * En Render (One-off Job o Shell del web service):
+ *   cd backend && node scripts/sync-calendar-init.js --year=2026
+ *
+ * Requiere: DATABASE_URL, GOOGLE_CLIENT_ID/SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_CALENDAR_ID
+ */
 require('dotenv').config();
 
 const calendarSync = require('../services/calendarSync');
 const studioSettings = require('../services/studioSettings');
 
 function parseArgs(argv) {
-  const options = { dryRun: false, from: null, to: null };
+  const options = { dryRun: false, from: null, to: null, year: null };
 
   for (const arg of argv) {
     if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--year') options.year = String(new Date().getFullYear());
+    else if (arg.startsWith('--year=')) options.year = arg.split('=')[1];
     else if (arg.startsWith('--from=')) options.from = arg.split('=')[1];
     else if (arg.startsWith('--to=')) options.to = arg.split('=')[1];
+  }
+
+  if (options.year) {
+    const y = Number(options.year);
+    if (!Number.isInteger(y) || y < 2000 || y > 2100) {
+      throw new Error(`Año inválido: ${options.year}`);
+    }
+    options.from = options.from || `${y}-01-01`;
+    options.to = options.to || `${y}-12-31`;
   }
 
   return options;

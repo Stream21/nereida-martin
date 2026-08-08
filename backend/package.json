@@ -7,6 +7,7 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "calendar:init": "node scripts/sync-calendar-init.js",
+    "calendar:init:year": "node scripts/sync-calendar-init.js --year=2026",
     "calendar:sync": "node scripts/sync-calendar.js",
     "calendar:audit": "node scripts/calendar-audit-overlaps.js",
     "cron:calendar-sync": "node scripts/trigger-calendar-sync.js",
