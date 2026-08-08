@@ -50,7 +50,7 @@ export default function AboutSection() {
                 decoding="async"
                 width={600}
                 height={600}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-[center_18%]"
               />
             </div>
           </div>
