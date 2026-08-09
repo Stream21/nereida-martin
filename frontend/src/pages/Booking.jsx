@@ -8,6 +8,7 @@ import StepQuestionnaire from '../components/booking/StepQuestionnaire'
 import StepTreatmentConfirm from '../components/booking/StepTreatmentConfirm'
 import StepTreatments from '../components/booking/StepTreatments'
 import { shouldAskPriorHistory, resolveMaintenanceBooking, hasBrowDesignHistoryInDb, BROW_DESIGN_SEGUIMIENTO, requiresAptitudeQuestionnaire } from '../utils/browDesign'
+import { requiresPhotoAssessment } from '../utils/photoAssessment'
 import StepHennaAssessment from '../components/booking/StepHennaAssessment'
 import StepAvailability from '../components/booking/StepAvailability'
 import StepSummary from '../components/booking/StepSummary'
@@ -64,10 +65,10 @@ function resolveDeclaredProfile(lookupData, studioHabitual) {
 function buildFlow({
   needsTreatmentConfirm,
   needsTreatmentQuestionnaire,
-  isHenna,
+  needsPhotoAssessment,
   skipTreatment,
   skipQuestionnaires,
-  skipHenna,
+  skipPhotoAssessment,
   skipIdentify,
   skipPriorHistory,
 }) {
@@ -77,7 +78,7 @@ function buildFlow({
   if (!skipTreatment) flow.push('treatment')
   if (!skipQuestionnaires && needsTreatmentConfirm) flow.push('treatment_confirm')
   if (!skipQuestionnaires && needsTreatmentQuestionnaire) flow.push('treatment_q')
-  if (!skipHenna && isHenna) flow.push('henna')
+  if (!skipPhotoAssessment && needsPhotoAssessment) flow.push('henna')
   flow.push('calendar', 'summary')
   return flow
 }
@@ -132,7 +133,10 @@ export default function Booking() {
   const [bookingError, setBookingError] = useState(null)
   const [infoNotice, setInfoNotice] = useState(null)
 
-  const isHenna = selectedTreatment?.id === 'brow-henna'
+  const treatmentIdsForPhoto = lookupData?.treatmentIds || []
+  const needsPhotoAssessment = requiresPhotoAssessment(selectedTreatment?.id, {
+    treatmentIds: treatmentIdsForPhoto,
+  })
   const showConsents = !lookupData?.hasAllBaseConsents
   const needsPriorHistory =
     !skipPriorHistoryFlag &&
@@ -152,14 +156,14 @@ export default function Booking() {
     () => buildFlow({
       needsTreatmentConfirm,
       needsTreatmentQuestionnaire,
-      isHenna,
+      needsPhotoAssessment,
       skipTreatment,
       skipQuestionnaires,
-      skipHenna,
+      skipPhotoAssessment: skipHenna,
       skipIdentify,
       skipPriorHistory: !needsPriorHistory,
     }),
-    [needsTreatmentConfirm, needsTreatmentQuestionnaire, isHenna, skipTreatment, skipQuestionnaires, skipHenna, skipIdentify, needsPriorHistory]
+    [needsTreatmentConfirm, needsTreatmentQuestionnaire, needsPhotoAssessment, skipTreatment, skipQuestionnaires, skipHenna, skipIdentify, needsPriorHistory]
   )
 
   const currentStep = flow[stepIndex] || 'identify'
@@ -409,10 +413,10 @@ export default function Booking() {
     const nextFlow = buildFlow({
       needsTreatmentConfirm: needConfirm,
       needsTreatmentQuestionnaire: needQ,
-      isHenna: false,
+      needsPhotoAssessment: false,
       skipTreatment: true,
       skipQuestionnaires: route.skipQuestionnaire,
-      skipHenna: true,
+      skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
     })
@@ -529,10 +533,12 @@ export default function Booking() {
     const nextFlow = buildFlow({
       needsTreatmentConfirm: needConfirm,
       needsTreatmentQuestionnaire: needQ,
-      isHenna: treatment.id === 'brow-henna',
+      needsPhotoAssessment: requiresPhotoAssessment(treatment.id, {
+        treatmentIds: lookupData?.treatmentIds || [],
+      }),
       skipTreatment: false,
       skipQuestionnaires: false,
-      skipHenna: false,
+      skipPhotoAssessment: false,
       skipIdentify: skipIdentify,
       skipPriorHistory: !needsPriorHistory,
     })
@@ -560,10 +566,12 @@ export default function Booking() {
     const nextFlow = buildFlow({
       needsTreatmentConfirm: false,
       needsTreatmentQuestionnaire: isFirstTime,
-      isHenna: selectedTreatment?.id === 'brow-henna',
+      needsPhotoAssessment: requiresPhotoAssessment(selectedTreatment?.id, {
+        treatmentIds: lookupData?.treatmentIds || [],
+      }),
       skipTreatment: skipTreatment,
       skipQuestionnaires: false,
-      skipHenna: false,
+      skipPhotoAssessment: false,
       skipIdentify: skipIdentify,
       skipPriorHistory: !needsPriorHistory,
     })
@@ -576,7 +584,7 @@ export default function Booking() {
       setDirection(1)
       setStepIndex(nextFlow.indexOf(target))
     }
-  }, [selectedTreatment, skipTreatment, skipIdentify, needsPriorHistory, clientInfo.name])
+  }, [selectedTreatment, skipTreatment, skipIdentify, needsPriorHistory, clientInfo.name, lookupData?.treatmentIds])
 
   useEffect(() => {
     if (!preselectedTreatmentId || loadingTreatments || treatments.length === 0) return
@@ -627,13 +635,19 @@ export default function Booking() {
       }
     }
 
-    if (isHenna && hennaAssessmentId) {
+    if (needsPhotoAssessment && hennaAssessmentId) {
       body.hennaAssessmentId = hennaAssessmentId
       if (!allConsents.includes('photo_consent')) {
-        setBookingError('Debes aceptar el consentimiento de imagen para Brow Henna')
+        setBookingError('Debes aceptar el consentimiento de imagen para la valoración por foto')
         setIsSubmitting(false)
         return
       }
+    }
+
+    if (needsPhotoAssessment && !hennaAssessmentId) {
+      setBookingError('Falta la valoración por foto. Vuelve al paso anterior.')
+      setIsSubmitting(false)
+      return
     }
 
     try {
@@ -667,7 +681,8 @@ export default function Booking() {
     }
   }, [
     isSubmitting, selectedTreatment, selectedDate, selectedTime, clientInfo, allConsents,
-    lookupData, studioHabitual, needsTreatmentQuestionnaire, treatmentAnswers, intakeSignature, isHenna, hennaAssessmentId, flow,
+    lookupData, studioHabitual, needsTreatmentQuestionnaire, treatmentAnswers, intakeSignature,
+    needsPhotoAssessment, hennaAssessmentId, flow,
   ])
 
   const handleReserveAnotherDay = useCallback(() => {
@@ -684,16 +699,16 @@ export default function Booking() {
     const nextFlow = buildFlow({
       needsTreatmentConfirm: false,
       needsTreatmentQuestionnaire: false,
-      isHenna,
+      needsPhotoAssessment,
       skipTreatment: true,
       skipQuestionnaires: true,
-      skipHenna: true,
+      skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
     })
     setStepIndex(nextFlow.indexOf('calendar'))
     setDirection(1)
-  }, [isHenna])
+  }, [needsPhotoAssessment])
 
   const handleReserveAnotherTreatment = useCallback(() => {
     setBookingResult(null)
@@ -713,10 +728,10 @@ export default function Booking() {
     const nextFlow = buildFlow({
       needsTreatmentConfirm: false,
       needsTreatmentQuestionnaire: false,
-      isHenna: false,
+      needsPhotoAssessment: false,
       skipTreatment: false,
       skipQuestionnaires: false,
-      skipHenna: true,
+      skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
     })
@@ -910,6 +925,7 @@ export default function Booking() {
             <motion.div key="henna" custom={direction} variants={stepVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.4 }}>
               <StepHennaAssessment
                 clientInfo={clientInfo}
+                treatmentName={selectedTreatment?.name}
                 onAssessmentReady={setHennaAssessmentId}
                 onComplete={goNext}
               />
@@ -935,7 +951,7 @@ export default function Booking() {
                 date={selectedDate}
                 time={selectedTime}
                 clientInfo={clientInfo}
-                pendingReview={isHenna}
+                pendingReview={needsPhotoAssessment}
                 consents={allConsents}
                 onConsentsChange={setConsents}
                 onConfirm={handleConfirm}

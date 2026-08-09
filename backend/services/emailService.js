@@ -60,11 +60,11 @@ function buildConfirmationHTML({
 }) {
   const calendarFile = require('./calendarFile');
   const googleUrl = calendarFile.generateGoogleCalendarUrl({
-    title: `${treatment.name} – Studio Anuelblingding`,
+    title: `${treatment.name} – Nereida Martín Studio`,
     startTime,
     endTime,
     description: `${treatment.name}: ${treatment.tag}`,
-    location: 'Studio Anuelblingding',
+    location: 'Nereida Martín Studio',
   });
 
   const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
@@ -76,7 +76,7 @@ function buildConfirmationHTML({
 <body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Studio Anuelblingding</h1>
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
       <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Tu cita ha sido confirmada</p>
     </div>
 
@@ -115,14 +115,17 @@ function buildConfirmationHTML({
     </div>` : ''}
 
     <div style="background:${E.infoBg};border-radius:12px;padding:16px;border:1px solid ${E.accentBorder};">
+      <p style="color:${E.text};font-size:13px;font-weight:600;line-height:1.5;margin:0 0 8px;">
+        Política de cancelación
+      </p>
       <p style="color:${E.text};font-size:13px;line-height:1.6;margin:0 0 8px;">
         ${POLICY_TEXT}
       </p>
-      ${cancellationDeadline ? `<p style="color:${E.muted};font-size:12px;margin:0;">Para tu cita, el plazo límite es: <strong>${cancellationDeadline}</strong>.</p>` : ''}
+      ${cancellationDeadline ? `<p style="color:${E.muted};font-size:12px;margin:0;">No podrás cancelar online después de: <strong>${cancellationDeadline}</strong>.</p>` : ''}
     </div>
 
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
-      <p style="color:${E.muted};font-size:11px;margin:0;">Studio Anuelblingding · Nere Martín</p>
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
     </div>
   </div>
 </body>
@@ -136,7 +139,7 @@ function buildCancellationHTML({ clientName, treatment, startTime, endTime }) {
 <body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Studio Anuelblingding</h1>
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
       <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Cita cancelada</p>
     </div>
     <div style="background:${E.white};border-radius:16px;padding:28px;box-shadow:0 2px 12px ${E.shadow};">
@@ -147,7 +150,7 @@ function buildCancellationHTML({ clientName, treatment, startTime, endTime }) {
       <p style="color:${E.muted};font-size:13px;margin:0;">Si deseas reservar de nuevo, visita nuestra web cuando quieras.</p>
     </div>
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
-      <p style="color:${E.muted};font-size:11px;margin:0;">Studio Anuelblingding · Nere Martín</p>
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
     </div>
   </div>
 </body>
@@ -172,7 +175,7 @@ function buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, chan
 <body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Studio Anuelblingding</h1>
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
       <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">${titles[changeType] || titles.updated}</p>
     </div>
     <div style="background:${E.white};border-radius:16px;padding:28px;box-shadow:0 2px 12px ${E.shadow};">
@@ -187,7 +190,7 @@ function buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, chan
       </div>` : ''}
     </div>
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
-      <p style="color:${E.muted};font-size:11px;margin:0;">Studio Anuelblingding · Nere Martín</p>
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
     </div>
   </div>
 </body>
@@ -201,7 +204,7 @@ function buildReminderHTML({ clientName, treatment, startTime, endTime }) {
 <body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Studio Anuelblingding</h1>
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
       <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Recordatorio de cita</p>
     </div>
 
@@ -225,7 +228,7 @@ function buildReminderHTML({ clientName, treatment, startTime, endTime }) {
     </div>
 
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
-      <p style="color:${E.muted};font-size:11px;margin:0;">Studio Anuelblingding · Nere Martín</p>
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
     </div>
   </div>
 </body>
@@ -245,9 +248,9 @@ async function sendConfirmation({
   const transport = getTransporter();
 
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `✨ Cita confirmada – ${treatment.name} | Studio Anuelblingding`,
+    subject: `✨ Cita confirmada – ${treatment.name} | Nereida Martín Studio`,
     html: buildConfirmationHTML({
       clientName,
       treatment,
@@ -264,9 +267,9 @@ async function sendCancellationConfirmation({ to, clientName, treatment, startTi
   const transport = getTransporter();
 
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `Cita cancelada – ${treatment.name} | Studio Anuelblingding`,
+    subject: `Cita cancelada – ${treatment.name} | Nereida Martín Studio`,
     html: buildCancellationHTML({ clientName, treatment, startTime, endTime }),
   });
 }
@@ -287,9 +290,9 @@ async function sendGoogleChangeNotice({
   };
 
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `${subjects[changeType] || subjects.updated} | Studio Anuelblingding`,
+    subject: `${subjects[changeType] || subjects.updated} | Nereida Martín Studio`,
     html: buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, changeType }),
   });
 }
@@ -298,9 +301,9 @@ async function sendReminder({ to, clientName, treatment, startTime, endTime }) {
   const transport = getTransporter();
 
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `⏰ Recordatorio: Tu cita es hoy – ${treatment.name} | Studio Anuelblingding`,
+    subject: `⏰ Recordatorio: Tu cita es hoy – ${treatment.name} | Nereida Martín Studio`,
     html: buildReminderHTML({ clientName, treatment, startTime, endTime }),
   });
 }
@@ -333,7 +336,7 @@ async function sendOwnerAlert({ subject, title, body, actions }) {
   if (!to) return;
   const transport = getTransporter();
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
     subject,
     html: ownerAlertHTML({ title, body, actions }),
@@ -342,7 +345,7 @@ async function sendOwnerAlert({ subject, title, body, actions }) {
 
 async function sendOwnerFirstVisitAlert(payload) {
   await sendOwnerAlert({
-    subject: `⭐ Primera visita – ${payload.clientName} | Studio`,
+    subject: `⭐ Primera visita – ${payload.clientName} | Nereida Martín Studio`,
     title: 'Nueva primera visita al estudio',
     body: payload.body,
   });
@@ -350,7 +353,7 @@ async function sendOwnerFirstVisitAlert(payload) {
 
 async function sendOwnerTreatmentFirstAlert(payload) {
   await sendOwnerAlert({
-    subject: `🆕 Nuevo tratamiento – ${payload.clientName} | Studio`,
+    subject: `🆕 Nuevo tratamiento – ${payload.clientName} | Nereida Martín Studio`,
     title: 'Primera vez en un tratamiento',
     body: payload.body,
   });
@@ -358,27 +361,27 @@ async function sendOwnerTreatmentFirstAlert(payload) {
 
 async function sendOwnerFlaggedAlert(payload) {
   await sendOwnerAlert({
-    subject: `⚠️ Cuestionario marcado – ${payload.clientName} | Studio`,
+    subject: `⚠️ Cuestionario marcado – ${payload.clientName} | Nereida Martín Studio`,
     title: 'Revisar cuestionario de aptitud',
     body: payload.body,
   });
 }
 
-async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath }) {
+async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath, treatmentName }) {
   const to = getOwnerEmail();
   if (!to) return;
   const transport = getTransporter();
-  const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+  const label = treatmentName || 'tratamiento';
   const attachments = photoPath
-    ? [{ filename: 'cejas-valoracion.jpg', path: require('path').join(__dirname, '..', 'uploads', photoPath) }]
+    ? [{ filename: 'valoracion-foto.jpg', path: require('path').join(__dirname, '..', 'uploads', photoPath) }]
     : [];
 
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `📷 Valoración Henna pendiente | Studio`,
+    subject: `📷 Valoración pendiente – ${label} | Nereida Martín Studio`,
     html: ownerAlertHTML({
-      title: 'Nueva valoración Brow Henna',
+      title: `Nueva valoración por foto – ${label}`,
       body,
       actions: [
         { label: 'Aprobar', url: approveUrl },
@@ -392,9 +395,9 @@ async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath
 async function sendClientHennaPending({ to, clientName, treatment, startTime, endTime }) {
   const transport = getTransporter();
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `⏳ Cita pendiente de valoración – ${treatment.name} | Studio`,
+    subject: `⏳ Cita pendiente de valoración – ${treatment.name} | Nereida Martín Studio`,
     html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
       <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
         <p>Hola <strong>${clientName}</strong>,</p>
@@ -408,9 +411,9 @@ async function sendClientHennaPending({ to, clientName, treatment, startTime, en
 async function sendClientHennaApproved({ to, clientName, treatment, startTime, endTime }) {
   const transport = getTransporter();
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `✅ Valoración aprobada – ${treatment.name} | Studio`,
+    subject: `✅ Valoración aprobada – ${treatment.name} | Nereida Martín Studio`,
     html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
       <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
         <p>Hola <strong>${clientName}</strong>,</p>
@@ -426,9 +429,9 @@ async function sendClientHennaRejected({ to, clientName, treatment, startTime })
     ? ` del ${formatDate(startTime)} a las ${formatTime(startTime)}`
     : '';
   await transport.sendMail({
-    from: `"Studio Anuelblingding" <${process.env.GMAIL_USER}>`,
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `Valoración Henna – no apta | Studio Anuelblingding`,
+    subject: `Valoración – no apta | Nereida Martín Studio`,
     html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
       <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
         <p>Hola <strong>${clientName}</strong>,</p>

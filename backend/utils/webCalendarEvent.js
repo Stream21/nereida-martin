@@ -1,14 +1,17 @@
 const WEB_SUMMARY_PREFIX = '[Web]';
+const { STUDIO_BRAND } = require('./studioBrand');
+const { isPhotoReviewType } = require('./photoAssessment');
 
 const PREFIX = {
   web: '[Web]',
   first_visit: '[Primera visita]',
   first_treatment: '[Nuevo tratamiento]',
+  pending_photo: '[Pendiente valoración]',
   pending_henna: '[Pendiente Henna]',
 };
 
 function getEventPrefix({ visitContext, reviewType, pendingReview }) {
-  if (pendingReview || reviewType === 'henna_photo') return PREFIX.pending_henna;
+  if (pendingReview || isPhotoReviewType(reviewType)) return PREFIX.pending_photo;
   if (visitContext === 'first_studio_visit') return PREFIX.first_visit;
   if (visitContext === 'first_treatment') return PREFIX.first_treatment;
   return PREFIX.web;
@@ -58,7 +61,7 @@ function buildBookingDescription({
   hennaPhotoUrl,
 }) {
   const lines = [
-    '🌐 Reserva online · Studio Anuelblingding',
+    `🌐 Reserva online · ${STUDIO_BRAND}`,
     '────────────────────────────',
     `Tratamiento: ${treatmentName}`,
     treatmentTag ? `Detalle: ${treatmentTag}` : null,
@@ -73,8 +76,8 @@ function buildBookingDescription({
   if (visitContext === 'first_treatment') {
     lines.push('', '🆕 Primera vez en este tratamiento');
   }
-  if (pendingReview || reviewType === 'henna_photo') {
-    lines.push('', '⏳ PENDIENTE DE VALORACIÓN HENNA — Revisar foto antes de confirmar');
+  if (pendingReview || isPhotoReviewType(reviewType)) {
+    lines.push('', '⏳ PENDIENTE DE VALORACIÓN POR FOTO — Revisar antes de confirmar');
     if (hennaPhotoUrl) lines.push(`Foto valoración: ${hennaPhotoUrl}`);
   }
   if (flagged) {
@@ -97,7 +100,7 @@ function getWebEventColorId() {
 }
 
 function getEventColorId({ visitContext, reviewType, pendingReview, flagged }) {
-  if (pendingReview || reviewType === 'henna_photo') {
+  if (pendingReview || isPhotoReviewType(reviewType)) {
     return process.env.GOOGLE_PENDING_COLOR_ID || '11';
   }
   if (flagged) return process.env.GOOGLE_FLAGGED_COLOR_ID || '4';

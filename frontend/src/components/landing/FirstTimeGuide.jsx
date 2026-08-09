@@ -8,7 +8,7 @@ const WHATSAPP_URL = 'https://wa.me/34641613614'
 const recommendations = [
   {
     need: 'Si quieres mejorar la forma de tus cejas',
-    treatment: 'Brow Design',
+    treatment: 'Perfilado',
     detail: 'Perfilado de cejas con visagismo',
     description: 'Es la mejor opción para empezar. Analizo tu rostro y trabajo tu ceja respetando tu forma natural.',
     icon: 'auto_fix_high',

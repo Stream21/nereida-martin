@@ -9,7 +9,7 @@ export function PrivacyPolicyContent() {
       </p>
       <h4>Responsable del tratamiento</h4>
       <p>
-        Nereida Martín — Studio Anuelblingding
+        Nereida Martín Studio
         <br />
         Teléfono: +34 {PHONE}
         <br />

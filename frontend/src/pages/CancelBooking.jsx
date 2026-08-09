@@ -6,6 +6,8 @@ import { es } from 'date-fns/locale'
 import Icon from '../components/ui/Icon'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const WHATSAPP_URL = 'https://wa.me/34641613614'
+const STUDIO_BRAND = 'Nereida Martín Studio'
 
 export default function CancelBooking() {
   const { token } = useParams()
@@ -67,13 +69,15 @@ export default function CancelBooking() {
   const cancellation = data?.cancellation
   const startDate = booking ? new Date(booking.startTime) : null
   const endDate = booking ? new Date(booking.endTime) : null
+  const deadlinePassed =
+    errorCode === 'DEADLINE_PASSED' || (cancellation && cancellation.canCancel === false)
 
   return (
     <div className="min-h-screen bg-background px-4 py-12">
       <div className="max-w-md mx-auto">
         <div className="text-center mb-8">
           <Link to="/" className="font-headline text-xl text-on-surface">
-            Studio Anuelblingding
+            {STUDIO_BRAND}
           </Link>
         </div>
 
@@ -110,7 +114,11 @@ export default function CancelBooking() {
             className="bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/10"
           >
             <h1 className="font-headline text-2xl text-on-surface text-center mb-6">
-              {errorCode === 'ALREADY_CANCELLED' ? 'Cita ya cancelada' : 'Cancelar cita'}
+              {errorCode === 'ALREADY_CANCELLED'
+                ? 'Cita ya cancelada'
+                : deadlinePassed
+                  ? 'No se puede cancelar online'
+                  : 'Cancelar cita'}
             </h1>
 
             {booking && startDate && (
@@ -150,14 +158,27 @@ export default function CancelBooking() {
               </div>
             )}
 
-            {error && (
+            {deadlinePassed && (
+              <div className="bg-amber-50 text-amber-950 rounded-xl p-4 text-sm mb-4 border border-amber-200/60">
+                <p className="font-medium mb-2">El plazo de cancelación online ha terminado.</p>
+                <p className="text-xs leading-relaxed mb-3">
+                  {error ||
+                    'Solo puedes cancelar hasta el día anterior a tu cita, a la misma hora. Si necesitas ayuda ahora, escríbenos por WhatsApp.'}
+                </p>
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-full py-3 rounded-2xl bg-[#25D366] text-white font-label text-xs tracking-widest uppercase font-bold"
+                >
+                  Contactar por WhatsApp
+                </a>
+              </div>
+            )}
+
+            {error && !deadlinePassed && (
               <div className="bg-red-50 text-red-800 rounded-xl p-4 text-sm mb-4">
                 {error}
-                {errorCode === 'DEADLINE_PASSED' && (
-                  <p className="mt-2 text-xs">
-                    Si necesitas ayuda, contáctanos por WhatsApp desde nuestra web.
-                  </p>
-                )}
               </div>
             )}
 

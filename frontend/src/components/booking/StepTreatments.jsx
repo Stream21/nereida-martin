@@ -8,6 +8,7 @@ import {
   hasAnyBrowDesignHistory,
   sortTreatmentsForDisplay,
 } from '../../utils/browDesign'
+import { requiresPhotoAssessment } from '../../utils/photoAssessment'
 
 const listVariants = {
   hidden: { opacity: 0 },
@@ -75,7 +76,7 @@ export default function StepTreatments({ treatments, categories, onSelect, clien
     if (hasBrowHistory && treatment.id === BROW_DESIGN_SEGUIMIENTO) {
       badges.push({ label: 'Ideal para ti', tone: 'primary' })
     }
-    if (treatment.id === 'brow-henna') {
+    if (requiresPhotoAssessment(treatment.id, { treatmentIds })) {
       badges.push({ label: 'Requiere valoración con foto', tone: 'warn' })
     }
     return badges

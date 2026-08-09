@@ -1,4 +1,5 @@
 const ics = require('ics');
+const { STUDIO_BRAND } = require('../utils/studioBrand');
 
 function toICSDateArray(date) {
   return [
@@ -30,7 +31,7 @@ function generateICS({ title, startTime, endTime, description, location }) {
       },
     ],
     status: 'CONFIRMED',
-    organizer: { name: 'Studio Anuelblingding' },
+    organizer: { name: STUDIO_BRAND },
   });
 
   if (error) {

@@ -94,7 +94,7 @@ export default function StepPriorTreatments({
             Tratamientos realizados anteriormente
           </p>
           <p className="text-xs text-on-surface-variant mb-4">
-            Selecciona todos los que apliquen. Si has hecho Brow Design, te mostraremos mantenimiento y Define.
+            Selecciona todos los que apliquen. Si has hecho Perfilado, te mostraremos mantenimiento y Define.
             Para el resto de tratamientos, te mostraremos solo lo que te corresponde según tu historial.
           </p>
 

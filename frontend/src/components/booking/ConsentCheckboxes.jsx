@@ -56,7 +56,7 @@ export default function ConsentCheckboxes({
       ? [{
           key: 'photo_consent',
           label: 'Autorizo la',
-          link: 'cesión de imagen para valoración Henna',
+          link: 'cesión de imagen para valoración',
           required: true,
         }]
       : []),

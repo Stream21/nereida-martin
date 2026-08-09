@@ -26,14 +26,12 @@ router.get('/', async (req, res) => {
            WHEN 'brow-henna' THEN 6
            WHEN 'brow-restored' THEN 7
            WHEN 'micropigmentacion-soft-pixel' THEN 8
-           WHEN 'nanoblading' THEN 9
-           WHEN 'lash-lift-korean' THEN 10
-           WHEN 'skin-reset' THEN 11
-           WHEN 'ritual-glow' THEN 12
-           WHEN 'skin-boost' THEN 13
-           WHEN 'labio-superior' THEN 14
-           WHEN 'depilacion-facial' THEN 15
-           WHEN 'smile-gem' THEN 16
+           WHEN 'lash-lift-korean' THEN 9
+           WHEN 'skin-reset' THEN 10
+           WHEN 'skin-boost' THEN 11
+           WHEN 'labio-superior' THEN 12
+           WHEN 'depilacion-facial' THEN 13
+           WHEN 'smile-gem' THEN 14
            ELSE 99
          END,
          name`

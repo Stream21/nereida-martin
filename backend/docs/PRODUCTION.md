@@ -1,4 +1,4 @@
-# Producción — Studio Anuelblingding
+# Producción — Nereida Martín Studio
 
 Checklist para desplegar en Render con sync de Google Calendar en vivo.
 
@@ -7,6 +7,12 @@ Checklist para desplegar en Render con sync de Google Calendar en vivo.
 El `buildCommand` del blueprint usa `NPM_CONFIG_PRODUCTION=false npm ci` en el frontend
 para instalar `vite` / `@vitejs/plugin-react` (están en `devDependencies`). Sin eso,
 con `NODE_ENV=production` el build falla con `Cannot find package '@vitejs/plugin-react'`.
+
+## Entregabilidad de email (spam)
+
+Los correos salen por Gmail SMTP (`GMAIL_USER`). Para reducir spam: configura SPF/DKIM/DMARC
+en el dominio del remitente, mantén el From estable (`Nereida Martín Studio`) y evita
+asuntos demasiado "promocionales". La bandeja de entrada vs spam depende del proveedor del destinatario.
 
 
 ## Variables de entorno obligatorias

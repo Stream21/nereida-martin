@@ -41,7 +41,7 @@ export function hasBrowDesignHistoryInDb(treatmentIds = []) {
   return BROW_DESIGN_TRIO.some((id) => treatmentIds.includes(id))
 }
 
-/** Tras identificación con intent=mantenimiento: mantenimiento si hay Brow Design en BD, si no primera vez. */
+/** Tras identificación con intent=mantenimiento: mantenimiento si hay Perfilado en BD, si no primera vez. */
 export function resolveMaintenanceBooking(treatmentIds = []) {
   if (hasBrowDesignHistoryInDb(treatmentIds)) {
     return {
@@ -56,7 +56,7 @@ export function resolveMaintenanceBooking(treatmentIds = []) {
     treatmentId: BROW_DESIGN_PRIMERA,
     skipQuestionnaire: false,
     notice:
-      'No encontramos Brow Design previo en tu historial con nosotros. Para mantenimiento necesitas haberlo realizado antes; hemos preparado tu cita de primera vez.',
+      'No encontramos Perfilado previo en tu historial con nosotros. Para mantenimiento necesitas haberlo realizado antes; hemos preparado tu cita de primera vez.',
   }
 }
 
@@ -94,7 +94,7 @@ export function buildPriorTreatmentOptions(treatments) {
         seen.add(BROW_DESIGN_DECLARED)
         options.push({
           id: BROW_DESIGN_DECLARED,
-          label: 'Brow Design',
+          label: 'Perfilado',
           tag: 'Primera vez o mantenimiento',
           category: 'cejas',
         })
@@ -134,10 +134,8 @@ export const TREATMENTS_WITH_APTITUDE_QUESTIONNAIRE = new Set([
   'brow-henna',
   'brow-restored',
   'micropigmentacion-soft-pixel',
-  'nanoblading',
   'lash-lift-korean',
   'skin-reset',
-  'ritual-glow',
   'skin-boost',
 ])
 

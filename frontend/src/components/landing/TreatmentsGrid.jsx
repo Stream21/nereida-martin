@@ -16,7 +16,7 @@ const treatments = {
   cejas: {
     items: [
       {
-        name: 'Brow Design',
+        name: 'Perfilado',
         tag: 'Primera vez',
         bookingId: 'brow-design-primera',
         duration: '45 minutos',
@@ -24,7 +24,7 @@ const treatments = {
           'El punto de partida para transformar tu mirada. Incluye un estudio completo de visajismo personalizado para diseñar la forma ideal según tus facciones, seguido de una epilación limpia y detallada con hilo o pinza.',
       },
       {
-        name: 'Brow Design',
+        name: 'Perfilado',
         tag: 'Mantenimiento',
         bookingId: 'brow-design-seguimiento',
         duration: '45 minutos',
@@ -84,10 +84,10 @@ const treatments = {
   pestanas: {
     items: [
       {
-        name: 'Korean Lash Lift',
-        tag: 'Lifting Coreano + Tinte',
+        name: 'Lifting koreano',
+        tag: 'Lifting + tinte',
         bookingId: 'lash-lift-korean',
-        duration: '60 minutos',
+        duration: '2 horas',
         description:
           'El tratamiento definitivo para elevar y curvar tus pestañas naturales desde la raíz. Añadimos un toque de color para intensificar la mirada, logrando un efecto de pestañas visiblemente más largas, oscuras y definidas. Además, incluye una sesión de hidratación profunda que nutre y protege el pelo, garantizando un resultado radiante, sano y de larga duración.',
       },

@@ -7,6 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 export default function StepHennaAssessment({
   clientInfo,
+  treatmentName,
   onComplete,
   onAssessmentReady,
   error,
@@ -16,6 +17,7 @@ export default function StepHennaAssessment({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const inputRef = useRef(null)
+  const label = treatmentName || 'tu tratamiento'
 
   const handleFile = (selected) => {
     if (!selected) return
@@ -67,9 +69,9 @@ export default function StepHennaAssessment({
   return (
     <div>
       <section className="mb-8 text-center">
-        <h2 className="font-headline text-2xl md:text-3xl text-on-surface">Valoración Brow Henna</h2>
+        <h2 className="font-headline text-2xl md:text-3xl text-on-surface">Valoración con foto</h2>
         <p className="mt-2 text-sm text-on-surface-variant max-w-sm mx-auto">
-          Sube una foto clara de tus cejas. Tu cita quedará pendiente hasta que revisemos tu aptitud.
+          Sube una foto clara de tus cejas o zona a tratar para {label}. Tu cita quedará pendiente hasta la revisión.
         </p>
       </section>
 
@@ -103,13 +105,13 @@ export default function StepHennaAssessment({
           className="w-full py-16 rounded-3xl border-2 border-dashed border-primary/30 bg-surface-container-lowest hover:bg-primary/5 transition-colors flex flex-col items-center gap-3"
         >
           <Icon name="add_a_photo" className="text-4xl text-primary/60" />
-          <span className="text-sm font-medium text-on-surface">Toca para subir foto de cejas</span>
+          <span className="text-sm font-medium text-on-surface">Toca para subir la foto</span>
           <span className="text-xs text-on-surface-variant">JPEG o PNG · máx. 5 MB</span>
         </motion.button>
       ) : (
         <div className="space-y-4">
           <div className="relative rounded-3xl overflow-hidden border border-outline-variant/15 aspect-[4/3] bg-surface-container-low">
-            <img src={preview} alt="Vista previa cejas" className="w-full h-full object-cover" />
+            <img src={preview} alt="Vista previa valoración" className="w-full h-full object-cover" />
             <button
               type="button"
               onClick={() => {

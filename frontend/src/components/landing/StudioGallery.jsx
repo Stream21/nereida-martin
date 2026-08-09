@@ -32,7 +32,7 @@ const galleryById = {
     type: 'photo',
     src: '/result-lash-lift.jpeg',
     position: 'center 40%',
-    label: 'Korean Lash Lift',
+    label: 'Lifting koreano',
   },
   'brows-female': {
     id: 'brows-female',

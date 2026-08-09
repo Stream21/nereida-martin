@@ -144,7 +144,7 @@ export default function StepSummary({
             <div>
               <p className="text-sm text-on-surface-variant leading-relaxed">
                 {pendingReview
-                  ? 'Tu cita quedará pendiente de valoración. Te avisaremos por email cuando confirmemos tu aptitud para Brow Henna.'
+                  ? 'Tu cita quedará pendiente de valoración por foto. Te avisaremos por email cuando confirmemos tu aptitud.'
                   : 'Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
               </p>
             </div>

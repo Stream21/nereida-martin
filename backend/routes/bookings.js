@@ -25,6 +25,11 @@ const {
 const { createOwnerActionToken, buildOwnerActionUrl } = require('../utils/ownerTokens');
 const requireClientAuth = require('../middleware/requireClientAuth');
 const { normalizePhone } = require('../utils/phone');
+const {
+  requiresPhotoAssessment,
+  REVIEW_TYPE_PHOTO,
+} = require('../utils/photoAssessment');
+const { STUDIO_BRAND } = require('../utils/studioBrand');
 
 const router = Router();
 
@@ -325,7 +330,10 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     }
 
     const treatment = treatmentResult.rows[0];
-    const isHenna = treatmentId === 'brow-henna';
+    const hadTreatmentBefore = await hasTreatmentBefore(authClientId, treatmentId);
+    const needsPhoto = requiresPhotoAssessment(treatmentId, {
+      treatmentIds: hadTreatmentBefore ? [treatmentId] : [],
+    });
     const blockDuration = blockDurationMinutes(treatment.duration_max || treatment.duration_min);
 
     const start = new Date(startTime);
@@ -396,7 +404,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     }
 
     const firstStudio = await isFirstStudioVisit(clientId);
-    const firstTreatment = !(await hasTreatmentBefore(clientId, treatmentId));
+    const firstTreatment = !hadTreatmentBefore;
     const visitContext = resolveVisitContext({ isFirstStudio: firstStudio, isFirstTreatment: firstTreatment });
 
     let intakeId = null;
@@ -480,8 +488,16 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
       }
     }
 
-    const bookingStatus = isHenna ? 'pending_review' : 'confirmed';
-    const reviewType = isHenna ? 'henna_photo' : null;
+    if (needsPhoto && !hennaAssessmentId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Este tratamiento requiere valoración con foto',
+        code: 'PHOTO_ASSESSMENT_REQUIRED',
+      });
+    }
+
+    const bookingStatus = needsPhoto ? 'pending_review' : 'confirmed';
+    const reviewType = needsPhoto ? REVIEW_TYPE_PHOTO : null;
 
     const bookingResult = await client.query(
       `INSERT INTO bookings (client_id, treatment_id, start_time, end_time, status, source, cancel_token, visit_context, review_type, intake_id)
@@ -501,7 +517,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     );
     const booking = bookingResult.rows[0];
 
-    if (isHenna && hennaAssessmentId) {
+    if (needsPhoto && hennaAssessmentId) {
       await client.query(
         `UPDATE henna_assessments SET booking_id = $1 WHERE id = $2 AND client_id = $3`,
         [booking.id, hennaAssessmentId, clientId]
@@ -525,11 +541,11 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
 
     const calendarFile = require('../services/calendarFile');
     const googleCalendarUrl = calendarFile.generateGoogleCalendarUrl({
-      title: `${treatment.name} – Studio Anuelblingding`,
+      title: `${treatment.name} – ${STUDIO_BRAND}`,
       startTime: start,
       endTime: end,
       description: `${treatment.name}: ${treatment.tag}`,
-      location: 'Studio Anuelblingding',
+      location: STUDIO_BRAND,
     });
 
     // Responder al instante: Google/email no deben bloquear la UX del cliente
@@ -543,11 +559,12 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
         endTime: end.toISOString(),
         status: booking.status,
         visitContext,
-        pendingReview: isHenna,
+        pendingReview: needsPhoto,
       },
       client: { name: clientName, email: clientEmail },
       cancelUrl,
       cancellationDeadline: formatDeadlineSpanish(start),
+      cancellationPolicy: POLICY_TEXT,
       icsUrl: `${frontendUrl}/api/bookings/${booking.id}/calendar`,
       googleCalendarUrl,
       emailSent: false,
@@ -556,7 +573,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     setImmediate(async () => {
       let hennaPhotoUrl = null;
       try {
-        if (isHenna && hennaAssessmentId) {
+        if (needsPhoto && hennaAssessmentId) {
           const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
           if (photoRes.rows[0]) {
             hennaPhotoUrl = `${backendUrl}/uploads/${photoRes.rows[0].photo_path}`;
@@ -646,7 +663,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
             });
           }
 
-          if (isHenna && hennaAssessmentId) {
+          if (needsPhoto && hennaAssessmentId) {
             const approveToken = await createOwnerActionToken({
               action: 'henna_approve',
               entityType: 'henna_assessment',
@@ -663,6 +680,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
               approveUrl: buildOwnerActionUrl(approveToken, 'approve'),
               rejectUrl: buildOwnerActionUrl(rejectToken, 'reject'),
               photoPath: photoRes.rows[0]?.photo_path,
+              treatmentName: treatment.name,
             });
             await emailService.sendClientHennaPending({
               to: clientEmail,
@@ -728,11 +746,11 @@ router.get('/:id/calendar', async (req, res) => {
     const row = result.rows[0];
     const calendarFile = require('../services/calendarFile');
     const icsContent = calendarFile.generateICS({
-      title: `${row.name || 'Cita'} – Studio Anuelblingding`,
+      title: `${row.name || 'Cita'} – ${STUDIO_BRAND}`,
       startTime: new Date(row.start_time),
       endTime: new Date(row.end_time),
       description: `${row.name}: ${row.tag}`,
-      location: 'Studio Anuelblingding',
+      location: STUDIO_BRAND,
     });
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');

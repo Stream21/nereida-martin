@@ -43,7 +43,7 @@ function parseArgs(argv) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
 
-  console.log('Studio Anuelblingding — Calendar init sync');
+  console.log('Nereida Martín Studio — Calendar init sync');
   console.log(`Mode: ${options.dryRun ? 'DRY RUN (no writes)' : 'LIVE'}`);
 
   await studioSettings.ensureBookingStartDateFromEnv();
