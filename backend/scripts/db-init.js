@@ -9,6 +9,17 @@ const { Pool } = require('pg');
 
 const DB_DIR = path.join(__dirname, '..', 'db');
 
+/** Same SSL rules as db/pool.js — Render External URL requires TLS. */
+function shouldUseSsl(url) {
+  if (process.env.DATABASE_SSL === 'false') return false;
+  if (process.env.DATABASE_SSL === 'true') return true;
+  if (process.env.PGSSLMODE === 'disable') return false;
+  if (process.env.RENDER === 'true') return true;
+  if (/\.render\.com/i.test(url)) return true;
+  if (/sslmode=require/i.test(url)) return true;
+  return false;
+}
+
 async function runFile(pool, filename) {
   const filePath = path.join(DB_DIR, filename);
   if (!fs.existsSync(filePath)) return;
@@ -31,12 +42,16 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const connectionString = process.env.DATABASE_URL;
+  const pool = new Pool({
+    connectionString,
+    ...(shouldUseSsl(connectionString) ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
 
   try {
     await pool.query('SELECT 1');
     console.log('Conectado a PostgreSQL.');
-    console.log(`URL: ${process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@')}\n`);
+    console.log(`URL: ${connectionString.replace(/:[^:@]+@/, ':****@')}\n`);
 
     const hasSchema = await tableExists(pool, 'treatments');
 

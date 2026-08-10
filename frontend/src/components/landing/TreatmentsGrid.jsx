@@ -74,7 +74,7 @@ const treatments = {
       {
         name: 'Micropigmentación Soft Pixel Brow',
         bookingId: 'micropigmentacion-soft-pixel',
-        duration: '2 horas y media',
+        duration: '3 horas',
         description:
           'Diseño de cejas semipermanente con una técnica avanzada de efecto polvo o pixelado. Logramos un sombreado suave, difuminado y elegante que aporta una definición perfecta y natural durante meses, olvidándote de maquillarlas a diario.',
         isMicro: true,

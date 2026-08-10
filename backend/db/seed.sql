@@ -7,7 +7,7 @@ INSERT INTO treatments (id, category, name, tag, duration_min, duration_max, pri
   ('brow-lami-define', 'cejas', 'Brow Lami Define', 'Laminado + perfilado + tinte', 75, NULL, 45, true),
   ('brow-henna', 'cejas', 'Brow Henna', 'Henna + perfilado', 60, NULL, 35, true),
   ('brow-restored', 'cejas', 'Brow Restored', 'Dermapen en cejas', 45, NULL, 30, true),
-  ('micropigmentacion-soft-pixel', 'cejas', 'Soft Pixel Brow', 'Micropigmentación efecto polvo', 150, NULL, 280, true),
+  ('micropigmentacion-soft-pixel', 'cejas', 'Soft Pixel Brow', 'Micropigmentación efecto polvo', 180, NULL, 280, true),
   ('nanoblading', 'cejas', 'Nanoblading', 'Efecto pelo a pelo', 120, 150, NULL, false),
   ('lash-lift-korean', 'pestanas', 'Lifting koreano', 'Lifting + tinte', 120, NULL, 60, true),
   ('skin-reset', 'rostro', 'Skin Reset', 'Limpieza facial coreana', 75, NULL, 60, true),

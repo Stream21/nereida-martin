@@ -3,11 +3,26 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import Icon from '../components/ui/Icon'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const WHATSAPP_URL = 'https://wa.me/34641613614'
 const STUDIO_BRAND = 'Nereida Martín Studio'
+
+function CheckCircleIcon({ className = 'w-8 h-8' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+    </svg>
+  )
+}
+
+function ErrorOutlineIcon({ className = 'w-10 h-10' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M11 15h2v2h-2v-2zm0-8h2v6h-2V7zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" />
+    </svg>
+  )
+}
 
 export default function CancelBooking() {
   const { token } = useParams()
@@ -87,8 +102,8 @@ export default function CancelBooking() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/10"
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-              <Icon name="check_circle" className="text-3xl text-primary" />
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <CheckCircleIcon className="w-9 h-9" />
             </div>
             <h1 className="font-headline text-2xl text-on-surface mb-2">Cita cancelada</h1>
             <p className="text-sm text-on-surface-variant mb-6">
@@ -103,7 +118,9 @@ export default function CancelBooking() {
           </motion.div>
         ) : errorCode === 'INVALID_TOKEN' || (!booking && error) ? (
           <div className="text-center bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/10">
-            <Icon name="error_outline" className="text-4xl text-outline-variant mb-4" />
+            <div className="flex justify-center text-outline-variant mb-4">
+              <ErrorOutlineIcon className="w-10 h-10" />
+            </div>
             <h1 className="font-headline text-xl text-on-surface mb-2">Enlace no válido</h1>
             <p className="text-sm text-on-surface-variant">{error}</p>
           </div>

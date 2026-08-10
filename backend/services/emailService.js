@@ -49,6 +49,25 @@ const E = {
   accentBorder: 'rgba(183,139,125,0.22)',
 };
 
+/** Full-width email CTA — large tap target for mobile clients (Gmail/Apple Mail). */
+function emailButton({ href, label, variant = 'primary' }) {
+  const isPrimary = variant === 'primary';
+  const bg = isPrimary ? E.accent : E.white;
+  const color = isPrimary ? E.white : E.accent;
+  const border = isPrimary ? E.accent : E.accent;
+  return `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 12px;">
+      <tr>
+        <td align="center" bgcolor="${bg}" style="background:${bg};border:2px solid ${border};border-radius:14px;">
+          <a href="${href}" ${isPrimary ? 'target="_blank"' : ''}
+             style="display:block;width:100%;box-sizing:border-box;padding:18px 20px;font-size:15px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${color};text-decoration:none;text-align:center;line-height:1.35;border-radius:14px;-webkit-text-size-adjust:100%;">
+            ${label}
+          </a>
+        </td>
+      </tr>
+    </table>`;
+}
+
 function buildConfirmationHTML({
   clientName,
   treatment,
@@ -97,21 +116,17 @@ function buildConfirmationHTML({
       </div>
     </div>
 
-    <div style="text-align:center;margin-bottom:16px;">
-      <a href="${googleUrl}" target="_blank" style="display:inline-block;background:${E.accent};color:${E.white};text-decoration:none;padding:14px 32px;border-radius:12px;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">
-        Agregar a Google Calendar
-      </a>
+    <div style="margin:0 0 8px;">
+      ${emailButton({ href: googleUrl, label: 'Agregar a Google Calendar', variant: 'primary' })}
     </div>
 
-    <div style="text-align:center;margin-bottom:16px;">
-      <a href="${icsUrl}" style="color:${E.accent};font-size:13px;text-decoration:underline;">Descargar recordatorio (.ics)</a>
+    <div style="text-align:center;margin:0 0 20px;padding:8px 0;">
+      <a href="${icsUrl}" style="display:inline-block;padding:12px 16px;color:${E.accent};font-size:14px;line-height:1.4;text-decoration:underline;-webkit-text-size-adjust:100%;">Descargar recordatorio (.ics)</a>
     </div>
 
     ${cancelUrl ? `
-    <div style="text-align:center;margin-bottom:20px;">
-      <a href="${cancelUrl}" style="display:inline-block;border:1px solid ${E.accent};color:${E.accent};text-decoration:none;padding:12px 28px;border-radius:12px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">
-        Cancelar cita
-      </a>
+    <div style="margin:0 0 20px;">
+      ${emailButton({ href: cancelUrl, label: 'Cancelar cita', variant: 'secondary' })}
     </div>` : ''}
 
     <div style="background:${E.infoBg};border-radius:12px;padding:16px;border:1px solid ${E.accentBorder};">

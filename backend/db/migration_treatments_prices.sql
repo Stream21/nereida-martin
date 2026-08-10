@@ -11,7 +11,7 @@ UPDATE treatments SET tag = 'Laminado + perfilado',         duration_min = 60,  
 UPDATE treatments SET tag = 'Laminado + perfilado + tinte', duration_min = 75,  duration_max = NULL, price = 45  WHERE id = 'brow-lami-define';
 UPDATE treatments SET tag = 'Henna + perfilado',            duration_min = 60,  duration_max = NULL, price = 35  WHERE id = 'brow-henna';
 UPDATE treatments SET tag = 'Dermapen en cejas',            duration_min = 45,  duration_max = NULL, price = 30  WHERE id = 'brow-restored';
-UPDATE treatments SET tag = 'Micropigmentación efecto polvo', duration_min = 150, duration_max = NULL, price = 280 WHERE id = 'micropigmentacion-soft-pixel';
+UPDATE treatments SET tag = 'Micropigmentación efecto polvo', duration_min = 180, duration_max = NULL, price = 280 WHERE id = 'micropigmentacion-soft-pixel';
 
 UPDATE treatments SET name = 'Lifting koreano', tag = 'Lifting + tinte', duration_min = 120, duration_max = NULL, price = 60 WHERE id = 'lash-lift-korean';
 
