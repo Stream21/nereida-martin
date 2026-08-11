@@ -17,10 +17,10 @@ const floatingShapes = [
 ]
 
 const services = [
-  'Cejas',
-  'Pestañas',
-  'Faciales',
-  'Micropigmentación',
+  { label: 'Cejas', cat: 'cejas' },
+  { label: 'Pestañas', cat: 'pestanas' },
+  { label: 'Faciales', cat: 'rostro' },
+  { label: 'Micropigmentación', cat: 'cejas', focus: 'micro' },
 ]
 
 const stagger = {
@@ -126,27 +126,46 @@ export default function HeroSection() {
             Tu mirada, su mejor <span className="italic text-primary/70">versión</span>
           </motion.p>
 
-          {/* Service pills */}
+          {/* Service pills → anclas a #treatments */}
           <motion.div
             variants={fadeUp}
             custom={0.6}
             className="flex flex-wrap justify-center gap-2.5 sm:gap-3 mb-10 sm:mb-12"
           >
-            {services.map((service, i) => (
-              <motion.span
-                key={service}
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  duration: 0.5,
-                  delay: 1.0 + i * 0.1,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-                className="px-5 py-2.5 rounded-full bg-surface-container-lowest/80 border border-outline-variant/40 font-label text-xs sm:text-sm tracking-wider uppercase text-on-surface-variant backdrop-blur-sm"
-              >
-                {service}
-              </motion.span>
-            ))}
+            {services.map((service, i) => {
+              const href =
+                service.focus === 'micro'
+                  ? `/?cat=${service.cat}&focus=micro#treatments`
+                  : `/?cat=${service.cat}#treatments`
+              return (
+                <motion.a
+                  key={service.label}
+                  href={href}
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={prefersReducedMotion ? {} : { scale: 1.04 }}
+                  whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+                  transition={{
+                    duration: 0.5,
+                    delay: 1.0 + i * 0.1,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate(href)
+                    requestAnimationFrame(() => {
+                      document.getElementById('treatments')?.scrollIntoView({
+                        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                        block: 'start',
+                      })
+                    })
+                  }}
+                  className="px-5 py-2.5 rounded-full bg-surface-container-lowest/80 border border-outline-variant/40 font-label text-xs sm:text-sm tracking-wider uppercase text-on-surface-variant backdrop-blur-sm hover:border-primary/40 hover:text-primary transition-colors"
+                >
+                  {service.label}
+                </motion.a>
+              )
+            })}
           </motion.div>
 
           {/* CTAs */}

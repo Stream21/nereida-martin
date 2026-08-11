@@ -16,6 +16,7 @@ const ownerAuthRouter = require('./routes/ownerAuth');
 const ownerDashboardRouter = require('./routes/ownerDashboard');
 const clientAuthRouter = require('./routes/clientAuth');
 const webhooksRouter = require('./routes/webhooks');
+const requestsRouter = require('./routes/requests');
 const studioSettings = require('./services/studioSettings');
 const calendarSync = require('./services/calendarSync');
 
@@ -36,6 +37,7 @@ app.use('/api/auth', clientAuthRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/intake', intakeRouter);
 app.use('/api/assessments', assessmentsRouter);
+app.use('/api/requests', requestsRouter);
 app.use('/api/owner', ownerRouter);
 app.use('/api/owner', ownerAuthRouter);
 app.use('/api/owner', ownerDashboardRouter);

@@ -69,6 +69,9 @@ async function main() {
     await runFile(pool, 'migration_intake_signature.sql');
     await runFile(pool, 'migration_client_auth.sql');
     await runFile(pool, 'migration_treatments_feedback.sql');
+    await runFile(pool, 'migration_micro_request_only.sql');
+    await runFile(pool, 'migration_client_notes.sql');
+    await runFile(pool, 'migration_rebooking_followup.sql');
     await runFile(pool, 'seed.sql');
 
     const counts = await pool.query(`

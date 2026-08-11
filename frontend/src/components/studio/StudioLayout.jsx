@@ -3,15 +3,17 @@ import StudioLogo from './StudioLogo'
 
 const TABS = [
   { id: 'overview', label: 'Resumen', icon: 'dashboard' },
+  { id: 'agenda', label: 'Agenda', icon: 'calendar_month' },
   { id: 'clients', label: 'Clientes', icon: 'group' },
   { id: 'services', label: 'Servicios', icon: 'spa' },
-  { id: 'goals', label: 'Objetivos', icon: 'flag' },
 ]
 
 export default function StudioLayout({ activeTab, onTabChange, onLogout, children }) {
+  const agendaFlush = activeTab === 'agenda'
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-20 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40">
+      <header className="sticky top-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40">
         {/* Desktop: logo + tabs + salir en una sola fila */}
         <div className="hidden sm:flex max-w-7xl mx-auto px-4 h-14 items-center gap-4">
           <StudioLogo variant="header" />
@@ -22,7 +24,7 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
                 key={tab.id}
                 type="button"
                 onClick={() => onTabChange(tab.id)}
-                className={`rounded-2xl px-4 py-2 text-sm flex items-center gap-1.5 transition-colors ${
+                className={`cursor-pointer rounded-2xl px-4 py-2 text-sm flex items-center gap-1.5 transition-colors ${
                   activeTab === tab.id
                     ? 'bg-primary text-on-primary'
                     : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
@@ -37,7 +39,7 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
           <button
             type="button"
             onClick={onLogout}
-            className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1 shrink-0"
+            className="cursor-pointer text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1 shrink-0 min-h-11"
           >
             <Icon name="logout" className="text-base" />
             Salir
@@ -45,23 +47,24 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
         </div>
 
         {/* Mobile: logo + salir, tabs debajo */}
-        <div className="sm:hidden px-4 pt-2.5 pb-1 flex items-center justify-between">
+        <div className="sm:hidden px-3 pt-2 pb-1 flex items-center justify-between">
           <StudioLogo variant="header" />
           <button
             type="button"
             onClick={onLogout}
-            className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1"
+            className="cursor-pointer min-h-11 min-w-11 flex items-center justify-center text-on-surface-variant"
+            aria-label="Salir"
           >
-            <Icon name="logout" className="text-base" />
+            <Icon name="logout" className="text-xl" />
           </button>
         </div>
-        <nav className="sm:hidden px-2 pb-2 flex gap-1 overflow-x-auto scrollbar-none">
+        <nav className="sm:hidden px-1.5 pb-2 flex gap-1 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => onTabChange(tab.id)}
-              className={`shrink-0 rounded-2xl px-3 py-2 text-xs flex items-center gap-1 transition-colors ${
+              className={`cursor-pointer shrink-0 rounded-2xl px-3 py-2.5 min-h-11 text-xs flex items-center gap-1 transition-colors ${
                 activeTab === tab.id
                   ? 'bg-primary text-on-primary'
                   : 'bg-surface-container-low text-on-surface-variant'
@@ -74,7 +77,15 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
         </nav>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-4 sm:py-5">{children}</main>
+      <main
+        className={
+          agendaFlush
+            ? 'max-w-7xl mx-auto w-full px-0 pt-2 pb-3 sm:px-4 sm:py-5'
+            : 'max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-5'
+        }
+      >
+        {children}
+      </main>
     </div>
   )
 }

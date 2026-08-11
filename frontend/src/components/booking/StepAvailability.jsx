@@ -361,7 +361,9 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
               <p className="text-sm text-on-surface-variant">
                 No hay horarios disponibles para este día.
               </p>
-              <p className="text-xs text-outline mt-1">Prueba con otra fecha.</p>
+              <p className="text-xs text-outline mt-1">
+                Las reservas requieren al menos 12 horas de antelación. Prueba con otra fecha.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

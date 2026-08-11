@@ -50,6 +50,64 @@ function buildDateFilters({ year, month, from, to }) {
   return { conditions, params, nextIdx: idx };
 }
 
+/** Extra filters for services list / export (treatment, client, price, source). */
+function buildServiceFilters({
+  year,
+  month,
+  from,
+  to,
+  treatmentId,
+  client,
+  priceMin,
+  priceMax,
+  source,
+}) {
+  const { conditions, params, nextIdx } = buildDateFilters({ year, month, from, to });
+  let idx = nextIdx;
+
+  if (treatmentId) {
+    conditions.push(`b.treatment_id = $${idx}`);
+    params.push(treatmentId);
+    idx += 1;
+  }
+
+  const clientQ = typeof client === 'string' ? client.trim() : '';
+  if (clientQ) {
+    conditions.push(
+      `(c.name ILIKE $${idx} OR COALESCE(c.email, '') ILIKE $${idx} OR COALESCE(c.phone, '') ILIKE $${idx})`
+    );
+    params.push(`%${clientQ}%`);
+    idx += 1;
+  }
+
+  if (priceMin != null && priceMin !== '' && !Number.isNaN(Number(priceMin))) {
+    conditions.push(`t.price >= $${idx}`);
+    params.push(Number(priceMin));
+    idx += 1;
+  }
+  if (priceMax != null && priceMax !== '' && !Number.isNaN(Number(priceMax))) {
+    conditions.push(`t.price <= $${idx}`);
+    params.push(Number(priceMax));
+    idx += 1;
+  }
+
+  if (source === 'google') {
+    conditions.push(`b.source = 'google'`);
+  } else if (source === 'owner') {
+    conditions.push(`b.source = 'owner'`);
+  } else if (source === 'web') {
+    conditions.push(`(b.source = 'web' OR b.source IS NULL OR b.source = '')`);
+  }
+
+  return { conditions, params, nextIdx: idx };
+}
+
+function mapServiceSource(source) {
+  if (source === 'google') return 'google';
+  if (source === 'owner') return 'owner';
+  return 'web';
+}
+
 async function getOverview() {
   const now = new Date();
   const currentYear = Number(
@@ -253,7 +311,12 @@ async function getBySource() {
 
   return result.rows.map((row) => ({
     source: row.source,
-    label: row.source === 'google' ? 'Google Calendar' : 'Reserva web',
+    label:
+      row.source === 'google'
+        ? 'Google Calendar'
+        : row.source === 'owner'
+          ? 'Agenda estudio'
+          : 'Reserva web',
     bookingCount: row.booking_count,
   }));
 }
@@ -347,8 +410,183 @@ async function listClients({ search = '', page = 1, limit = 20 }) {
   };
 }
 
-async function listServices({ year, month, from, to, page = 1, limit = 50 }) {
-  const { conditions, params, nextIdx } = buildDateFilters({ year, month, from, to });
+async function getClientDetail(clientId) {
+  const clientRes = await query(
+    `SELECT id, name, email, phone, phone_normalized, notes, account_status,
+            created_at, registered_at, first_booking_at, last_booking_at, declared_profile
+     FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  if (clientRes.rows.length === 0) return null;
+
+  const row = clientRes.rows[0];
+  const historyRes = await query(
+    `SELECT b.id, b.start_time, b.end_time, b.status, b.source,
+            t.name AS treatment_name, t.tag AS treatment_tag, t.price
+     FROM bookings b
+     LEFT JOIN treatments t ON b.treatment_id = t.id
+     WHERE b.client_id = $1
+     ORDER BY b.start_time DESC
+     LIMIT 50`,
+    [clientId]
+  );
+
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    phoneNormalized: row.phone_normalized,
+    notes: row.notes || '',
+    accountStatus: row.account_status,
+    createdAt: row.created_at,
+    registeredAt: row.registered_at,
+    firstBookingAt: row.first_booking_at,
+    lastBookingAt: row.last_booking_at,
+    declaredProfile: row.declared_profile,
+    history: historyRes.rows.map((b) => ({
+      id: b.id,
+      startTime: b.start_time,
+      endTime: b.end_time,
+      status: b.status,
+      source: b.source,
+      treatmentName: b.treatment_name,
+      treatmentTag: b.treatment_tag,
+      price: b.price != null ? Number(b.price) : null,
+    })),
+  };
+}
+
+async function updateClient(clientId, { name, phone, email, notes }) {
+  const { normalizePhone } = require('../utils/phone');
+  const existing = await query('SELECT id FROM clients WHERE id = $1', [clientId]);
+  if (existing.rows.length === 0) {
+    return { error: 'Cliente no encontrado', status: 404 };
+  }
+
+  const nameTrim = String(name || '').trim();
+  if (nameTrim.length < 2) {
+    return { error: 'El nombre es obligatorio', status: 400 };
+  }
+
+  const emailTrim = email != null && String(email).trim() ? String(email).trim().toLowerCase() : null;
+  if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+    return { error: 'Email no válido', status: 400 };
+  }
+
+  const phoneTrim = phone != null ? String(phone).trim() : '';
+  const phoneNorm = phoneTrim ? normalizePhone(phoneTrim) : null;
+  if (phoneTrim && !phoneNorm) {
+    return { error: 'Teléfono no válido', status: 400 };
+  }
+
+  const notesVal = notes != null ? String(notes) : null;
+
+  try {
+    const result = await query(
+      `UPDATE clients
+       SET name = $1,
+           email = $2,
+           phone = $3,
+           phone_normalized = $4,
+           notes = $5
+       WHERE id = $6
+       RETURNING id, name, email, phone, notes, account_status`,
+      [nameTrim, emailTrim, phoneTrim || null, phoneNorm, notesVal, clientId]
+    );
+    const row = result.rows[0];
+    return {
+      client: {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        notes: row.notes || '',
+        accountStatus: row.account_status,
+      },
+    };
+  } catch (err) {
+    if (err.code === '23505') {
+      return { error: 'Email o teléfono ya registrados en otro cliente', status: 409, code: 'DUPLICATE' };
+    }
+    throw err;
+  }
+}
+
+async function listCalendarEvents({ from, to }) {
+  const result = await query(
+    `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
+            c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
+            t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min
+     FROM bookings b
+     JOIN clients c ON b.client_id = c.id
+     LEFT JOIN treatments t ON b.treatment_id = t.id
+     WHERE b.status IN ('confirmed', 'pending_review')
+       AND b.start_time < $2
+       AND b.end_time > $1
+     ORDER BY b.start_time ASC`,
+    [from, to]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    status: row.status,
+    source: row.source,
+    treatmentId: row.treatment_id,
+    treatmentName: row.treatment_name || 'Cita',
+    treatmentTag: row.treatment_tag || '',
+    durationMin: row.duration_min,
+    clientId: row.client_id,
+    clientName: row.client_name,
+    clientPhone: row.client_phone,
+  }));
+}
+
+async function listOwnerTreatments() {
+  const result = await query(
+    `SELECT id, category, name, tag, duration_min, duration_max, price, active
+     FROM treatments
+     WHERE active = true OR id = 'micropigmentacion-soft-pixel'
+     ORDER BY active DESC, category, name`
+  );
+  return result.rows.map((t) => ({
+    id: t.id,
+    category: t.category,
+    name: t.name,
+    tag: t.tag,
+    durationMin: t.duration_min,
+    durationMax: t.duration_max,
+    price: t.price != null ? Number(t.price) : null,
+    active: t.active,
+  }));
+}
+
+async function listServices({
+  year,
+  month,
+  from,
+  to,
+  treatmentId,
+  client,
+  priceMin,
+  priceMax,
+  source,
+  page = 1,
+  limit = 50,
+}) {
+  const { conditions, params, nextIdx } = buildServiceFilters({
+    year,
+    month,
+    from,
+    to,
+    treatmentId,
+    client,
+    priceMin,
+    priceMax,
+    source,
+  });
   const whereParts = [CONFIRMED_FILTER, ...conditions];
   const whereClause = `WHERE ${whereParts.join(' AND ')}`;
   const offset = (page - 1) * limit;
@@ -356,6 +594,8 @@ async function listServices({ year, month, from, to, page = 1, limit = 50 }) {
   const countRes = await query(
     `SELECT COUNT(*)::int AS total
      FROM bookings b
+     JOIN clients c ON b.client_id = c.id
+     LEFT JOIN treatments t ON b.treatment_id = t.id
      ${whereClause}`,
     params
   );
@@ -391,7 +631,7 @@ async function listServices({ year, month, from, to, page = 1, limit = 50 }) {
       startTime: row.start_time,
       endTime: row.end_time,
       status: row.status,
-      source: row.source === 'google' ? 'google' : 'web',
+      source: mapServiceSource(row.source),
       clientName: row.client_name,
       clientEmail: row.client_email,
       clientPhone: row.client_phone,
@@ -402,8 +642,28 @@ async function listServices({ year, month, from, to, page = 1, limit = 50 }) {
   };
 }
 
-async function listServicesForExport({ year, month, from, to }) {
-  const { conditions, params } = buildDateFilters({ year, month, from, to });
+async function listServicesForExport({
+  year,
+  month,
+  from,
+  to,
+  treatmentId,
+  client,
+  priceMin,
+  priceMax,
+  source,
+}) {
+  const { conditions, params } = buildServiceFilters({
+    year,
+    month,
+    from,
+    to,
+    treatmentId,
+    client,
+    priceMin,
+    priceMax,
+    source,
+  });
   const whereParts = [CONFIRMED_FILTER, ...conditions];
   const whereClause = `WHERE ${whereParts.join(' AND ')}`;
 
@@ -473,6 +733,10 @@ module.exports = {
   getByTreatment,
   getBySource,
   listClients,
+  getClientDetail,
+  updateClient,
+  listCalendarEvents,
+  listOwnerTreatments,
   listServices,
   listServicesForExport,
   getGoals,

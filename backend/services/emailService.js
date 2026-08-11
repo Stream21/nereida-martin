@@ -323,6 +323,64 @@ async function sendReminder({ to, clientName, treatment, startTime, endTime }) {
   });
 }
 
+function buildRebookingHTML({ clientName, treatment, sameTreatmentUrl, bookUrl }) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+    <div style="text-align:center;margin-bottom:32px;">
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
+      <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">¿Repetimos?</p>
+    </div>
+    <div style="background:${E.white};border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 2px 12px ${E.shadow};">
+      <p style="color:${E.text};font-size:16px;margin:0 0 16px;">Hola <strong>${clientName}</strong>,</p>
+      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 20px;">
+        Esperamos que hayas disfrutado tu <strong>${treatment.name}</strong>. ¿Te gustaría reservar el mismo tratamiento u otro?
+      </p>
+    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 12px;">
+      <tr>
+        <td align="center" bgcolor="${E.accent}" style="background:${E.accent};border-radius:14px;">
+          <a href="${sameTreatmentUrl}" style="display:block;padding:18px 20px;font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${E.white};text-decoration:none;text-align:center;">
+            Reservar ${treatment.name}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 20px;">
+      <tr>
+        <td align="center" bgcolor="${E.white}" style="background:${E.white};border:2px solid ${E.accent};border-radius:14px;">
+          <a href="${bookUrl}" style="display:block;padding:18px 20px;font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${E.accent};text-decoration:none;text-align:center;">
+            Ver otros tratamientos
+          </a>
+        </td>
+      </tr>
+    </table>
+    <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid ${E.border};">
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function sendRebookingFollowup({
+  to,
+  clientName,
+  treatment,
+  sameTreatmentUrl,
+  bookUrl,
+}) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `¿Quieres volver a reservar? – ${treatment.name} | Nereida Martín Studio`,
+    html: buildRebookingHTML({ clientName, treatment, sameTreatmentUrl, bookUrl }),
+  });
+}
+
 function getOwnerEmail() {
   return process.env.OWNER_EMAIL || process.env.GMAIL_USER;
 }
@@ -346,7 +404,7 @@ function ownerAlertHTML({ title, body, actions }) {
   </div></body></html>`;
 }
 
-async function sendOwnerAlert({ subject, title, body, actions }) {
+async function sendOwnerAlert({ subject, title, body, actions, attachments }) {
   const to = getOwnerEmail();
   if (!to) return;
   const transport = getTransporter();
@@ -355,6 +413,7 @@ async function sendOwnerAlert({ subject, title, body, actions }) {
     to,
     subject,
     html: ownerAlertHTML({ title, body, actions }),
+    attachments: attachments || undefined,
   });
 }
 
@@ -462,6 +521,7 @@ module.exports = {
   sendCancellationConfirmation,
   sendGoogleChangeNotice,
   sendReminder,
+  sendRebookingFollowup,
   sendOwnerFirstVisitAlert,
   sendOwnerTreatmentFirstAlert,
   sendOwnerFlaggedAlert,

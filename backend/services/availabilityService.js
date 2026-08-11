@@ -22,6 +22,7 @@ const {
   addDaysToDateStr,
 } = require('../utils/studioTimezone');
 const studioSettings = require('./studioSettings');
+const { isBeforeMinLead } = require('../utils/bookingLeadTime');
 
 const MAX_NEXT_SLOT_DAYS = 90;
 
@@ -79,14 +80,14 @@ function getSlotsForDate(dateStr, blockDurationMinutes, busyRanges, now = Date.n
 
     while (cursor + blockMs <= end.getTime()) {
       const slotEnd = cursor + blockMs;
-      const isPast = cursor <= now;
+      const tooSoon = isBeforeMinLead(cursor, now);
       const hasConflict = hasOverlapWithRanges(
         new Date(cursor),
         new Date(slotEnd),
         busyRanges
       );
 
-      if (!isPast && !hasConflict) {
+      if (!tooSoon && !hasConflict) {
         slots.push({
           time: formatStudioTime(new Date(cursor)),
           available: true,
@@ -101,9 +102,12 @@ function getSlotsForDate(dateStr, blockDurationMinutes, busyRanges, now = Date.n
   return slots;
 }
 
-async function getAvailabilityForDate(dateStr, treatmentId) {
+async function getAvailabilityForDate(dateStr, treatmentId, { allowInactiveIds = [] } = {}) {
+  const allowInactive = allowInactiveIds.includes(treatmentId);
   const treatmentResult = await query(
-    'SELECT duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
+    allowInactive
+      ? 'SELECT duration_min, duration_max FROM treatments WHERE id = $1'
+      : 'SELECT duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
     [treatmentId]
   );
 
@@ -153,7 +157,7 @@ async function hasSlotAvailable(dateStr, timeStr, blockMinutes, excludeBookingId
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
   if (dateStr < bookingStartDate) return false;
-  if (start.getTime() <= Date.now()) return false;
+  if (isBeforeMinLead(start.getTime())) return false;
 
   const busyRanges = await getBusyRangesForDate(dateStr, excludeBookingId);
   return !hasOverlapWithRanges(start, end, busyRanges);

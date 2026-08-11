@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import useScrollReveal from '../../hooks/useScrollReveal'
 import Icon from '../ui/Icon'
 
@@ -78,6 +78,7 @@ const treatments = {
         description:
           'Diseño de cejas semipermanente con una técnica avanzada de efecto polvo o pixelado. Logramos un sombreado suave, difuminado y elegante que aporta una definición perfecta y natural durante meses, olvidándote de maquillarlas a diario.',
         isMicro: true,
+        requestOnly: true,
       },
     ],
   },
@@ -143,8 +144,15 @@ const treatments = {
   },
 }
 
-function TreatmentCard({ treatment, onBook }) {
+function TreatmentCard({ treatment, onBook, onRequest }) {
   const [open, setOpen] = useState(false)
+  const isRequestOnly = treatment.requestOnly
+  const ctaLabel = isRequestOnly ? 'Solicitar' : 'Reservar'
+  const ctaFullLabel = isRequestOnly ? 'Solicitar cita' : 'Reservar cita'
+  const handleCta = () => {
+    if (isRequestOnly) onRequest?.()
+    else onBook(treatment.bookingId)
+  }
 
   return (
     <motion.div
@@ -178,18 +186,18 @@ function TreatmentCard({ treatment, onBook }) {
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onBook(treatment.bookingId)
+                  handleCta()
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     e.stopPropagation()
-                    onBook(treatment.bookingId)
+                    handleCta()
                   }
                 }}
                 className="inline-flex items-center gap-1 text-xs font-label font-bold tracking-wide uppercase text-primary hover:text-primary/80 transition-colors"
               >
-                Reservar
+                {ctaLabel}
                 <Icon name="arrow_forward" className="text-sm" />
               </motion.span>
             )}
@@ -220,11 +228,11 @@ function TreatmentCard({ treatment, onBook }) {
               {treatment.bookingId && (
                 <motion.button
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => onBook(treatment.bookingId)}
+                  onClick={handleCta}
                   className="w-full flex items-center justify-center gap-2 coral-gradient text-white rounded-2xl py-3.5 font-label text-xs tracking-widest uppercase font-bold editorial-shadow"
                 >
-                  <span>Reservar cita</span>
-                  <Icon name="calendar_month" className="text-base" />
+                  <span>{ctaFullLabel}</span>
+                  <Icon name={isRequestOnly ? 'mail' : 'calendar_month'} className="text-base" />
                 </motion.button>
               )}
             </div>
@@ -236,10 +244,15 @@ function TreatmentCard({ treatment, onBook }) {
 }
 
 export default function TreatmentsGrid() {
-  const [activeTab, setActiveTab] = useState('cejas')
+  const [searchParams] = useSearchParams()
+  const initialCat = searchParams.get('cat')
+  const [activeTab, setActiveTab] = useState(
+    initialCat && treatments[initialCat] ? initialCat : 'cejas'
+  )
   const { ref, isInView } = useScrollReveal()
   const navigate = useNavigate()
   const tabsRef = useRef(null)
+  const microNoticeRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const activeData = treatments[activeTab]
@@ -264,7 +277,7 @@ export default function TreatmentsGrid() {
     }
   }, [checkScroll])
 
-  const scrollToTab = (catId) => {
+  const scrollToTab = useCallback((catId) => {
     setActiveTab(catId)
     const container = tabsRef.current
     const activeBtn = container?.querySelector(`[data-cat="${catId}"]`)
@@ -272,14 +285,33 @@ export default function TreatmentsGrid() {
       const offset = activeBtn.offsetLeft - container.offsetWidth / 2 + activeBtn.offsetWidth / 2
       container.scrollTo({ left: offset, behavior: 'smooth' })
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const cat = searchParams.get('cat')
+    const focus = searchParams.get('focus')
+    if (cat && treatments[cat]) {
+      scrollToTab(cat)
+    }
+    if (focus === 'micro') {
+      const t = window.setTimeout(() => {
+        microNoticeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 350)
+      return () => window.clearTimeout(t)
+    }
+    return undefined
+  }, [searchParams, scrollToTab])
 
   const handleBookTreatment = useCallback((bookingId) => {
     navigate(`/reservar?treatment=${bookingId}`)
   }, [navigate])
 
+  const handleRequestMicro = useCallback(() => {
+    navigate('/solicitar-micro')
+  }, [navigate])
+
   return (
-    <section id="treatments" className="py-24 px-6">
+    <section id="treatments" className="py-24 px-6 scroll-mt-24">
       <div className="max-w-5xl mx-auto">
         <motion.div
           ref={ref}
@@ -347,27 +379,31 @@ export default function TreatmentsGrid() {
                   key={treatment.bookingId || `${treatment.name}-${treatment.tag || ''}`}
                   treatment={treatment}
                   onBook={handleBookTreatment}
+                  onRequest={handleRequestMicro}
                 />
               ))}
             </div>
 
             {/* Micropigmentation notice */}
             {hasMicro && (
-              <div className="mt-6 bg-primary/5 rounded-2xl p-6 border border-primary/10">
+              <div
+                ref={microNoticeRef}
+                className="mt-6 bg-primary/5 rounded-2xl p-6 border border-primary/10"
+              >
                 <div className="flex items-start gap-3">
                   <Icon name="info" className="text-primary shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-bold text-on-surface mb-1">Información importante</p>
                     <p className="text-sm text-on-surface-variant">
-                      Los tratamientos de micropigmentación requieren una valoración previa.
-                      El resultado final se perfecciona en una sesión de retoque.
-                      Si es tu primera vez, puedes escribirme y te asesoro personalmente.
+                      La micropigmentación no se reserva online: solicítala y Nereida te agendará
+                      cuando más os convenga. El resultado final se perfecciona en una sesión de
+                      retoque.
                     </p>
                     <button
-                      onClick={() => navigate('/reservar')}
+                      onClick={handleRequestMicro}
                       className="mt-3 text-sm font-bold text-primary hover:underline"
                     >
-                      Pedir cita de valoración (30 min)
+                      Solicitar micropigmentación
                     </button>
                   </div>
                 </div>

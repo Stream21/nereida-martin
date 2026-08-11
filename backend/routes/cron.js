@@ -99,4 +99,72 @@ router.get('/calendar-sync', async (req, res) => {
   }
 });
 
+router.get('/rebooking-followups', async (req, res) => {
+  if (!authorizeCron(req, res)) return;
+
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+    const result = await query(
+      `SELECT b.id, b.treatment_id, b.end_time,
+              c.name AS client_name, c.email AS client_email,
+              t.name AS treatment_name, t.tag AS treatment_tag, t.active AS treatment_active
+       FROM bookings b
+       JOIN clients c ON b.client_id = c.id
+       LEFT JOIN treatments t ON b.treatment_id = t.id
+       WHERE b.status = 'confirmed'
+         AND b.rebooking_sent = false
+         AND b.end_time <= $1
+         AND b.end_time > $2
+         AND c.email IS NOT NULL
+         AND c.email != 'imported@studio.local'`,
+      [now.toISOString(), windowStart.toISOString()]
+    );
+
+    const frontendUrl = (process.env.FRONTEND_URL || process.env.BACKEND_URL || '').replace(/\/$/, '');
+    const bookUrl = `${frontendUrl}/reservar`;
+    let sent = 0;
+    const errors = [];
+
+    for (const row of result.rows) {
+      try {
+        if (!row.client_email) continue;
+
+        const treatmentName = row.treatment_name || 'tu tratamiento';
+        let sameTreatmentUrl = bookUrl;
+        if (row.treatment_id === 'micropigmentacion-soft-pixel') {
+          sameTreatmentUrl = `${frontendUrl}/solicitar-micro`;
+        } else if (row.treatment_id && row.treatment_active !== false) {
+          sameTreatmentUrl = `${bookUrl}?treatment=${encodeURIComponent(row.treatment_id)}`;
+        }
+
+        const emailService = require('../services/emailService');
+        await emailService.sendRebookingFollowup({
+          to: row.client_email,
+          clientName: row.client_name,
+          treatment: { name: treatmentName, tag: row.treatment_tag || '' },
+          sameTreatmentUrl,
+          bookUrl,
+        });
+
+        await query('UPDATE bookings SET rebooking_sent = true WHERE id = $1', [row.id]);
+        sent++;
+      } catch (err) {
+        errors.push({ bookingId: row.id, error: err.message });
+      }
+    }
+
+    res.json({
+      processed: result.rows.length,
+      sent,
+      errors: errors.length > 0 ? errors : undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Cron rebooking-followups error:', err);
+    res.status(500).json({ error: 'Error procesando follow-ups de rebooking' });
+  }
+});
+
 module.exports = router;

@@ -72,6 +72,115 @@ router.post('/clients', async (req, res) => {
   }
 });
 
+router.get('/clients/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const client = await dashboard.getClientDetail(id);
+    if (!client) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    res.json({ client });
+  } catch (err) {
+    console.error('Owner get client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.patch('/clients/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await dashboard.updateClient(id, req.body || {});
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner update client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/calendar', async (req, res) => {
+  try {
+    const from = req.query.from;
+    const to = req.query.to;
+    if (!from || !to || isNaN(Date.parse(from)) || isNaN(Date.parse(to))) {
+      return res.status(400).json({ error: 'from y to deben ser fechas ISO válidas' });
+    }
+    const events = await dashboard.listCalendarEvents({ from, to });
+    res.json({ events });
+  } catch (err) {
+    console.error('Owner calendar error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/treatments', async (req, res) => {
+  try {
+    const treatments = await dashboard.listOwnerTreatments();
+    res.json({ treatments });
+  } catch (err) {
+    console.error('Owner treatments error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/bookings', async (req, res) => {
+  try {
+    const { clientId, treatmentId, startTime, date, time } = req.body || {};
+    if (!clientId || !treatmentId || (!startTime && !(date && time))) {
+      return res.status(400).json({
+        error: 'clientId, treatmentId y startTime (o date+time) son obligatorios',
+      });
+    }
+    const ownerBooking = require('../services/ownerBookingService');
+    const result = await ownerBooking.createOwnerBooking({
+      clientId: Number(clientId),
+      treatmentId,
+      startTime,
+      date,
+      time,
+    });
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        message: result.message,
+        code: result.code,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Owner create booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/availability', async (req, res) => {
+  try {
+    const { date, treatmentId } = req.query;
+    if (!date || !treatmentId) {
+      return res.status(400).json({ error: 'date y treatmentId son obligatorios' });
+    }
+    const availabilityService = require('../services/availabilityService');
+    const data = await availabilityService.getAvailabilityForDate(date, treatmentId, {
+      allowInactiveIds: ['micropigmentacion-soft-pixel'],
+    });
+    if (data.error === 'not_found') {
+      return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Owner availability error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/clients/import', upload.single('file'), async (req, res) => {
   try {
     if (!req.file?.buffer) {
@@ -149,11 +258,33 @@ router.get('/services', async (req, res) => {
       return res.status(400).json({ error: 'Mes no válido', code: 'INVALID_MONTH' });
     }
 
+    const priceMin = req.query.priceMin != null && req.query.priceMin !== ''
+      ? Number(req.query.priceMin)
+      : undefined;
+    const priceMax = req.query.priceMax != null && req.query.priceMax !== ''
+      ? Number(req.query.priceMax)
+      : undefined;
+    if (priceMin != null && Number.isNaN(priceMin)) {
+      return res.status(400).json({ error: 'Importe mínimo no válido', code: 'INVALID_PRICE' });
+    }
+    if (priceMax != null && Number.isNaN(priceMax)) {
+      return res.status(400).json({ error: 'Importe máximo no válido', code: 'INVALID_PRICE' });
+    }
+
+    const source = ['web', 'google', 'owner'].includes(req.query.source)
+      ? req.query.source
+      : undefined;
+
     const data = await dashboard.listServices({
       year,
       month,
-      from: req.query.from,
-      to: req.query.to,
+      from: req.query.from || undefined,
+      to: req.query.to || undefined,
+      treatmentId: req.query.treatmentId || undefined,
+      client: req.query.client || undefined,
+      priceMin,
+      priceMax,
+      source,
       page,
       limit: Math.min(100, limit),
     });
@@ -257,11 +388,26 @@ router.post('/goals', async (req, res) => {
 
 router.get('/export/services', async (req, res) => {
   try {
+    const priceMin = req.query.priceMin != null && req.query.priceMin !== ''
+      ? Number(req.query.priceMin)
+      : undefined;
+    const priceMax = req.query.priceMax != null && req.query.priceMax !== ''
+      ? Number(req.query.priceMax)
+      : undefined;
+    const source = ['web', 'google', 'owner'].includes(req.query.source)
+      ? req.query.source
+      : undefined;
+
     const rows = await dashboard.listServicesForExport({
       year: req.query.year,
       month: req.query.month,
       from: req.query.from,
       to: req.query.to,
+      treatmentId: req.query.treatmentId || undefined,
+      client: req.query.client || undefined,
+      priceMin,
+      priceMax,
+      source,
     });
 
     const workbook = new ExcelJS.Workbook();
@@ -283,6 +429,12 @@ router.get('/export/services', async (req, res) => {
 
     sheet.getRow(1).font = { bold: true };
 
+    const sourceLabel = (s) => {
+      if (s === 'google') return 'Google';
+      if (s === 'owner') return 'Agenda';
+      return 'Web';
+    };
+
     for (const row of rows) {
       const start = new Date(row.start_time);
       sheet.addRow({
@@ -294,7 +446,7 @@ router.get('/export/services', async (req, res) => {
         treatment: row.treatment_name,
         category: row.treatment_category,
         price: row.price != null ? Number(row.price) : '',
-        source: row.source === 'google' ? 'Google' : 'Web',
+        source: sourceLabel(row.source),
         id: row.id,
       });
     }

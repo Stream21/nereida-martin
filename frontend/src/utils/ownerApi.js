@@ -96,11 +96,43 @@ export function fetchClients({ search = '', page = 1, limit = 20 } = {}) {
   return ownerFetch(`/clients?${params}`)
 }
 
+export function fetchClient(clientId) {
+  return ownerFetch(`/clients/${clientId}`)
+}
+
+export function updateClient(clientId, payload) {
+  return ownerFetch(`/clients/${clientId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function createClient({ name, phone, email }) {
   return ownerFetch('/clients', {
     method: 'POST',
     body: JSON.stringify({ name, phone, email }),
   })
+}
+
+export function fetchOwnerCalendar({ from, to }) {
+  const params = new URLSearchParams({ from, to })
+  return ownerFetch(`/calendar?${params}`)
+}
+
+export function fetchOwnerTreatments() {
+  return ownerFetch('/treatments')
+}
+
+export function createOwnerBooking({ clientId, treatmentId, startTime, date, time }) {
+  return ownerFetch('/bookings', {
+    method: 'POST',
+    body: JSON.stringify({ clientId, treatmentId, startTime, date, time }),
+  })
+}
+
+export function fetchOwnerAvailability({ date, treatmentId }) {
+  const params = new URLSearchParams({ date, treatmentId })
+  return ownerFetch(`/availability?${params}`)
 }
 
 export function inviteClient(clientId) {
@@ -130,36 +162,53 @@ export async function importClientsFile(file, { dryRun = false } = {}) {
   return data
 }
 
-export function fetchServices({ year, month, from, to, page = 1, limit = 50 } = {}) {
+export function fetchServices({
+  year,
+  month,
+  from,
+  to,
+  treatmentId,
+  client,
+  priceMin,
+  priceMax,
+  source,
+  page = 1,
+  limit = 50,
+} = {}) {
   const params = new URLSearchParams({ page, limit })
   if (year) params.set('year', year)
   if (month) params.set('month', month)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
+  if (treatmentId) params.set('treatmentId', treatmentId)
+  if (client) params.set('client', client)
+  if (priceMin !== '' && priceMin != null) params.set('priceMin', priceMin)
+  if (priceMax !== '' && priceMax != null) params.set('priceMax', priceMax)
+  if (source) params.set('source', source)
   return ownerFetch(`/services?${params}`)
 }
 
-export function fetchGoals({ year, month } = {}) {
-  const params = new URLSearchParams()
-  if (year) params.set('year', year)
-  if (month) params.set('month', month)
-  const qs = params.toString()
-  return ownerFetch(`/goals${qs ? `?${qs}` : ''}`)
-}
-
-export function saveGoal(goal) {
-  return ownerFetch('/goals', {
-    method: 'POST',
-    body: JSON.stringify(goal),
-  })
-}
-
-export async function exportServices({ year, month, from, to } = {}) {
+export async function exportServices({
+  year,
+  month,
+  from,
+  to,
+  treatmentId,
+  client,
+  priceMin,
+  priceMax,
+  source,
+} = {}) {
   const params = new URLSearchParams()
   if (year) params.set('year', year)
   if (month) params.set('month', month)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
+  if (treatmentId) params.set('treatmentId', treatmentId)
+  if (client) params.set('client', client)
+  if (priceMin !== '' && priceMin != null) params.set('priceMin', priceMin)
+  if (priceMax !== '' && priceMax != null) params.set('priceMax', priceMax)
+  if (source) params.set('source', source)
 
   const token = getOwnerToken()
   const res = await fetch(`${API_URL}/api/owner/export/services?${params}`, {

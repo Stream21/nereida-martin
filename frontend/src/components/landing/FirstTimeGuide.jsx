@@ -133,7 +133,7 @@ export default function FirstTimeGuide() {
               onClick={() => window.open(WHATSAPP_URL, '_blank')}
               className="text-sm font-label font-bold text-primary hover:underline underline-offset-4"
             >
-              Pedir cita de valoración (30 min)
+              Consultar por WhatsApp
             </button>
           </div>
         </motion.div>

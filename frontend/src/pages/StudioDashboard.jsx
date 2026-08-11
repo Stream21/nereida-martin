@@ -11,7 +11,7 @@ import SourcePieChart from '../components/studio/SourcePieChart'
 import TopClientsCard from '../components/studio/TopClientsCard'
 import ClientsTable from '../components/studio/ClientsTable'
 import ServicesTable from '../components/studio/ServicesTable'
-import GoalsPanel from '../components/studio/GoalsPanel'
+import StudioCalendar from '../components/studio/StudioCalendar'
 import { useOwnerAuth } from '../hooks/useOwnerAuth'
 import {
   fetchByTreatment,
@@ -138,6 +138,12 @@ export default function StudioDashboard() {
           </motion.div>
         )}
 
+        {activeTab === 'agenda' && (
+          <motion.div key="agenda" variants={tabVariants} initial="initial" animate="animate" exit="exit">
+            <StudioCalendar />
+          </motion.div>
+        )}
+
         {activeTab === 'clients' && (
           <motion.div key="clients" variants={tabVariants} initial="initial" animate="animate" exit="exit">
             <ClientsTable />
@@ -147,12 +153,6 @@ export default function StudioDashboard() {
         {activeTab === 'services' && (
           <motion.div key="services" variants={tabVariants} initial="initial" animate="animate" exit="exit">
             <ServicesTable />
-          </motion.div>
-        )}
-
-        {activeTab === 'goals' && (
-          <motion.div key="goals" variants={tabVariants} initial="initial" animate="animate" exit="exit">
-            <GoalsPanel />
           </motion.div>
         )}
       </AnimatePresence>

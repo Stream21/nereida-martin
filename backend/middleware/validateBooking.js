@@ -2,6 +2,7 @@ const studioSettings = require('../services/studioSettings');
 const { isOnGrid, SLOT_MINUTES } = require('../utils/slotGrid');
 const { isWeekendDay, slotFitsInWorkWindows, STUDIO_HOURS_LABEL } = require('../utils/studioHours');
 const { formatStudioDate } = require('../utils/studioTimezone');
+const { isBeforeMinLead, MIN_BOOKING_LEAD_HOURS } = require('../utils/bookingLeadTime');
 
 function isValidPhone(phone) {
   if (!phone || typeof phone !== 'string') return false;
@@ -53,8 +54,10 @@ async function validateBooking(req, res, next) {
       errors.push(`El horario laboral es ${STUDIO_HOURS_LABEL}`);
     }
 
-    if (date <= new Date()) {
-      errors.push('La fecha debe ser futura');
+    if (isBeforeMinLead(date.getTime())) {
+      errors.push(
+        `Las reservas deben hacerse con al menos ${MIN_BOOKING_LEAD_HOURS} horas de antelación`
+      );
     }
 
     try {

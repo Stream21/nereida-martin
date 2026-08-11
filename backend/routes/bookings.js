@@ -110,6 +110,15 @@ router.post('/cancel/:token', async (req, res) => {
       });
     }
 
+    if (row.source === 'google') {
+      return res.status(403).json({
+        error: 'Cita de Google Calendar',
+        code: 'GOOGLE_READONLY',
+        message:
+          'Las citas importadas de Google no se pueden cancelar desde la web. Cancélalas en Google Calendar.',
+      });
+    }
+
     const startTime = new Date(row.start_time);
 
     if (!canCancel(startTime)) {
@@ -200,6 +209,16 @@ router.patch('/:id', async (req, res) => {
     }
 
     const booking = bookingResult.rows[0];
+
+    if (booking.source === 'google') {
+      return res.status(403).json({
+        error: 'Cita de Google Calendar',
+        message:
+          'Las citas importadas de Google no se pueden modificar desde la web. Edítalas en Google Calendar.',
+        code: 'GOOGLE_READONLY',
+      });
+    }
+
     const start = new Date(startTime);
 
     if (!canCancel(new Date(booking.start_time))) {
@@ -318,6 +337,15 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     let consentList = Array.isArray(consents) ? [...consents] : [];
 
     const cancelToken = uuidv4();
+
+    if (treatmentId === 'micropigmentacion-soft-pixel') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error:
+          'La micropigmentación se agenda con el estudio. Solicítala desde la web o por WhatsApp.',
+        code: 'MICRO_REQUEST_ONLY',
+      });
+    }
 
     const treatmentResult = await client.query(
       'SELECT id, name, tag, category, duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
