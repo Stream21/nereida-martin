@@ -56,7 +56,8 @@ export default function Footer() {
                 Horario
               </h6>
               <p className="text-sm text-on-surface-variant">
-                Lun - Vie: 10:00 - 14:00 y 15:00 - 18:00<br />
+                Lun–Jue: 10:00–14:00 y 15:00–18:00<br />
+                Vie: 10:00–14:00 y 15:00–17:00<br />
                 Sáb y Dom: cerrado
               </p>
             </div>

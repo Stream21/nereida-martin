@@ -2,6 +2,7 @@ export const BROW_DESIGN_PRIMERA = 'brow-design-primera'
 export const BROW_DESIGN_SEGUIMIENTO = 'brow-design-seguimiento'
 export const BROW_DESIGN_DEFINE = 'brow-define'
 export const BROW_DESIGN_DECLARED = 'brow-design'
+export const MICRO_SOFT_PIXEL = 'micropigmentacion-soft-pixel'
 
 export const BROW_DESIGN_TRIO = [
   BROW_DESIGN_PRIMERA,
@@ -101,6 +102,9 @@ export function buildPriorTreatmentOptions(treatments) {
       }
       continue
     }
+    // Micro no se reserva online; se inyecta al final para historial declarado
+    if (t.id === MICRO_SOFT_PIXEL) continue
+    seen.add(t.id)
     options.push({
       id: t.id,
       label: t.name,
@@ -108,6 +112,15 @@ export function buildPriorTreatmentOptions(treatments) {
       category: t.category,
     })
   }
+
+  // Siempre disponible en «tratamientos realizados» aunque esté inactive en catálogo
+  const fromCatalog = treatments.find((t) => t.id === MICRO_SOFT_PIXEL)
+  options.push({
+    id: MICRO_SOFT_PIXEL,
+    label: fromCatalog?.name || 'Soft Pixel Brow',
+    tag: fromCatalog?.tag || 'Micropigmentación efecto polvo',
+    category: fromCatalog?.category || 'cejas',
+  })
 
   return options
 }

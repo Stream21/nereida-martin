@@ -34,10 +34,13 @@ const HOUR_END = 18
 const PX_PER_HOUR = 56
 
 /** Studio work windows in minutes from midnight (matches backend studioHours). */
-const WORK_WINDOWS = [
-  { start: 10 * 60, end: 14 * 60 },
-  { start: 15 * 60, end: 18 * 60 },
-]
+function workWindowsForDay(day) {
+  const afternoonEnd = day.getDay() === 5 ? 17 : 18 // viernes cierra a las 17:00
+  return [
+    { start: 10 * 60, end: 14 * 60 },
+    { start: 15 * 60, end: afternoonEnd * 60 },
+  ]
+}
 
 function minsToLabel(mins) {
   const h = Math.floor(mins / 60)
@@ -59,7 +62,7 @@ function formatDurationLabel(minutes) {
 }
 
 /** Free intervals within work windows minus booked events. */
-function freeGapsForDay(dayEvents) {
+function freeGapsForDay(day, dayEvents) {
   const busy = dayEvents
     .map((ev) => ({
       start: getHours(new Date(ev.startTime)) * 60 + getMinutes(new Date(ev.startTime)),
@@ -68,7 +71,7 @@ function freeGapsForDay(dayEvents) {
     .sort((a, b) => a.start - b.start)
 
   const gaps = []
-  for (const win of WORK_WINDOWS) {
+  for (const win of workWindowsForDay(day)) {
     let cursor = win.start
     const relevant = busy.filter((b) => b.end > win.start && b.start < win.end)
     for (const b of relevant) {
@@ -86,9 +89,11 @@ function freeGapsForDay(dayEvents) {
   return gaps.filter((g) => g.end - g.start >= 15)
 }
 
-function isClosedHour(hour) {
-  // 14:00–15:00 lunch / business close
-  return hour === 14
+function isClosedHour(hour, day) {
+  // 14:00–15:00 lunch; viernes 17:00–18:00 cerrado
+  if (hour === 14) return true
+  if (day?.getDay() === 5 && hour >= 17) return true
+  return false
 }
 
 function weekdayIndex(day) {
@@ -651,7 +656,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
             {days.map((day) => {
               const dayEvents = events.filter((e) => isSameDay(new Date(e.startTime), day))
               const laidOut = layoutOverlaps(dayEvents)
-              const gaps = freeGapsForDay(dayEvents)
+              const gaps = freeGapsForDay(day, dayEvents)
 
               return (
                 <div
@@ -660,8 +665,8 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                     isToday(day) ? 'bg-primary/[0.03]' : ''
                   }`}
                 >
-                  {/* Closed hour (14:00–15:00) — not clickable */}
-                  {hours.filter(isClosedHour).map((h) => (
+                  {/* Closed hours (comida / viernes desde 17:00) — not clickable */}
+                  {hours.filter((h) => isClosedHour(h, day)).map((h) => (
                     <div
                       key={`closed-${h}`}
                       aria-hidden

@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { POLICY_TEXT } = require('../utils/cancellationPolicy');
+const { TIMEZONE } = require('../utils/studioTimezone');
 
 let transporter = null;
 
@@ -26,14 +27,36 @@ function getTransporter() {
   return transporter;
 }
 
+/** Always format in studio TZ (Atlantic/Canary) — never server-local getters. */
 function formatDate(date) {
-  const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-  const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-  return `${days[date.getDay()]}, ${date.getDate()} de ${months[date.getMonth()]} de ${date.getFullYear()}`;
+  const d = date instanceof Date ? date : new Date(date);
+  const weekday = new Intl.DateTimeFormat('es-ES', {
+    timeZone: TIMEZONE,
+    weekday: 'long',
+  }).format(d);
+  const day = new Intl.DateTimeFormat('es-ES', {
+    timeZone: TIMEZONE,
+    day: 'numeric',
+  }).format(d);
+  const month = new Intl.DateTimeFormat('es-ES', {
+    timeZone: TIMEZONE,
+    month: 'long',
+  }).format(d);
+  const year = new Intl.DateTimeFormat('es-ES', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+  }).format(d);
+  return `${weekday}, ${day} de ${month} de ${year}`;
 }
 
 function formatTime(date) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const d = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat('es-ES', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
 }
 
 const E = {
@@ -265,7 +288,7 @@ async function sendConfirmation({
   await transport.sendMail({
     from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `✨ Cita confirmada – ${treatment.name} | Nereida Martín Studio`,
+    subject: `✨ Cita confirmada – ${treatment.name} · ${formatTime(startTime)} | Nereida Martín Studio`,
     html: buildConfirmationHTML({
       clientName,
       treatment,
@@ -318,7 +341,7 @@ async function sendReminder({ to, clientName, treatment, startTime, endTime }) {
   await transport.sendMail({
     from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `⏰ Recordatorio: Tu cita es hoy – ${treatment.name} | Nereida Martín Studio`,
+    subject: `⏰ Recordatorio: Tu cita es hoy – ${treatment.name} · ${formatTime(startTime)} | Nereida Martín Studio`,
     html: buildReminderHTML({ clientName, treatment, startTime, endTime }),
   });
 }

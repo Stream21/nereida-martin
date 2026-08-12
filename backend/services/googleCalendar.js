@@ -4,6 +4,7 @@ const {
   getWebEventColorId,
   getWebEventExtendedProperties,
 } = require('../utils/webCalendarEvent');
+const { TIMEZONE } = require('../utils/studioTimezone');
 
 function getAuthClient() {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
@@ -45,8 +46,8 @@ async function createEvent({
   const event = {
     summary,
     description,
-    start: { dateTime: startTime, timeZone: 'Europe/Madrid' },
-    end: { dateTime: endTime, timeZone: 'Europe/Madrid' },
+    start: { dateTime: startTime, timeZone: TIMEZONE },
+    end: { dateTime: endTime, timeZone: TIMEZONE },
     reminders: {
       useDefault: false,
       overrides: [
@@ -90,8 +91,8 @@ async function updateEvent(eventId, {
   const event = {
     summary,
     description,
-    start: { dateTime: startTime, timeZone: 'Europe/Madrid' },
-    end: { dateTime: endTime, timeZone: 'Europe/Madrid' },
+    start: { dateTime: startTime, timeZone: TIMEZONE },
+    end: { dateTime: endTime, timeZone: TIMEZONE },
   };
 
   if (isWebBooking && bookingId) {
@@ -166,7 +167,7 @@ async function getFreeBusy(dateStr) {
     resource: {
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
-      timeZone: 'Europe/Madrid',
+      timeZone: TIMEZONE,
       items: [{ id: calendarId }],
     },
   });

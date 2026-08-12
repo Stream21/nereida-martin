@@ -47,6 +47,12 @@ router.get('/clients', async (req, res) => {
       search: req.query.search || '',
       page,
       limit,
+      status: req.query.status || '',
+      treatmentId: req.query.treatmentId || '',
+      lastFrom: req.query.lastFrom || '',
+      lastTo: req.query.lastTo || '',
+      minBookings: req.query.minBookings ?? '',
+      maxBookings: req.query.maxBookings ?? '',
     });
     res.json(data);
   } catch (err) {

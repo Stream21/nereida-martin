@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import {
   createClient,
@@ -6,12 +7,24 @@ import {
   enableClient,
   fetchClient,
   fetchClients,
+  fetchOwnerTreatments,
   importClientsFile,
   inviteClient,
   updateClient,
 } from '../../utils/ownerApi'
 
 const PAGE_SIZE = 10
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'Todos' },
+  { value: 'active', label: 'Activa' },
+  { value: 'invited', label: 'Invitada' },
+  { value: 'pending', label: 'Pendiente' },
+  { value: 'disabled', label: 'Desactivada' },
+]
+
+const fieldClass =
+  'w-full rounded-2xl border border-outline-variant bg-surface-container-low px-3.5 py-2.5 text-sm outline-none focus:border-primary min-h-11'
 
 function formatEuro(value) {
   return new Intl.NumberFormat('es-ES', {
@@ -55,7 +68,7 @@ function ContactCell({ client }) {
   }
   if (email) return <div className="text-on-surface">{email}</div>
   if (phone) return <div className="text-on-surface">{phone}</div>
-  return <span className="text-on-surface-variant">Sin contacto</span>
+  return <span className="text-on-surface-variant">—</span>
 }
 
 function statusMeta(client) {
@@ -64,13 +77,6 @@ function statusMeta(client) {
   }
   if (client.accountStatus === 'active') {
     return { icon: 'check_circle', label: 'Activa', className: 'bg-primary/15 text-primary' }
-  }
-  if (!client.phone && !client.phoneNormalized) {
-    return {
-      icon: 'phone_disabled',
-      label: 'Sin teléfono',
-      className: 'bg-surface-container text-on-surface-variant',
-    }
   }
   if (client.hasInvite) {
     return {
@@ -236,6 +242,15 @@ function ClientFichaModal({ clientId, onClose, onSaved }) {
 
 export default function ClientsTable() {
   const [search, setSearch] = useState('')
+  const [searchDebounced, setSearchDebounced] = useState('')
+  const [status, setStatus] = useState('')
+  const [treatmentId, setTreatmentId] = useState('')
+  const [lastFrom, setLastFrom] = useState('')
+  const [lastTo, setLastTo] = useState('')
+  const [minBookings, setMinBookings] = useState('')
+  const [maxBookings, setMaxBookings] = useState('')
+  const [treatments, setTreatments] = useState([])
+  const [moreOpen, setMoreOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ clients: [], total: 0, page: 1, limit: PAGE_SIZE })
   const [loading, setLoading] = useState(true)
@@ -248,25 +263,60 @@ export default function ClientsTable() {
   const [importing, setImporting] = useState(false)
   const [fichaId, setFichaId] = useState(null)
   const fileRef = useRef(null)
+  const tableTopRef = useRef(null)
+
+  const filterParams = useMemo(
+    () => ({
+      search: searchDebounced || undefined,
+      status: status || undefined,
+      treatmentId: treatmentId || undefined,
+      lastFrom: lastFrom || undefined,
+      lastTo: lastTo || undefined,
+      minBookings: minBookings !== '' ? minBookings : undefined,
+      maxBookings: maxBookings !== '' ? maxBookings : undefined,
+    }),
+    [searchDebounced, status, treatmentId, lastFrom, lastTo, minBookings, maxBookings]
+  )
+
+  const extendedActiveCount = [
+    !!treatmentId,
+    !!lastFrom,
+    !!lastTo,
+    minBookings !== '',
+    maxBookings !== '',
+  ].filter(Boolean).length
 
   const totalPages = Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))
 
-  const reload = (nextPage = page) => {
+  useEffect(() => {
+    fetchOwnerTreatments()
+      .then((res) => setTreatments(res.treatments || []))
+      .catch(() => setTreatments([]))
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchDebounced, status, treatmentId, lastFrom, lastTo, minBookings, maxBookings])
+
+  const loadClients = (nextPage = page) => {
     setLoading(true)
-    fetchClients({ search, page: nextPage, limit: PAGE_SIZE })
+    setError('')
+    return fetchClients({ ...filterParams, page: nextPage, limit: PAGE_SIZE })
       .then((res) => setData(res))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
-    setPage(1)
-  }, [search])
-
-  useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchClients({ search, page, limit: PAGE_SIZE })
+    setError('')
+    fetchClients({ ...filterParams, page, limit: PAGE_SIZE })
       .then((res) => {
         if (!cancelled) setData(res)
       })
@@ -276,15 +326,34 @@ export default function ClientsTable() {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-
     return () => {
       cancelled = true
     }
-  }, [search, page])
+  }, [filterParams, page])
+
+  const goToPage = (next) => {
+    setPage(next)
+    tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
 
   const showToast = (msg) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
+  }
+
+  const clearExtended = () => {
+    setTreatmentId('')
+    setLastFrom('')
+    setLastTo('')
+    setMinBookings('')
+    setMaxBookings('')
+  }
+
+  const clearAll = () => {
+    setSearch('')
+    setSearchDebounced('')
+    setStatus('')
+    clearExtended()
   }
 
   const handleCopyInvite = async (client) => {
@@ -298,7 +367,7 @@ export default function ClientsTable() {
       }
       await navigator.clipboard.writeText(url)
       showToast('Enlace copiado; envíalo por WhatsApp')
-      reload()
+      loadClients()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -317,7 +386,7 @@ export default function ClientsTable() {
         await disableClient(client.id)
         showToast('Acceso desactivado')
       }
-      reload()
+      loadClients()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -333,8 +402,8 @@ export default function ClientsTable() {
       setShowAdd(false)
       setAddForm({ name: '', phone: '', email: '' })
       showToast('Contacto añadido')
-      reload(1)
       setPage(1)
+      loadClients(1)
     } catch (err) {
       setAddError(err.message)
     }
@@ -351,8 +420,8 @@ export default function ClientsTable() {
       showToast(
         `Importación: ${summary.created} nuevas, ${summary.updated} actualizadas, ${summary.skipped} omitidas`
       )
-      reload(1)
       setPage(1)
+      loadClients(1)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -362,40 +431,182 @@ export default function ClientsTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, email o teléfono…"
-          className="w-full sm:max-w-sm rounded-2xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-on-surface outline-none focus:border-primary"
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAdd((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-2xl bg-primary text-on-primary px-4 py-2.5 text-sm font-medium"
-          >
-            <Icon name="person_add" className="text-base" />
-            Añadir
-          </button>
-          <button
-            type="button"
-            disabled={importing}
-            onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-1.5 rounded-2xl border border-outline-variant bg-surface-container-lowest px-4 py-2.5 text-sm text-on-surface disabled:opacity-60"
-          >
-            <Icon name="upload_file" className="text-base" />
-            {importing ? 'Importando…' : 'Importar Excel'}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImport}
-          />
+      <div
+        ref={tableTopRef}
+        className="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 shadow-[0_4px_20px_rgba(28,25,23,0.05)] overflow-hidden"
+      >
+        <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+          <label className="flex-1 min-w-0 sm:min-w-[12rem]">
+            <span className="sr-only">Buscar</span>
+            <div className="relative">
+              <Icon
+                name="search"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none"
+              />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre, email o teléfono…"
+                className={`${fieldClass} pl-10`}
+              />
+            </div>
+          </label>
+
+          <label className="w-full sm:w-[10.5rem] shrink-0">
+            <span className="sr-only">Estado</span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className={fieldClass}
+              aria-label="Estado"
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value || 'all'} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMoreOpen((o) => !o)}
+              className={`cursor-pointer inline-flex items-center gap-1.5 rounded-2xl border px-3.5 py-2.5 min-h-11 text-sm transition-colors ${
+                moreOpen || extendedActiveCount > 0
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'
+              }`}
+            >
+              <Icon name="tune" className="text-lg" />
+              <span>Más filtros</span>
+              {extendedActiveCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-5 h-5 rounded-full bg-primary text-on-primary text-[10px] font-bold px-1">
+                  {extendedActiveCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAdd((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-primary text-on-primary px-4 py-2.5 min-h-11 text-sm font-medium"
+            >
+              <Icon name="person_add" className="text-base" />
+              Añadir
+            </button>
+            <button
+              type="button"
+              disabled={importing}
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-outline-variant px-4 py-2.5 min-h-11 text-sm text-on-surface disabled:opacity-60"
+            >
+              <Icon name="upload_file" className="text-base" />
+              {importing ? 'Importando…' : 'Importar'}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </div>
         </div>
+
+        <AnimatePresence initial={false}>
+          {moreOpen && (
+            <motion.div
+              key="more-filters"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              className="overflow-hidden border-t border-outline-variant/25"
+            >
+              <div className="p-4 bg-surface-container-low/60 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <label className="min-w-0">
+                    <span className="text-xs text-on-surface-variant block mb-1">Última cita desde</span>
+                    <input
+                      type="date"
+                      value={lastFrom}
+                      onChange={(e) => setLastFrom(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </label>
+                  <label className="min-w-0">
+                    <span className="text-xs text-on-surface-variant block mb-1">Última cita hasta</span>
+                    <input
+                      type="date"
+                      value={lastTo}
+                      onChange={(e) => setLastTo(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </label>
+                  <label className="min-w-0 col-span-2 sm:col-span-1">
+                    <span className="text-xs text-on-surface-variant block mb-1">Tratamiento</span>
+                    <select
+                      value={treatmentId}
+                      onChange={(e) => setTreatmentId(e.target.value)}
+                      className={fieldClass}
+                    >
+                      <option value="">Todos</option>
+                      {treatments.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                          {t.tag ? ` · ${t.tag}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="min-w-0">
+                    <span className="text-xs text-on-surface-variant block mb-1">Citas mín.</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={minBookings}
+                      onChange={(e) => setMinBookings(e.target.value)}
+                      placeholder="0"
+                      className={fieldClass}
+                    />
+                  </label>
+                  <label className="min-w-0">
+                    <span className="text-xs text-on-surface-variant block mb-1">Citas máx.</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={maxBookings}
+                      onChange={(e) => setMaxBookings(e.target.value)}
+                      placeholder="∞"
+                      className={fieldClass}
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {extendedActiveCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearExtended}
+                      className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface px-2 py-1.5 rounded-lg min-h-9"
+                    >
+                      Quitar extras
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="cursor-pointer text-xs text-primary hover:bg-primary/10 px-2.5 py-1.5 rounded-lg min-h-9"
+                  >
+                    Restablecer todo
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {showAdd && (
@@ -437,10 +648,13 @@ export default function ClientsTable() {
         <p className="text-sm text-primary bg-primary/10 rounded-xl px-3 py-2">{toast}</p>
       )}
       {error && <p className="text-sm text-error">{error}</p>}
-      {loading && <p className="text-sm text-on-surface-variant">Cargando clientes…</p>}
 
-      <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)]">
-        <div className="overflow-x-auto">
+      <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] min-h-[28rem]">
+        <div
+          className={`overflow-x-auto transition-opacity duration-200 ${
+            loading ? 'opacity-55' : 'opacity-100'
+          }`}
+        >
           <table className="w-full text-sm">
             <thead className="bg-surface-container-low text-on-surface-variant text-left">
               <tr>
@@ -541,7 +755,7 @@ export default function ClientsTable() {
           <button
             type="button"
             disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => goToPage(Math.max(1, page - 1))}
             title="Página anterior"
             aria-label="Página anterior"
             className="cursor-pointer rounded-xl border border-outline-variant p-2 disabled:opacity-40 hover:bg-surface-container transition-colors"
@@ -554,7 +768,7 @@ export default function ClientsTable() {
           <button
             type="button"
             disabled={page >= totalPages || loading}
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => goToPage(page + 1)}
             title="Página siguiente"
             aria-label="Página siguiente"
             className="cursor-pointer rounded-xl border border-outline-variant p-2 disabled:opacity-40 hover:bg-surface-container transition-colors"
@@ -570,7 +784,7 @@ export default function ClientsTable() {
           onClose={() => setFichaId(null)}
           onSaved={() => {
             showToast('Ficha actualizada')
-            reload()
+            loadClients()
           }}
         />
       )}

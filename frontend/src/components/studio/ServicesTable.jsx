@@ -395,10 +395,13 @@ export default function ServicesTable() {
       </div>
 
       {error && <p className="text-sm text-error bg-error-container rounded-xl px-3 py-2">{error}</p>}
-      {loading && <p className="text-sm text-on-surface-variant">Cargando servicios…</p>}
 
-      <div className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] border border-outline-variant/30">
-        <div className="overflow-x-auto">
+      <div className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] border border-outline-variant/30 min-h-[28rem]">
+        <div
+          className={`overflow-x-auto transition-opacity duration-200 ${
+            loading ? 'opacity-55' : 'opacity-100'
+          }`}
+        >
           <table className="w-full text-sm">
             <thead className="bg-surface-container-low text-on-surface-variant text-left">
               <tr>

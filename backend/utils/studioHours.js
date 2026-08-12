@@ -1,8 +1,15 @@
 const { studioLocalToDate, getStudioDayOfWeek } = require('./studioTimezone');
 
-const WORK_WINDOWS_WEEKDAY = [
+/** Lun–Jue: tarde hasta 18:00. */
+const WORK_WINDOWS_MON_THU = [
   { startHour: 10, startMin: 0, endHour: 14, endMin: 0 },
   { startHour: 15, startMin: 0, endHour: 18, endMin: 0 },
+];
+
+/** Viernes: la última sesión debe terminar a las 17:00. */
+const WORK_WINDOWS_FRIDAY = [
+  { startHour: 10, startMin: 0, endHour: 14, endMin: 0 },
+  { startHour: 15, startMin: 0, endHour: 17, endMin: 0 },
 ];
 
 function isWeekendDay(dateStr) {
@@ -12,7 +19,8 @@ function isWeekendDay(dateStr) {
 
 function getWorkWindowsForDate(dateStr) {
   if (isWeekendDay(dateStr)) return [];
-  return WORK_WINDOWS_WEEKDAY;
+  const day = getStudioDayOfWeek(dateStr);
+  return day === 5 ? WORK_WINDOWS_FRIDAY : WORK_WINDOWS_MON_THU;
 }
 
 function getWindowBounds(dateStr, window) {
@@ -57,10 +65,13 @@ function slotFitsInWorkWindows(dateStr, slotStartMs, slotEndMs) {
   });
 }
 
-const STUDIO_HOURS_LABEL = 'Lun - Vie: 10:00 - 14:00 y 15:00 - 18:00';
+const STUDIO_HOURS_LABEL =
+  'Lun–Jue: 10:00–14:00 y 15:00–18:00 · Vie: 10:00–14:00 y 15:00–17:00';
 
 module.exports = {
-  WORK_WINDOWS_WEEKDAY,
+  WORK_WINDOWS_MON_THU,
+  WORK_WINDOWS_FRIDAY,
+  WORK_WINDOWS_WEEKDAY: WORK_WINDOWS_MON_THU,
   STUDIO_HOURS_LABEL,
   isWeekendDay,
   getWorkWindowsForDate,

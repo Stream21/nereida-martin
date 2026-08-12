@@ -12,7 +12,11 @@ const contactInfo = [
   {
     icon: 'schedule',
     title: 'Horario',
-    lines: ['Lun - Vie: 10:00 - 14:00 y 15:00 - 18:00', 'Sáb y Dom: cerrado'],
+    lines: [
+      'Lun–Jue: 10:00–14:00 y 15:00–18:00',
+      'Vie: 10:00–14:00 y 15:00–17:00',
+      'Sáb y Dom: cerrado',
+    ],
   },
   {
     id: 'whatsapp',

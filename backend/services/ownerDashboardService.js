@@ -321,25 +321,110 @@ async function getBySource() {
   }));
 }
 
-async function listClients({ search = '', page = 1, limit = 20 }) {
+async function listClients({
+  search = '',
+  page = 1,
+  limit = 20,
+  status = '',
+  treatmentId = '',
+  lastFrom = '',
+  lastTo = '',
+  minBookings = '',
+  maxBookings = '',
+}) {
   const offset = (page - 1) * limit;
   const params = [];
   let idx = 1;
-  let searchClause = '';
+  const whereParts = [];
 
   if (search.trim()) {
-    searchClause = `WHERE (
+    whereParts.push(`(
       c.name ILIKE $${idx}
       OR c.email ILIKE $${idx}
       OR c.phone ILIKE $${idx}
       OR c.phone_normalized ILIKE $${idx}
-    )`;
+    )`);
     params.push(`%${search.trim()}%`);
     idx += 1;
   }
 
+  const statusKey = typeof status === 'string' ? status.trim() : '';
+  if (statusKey === 'disabled' || statusKey === 'active') {
+    whereParts.push(`c.account_status = $${idx}`);
+    params.push(statusKey);
+    idx += 1;
+  } else if (statusKey === 'invited') {
+    whereParts.push(
+      `c.account_status NOT IN ('active', 'disabled')
+       AND EXISTS (
+         SELECT 1 FROM client_invites i
+         WHERE i.client_id = c.id AND i.used_at IS NULL AND i.expires_at > NOW()
+       )`
+    );
+  } else if (statusKey === 'pending') {
+    whereParts.push(
+      `c.account_status NOT IN ('active', 'disabled')
+       AND NOT EXISTS (
+         SELECT 1 FROM client_invites i
+         WHERE i.client_id = c.id AND i.used_at IS NULL AND i.expires_at > NOW()
+       )`
+    );
+  }
+
+  if (treatmentId) {
+    whereParts.push(`EXISTS (
+      SELECT 1 FROM bookings bt
+      WHERE bt.client_id = c.id
+        AND bt.treatment_id = $${idx}
+        AND bt.status IN ('confirmed', 'pending_review')
+    )`);
+    params.push(treatmentId);
+    idx += 1;
+  }
+
+  const havingParts = [];
+  if (lastFrom) {
+    havingParts.push(
+      `(MAX(b.start_time) FILTER (WHERE b.status IN ('confirmed', 'pending_review')) AT TIME ZONE '${TZ}')::date >= $${idx}::date`
+    );
+    params.push(lastFrom);
+    idx += 1;
+  }
+  if (lastTo) {
+    havingParts.push(
+      `(MAX(b.start_time) FILTER (WHERE b.status IN ('confirmed', 'pending_review')) AT TIME ZONE '${TZ}')::date <= $${idx}::date`
+    );
+    params.push(lastTo);
+    idx += 1;
+  }
+  if (minBookings !== '' && minBookings != null && !Number.isNaN(Number(minBookings))) {
+    havingParts.push(
+      `COUNT(b.id) FILTER (WHERE b.status IN ('confirmed', 'pending_review')) >= $${idx}`
+    );
+    params.push(Number(minBookings));
+    idx += 1;
+  }
+  if (maxBookings !== '' && maxBookings != null && !Number.isNaN(Number(maxBookings))) {
+    havingParts.push(
+      `COUNT(b.id) FILTER (WHERE b.status IN ('confirmed', 'pending_review')) <= $${idx}`
+    );
+    params.push(Number(maxBookings));
+    idx += 1;
+  }
+
+  const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const havingClause = havingParts.length ? `HAVING ${havingParts.join(' AND ')}` : '';
+
   const countRes = await query(
-    `SELECT COUNT(*)::int AS total FROM clients c ${searchClause}`,
+    `SELECT COUNT(*)::int AS total FROM (
+       SELECT c.id
+       FROM clients c
+       LEFT JOIN bookings b ON b.client_id = c.id
+       LEFT JOIN treatments t ON b.treatment_id = t.id
+       ${whereClause}
+       GROUP BY c.id
+       ${havingClause}
+     ) filtered`,
     params
   );
 
@@ -380,8 +465,9 @@ async function listClients({ search = '', page = 1, limit = 20 }) {
      FROM clients c
      LEFT JOIN bookings b ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
-     ${searchClause}
+     ${whereClause}
      GROUP BY c.id
+     ${havingClause}
      ORDER BY last_booking_at DESC NULLS LAST, c.name ASC
      LIMIT $${idx} OFFSET $${idx + 1}`,
     [...params, limit, offset]

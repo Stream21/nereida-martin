@@ -1,14 +1,21 @@
 const ics = require('ics');
 const { STUDIO_BRAND } = require('../utils/studioBrand');
+const { TIMEZONE } = require('../utils/studioTimezone');
 
+/** Wall-clock components in studio TZ for floating ICS times. */
 function toICSDateArray(date) {
-  return [
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-  ];
+  const d = date instanceof Date ? date : new Date(date);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value);
+  return [get('year'), get('month'), get('day'), get('hour'), get('minute')];
 }
 
 function generateICS({ title, startTime, endTime, description, location }) {

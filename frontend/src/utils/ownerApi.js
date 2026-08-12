@@ -90,9 +90,25 @@ export function fetchBySource() {
   return ownerFetch('/metrics/by-source')
 }
 
-export function fetchClients({ search = '', page = 1, limit = 20 } = {}) {
+export function fetchClients({
+  search = '',
+  page = 1,
+  limit = 20,
+  status = '',
+  treatmentId = '',
+  lastFrom = '',
+  lastTo = '',
+  minBookings = '',
+  maxBookings = '',
+} = {}) {
   const params = new URLSearchParams({ page, limit })
   if (search) params.set('search', search)
+  if (status) params.set('status', status)
+  if (treatmentId) params.set('treatmentId', treatmentId)
+  if (lastFrom) params.set('lastFrom', lastFrom)
+  if (lastTo) params.set('lastTo', lastTo)
+  if (minBookings !== '' && minBookings != null) params.set('minBookings', minBookings)
+  if (maxBookings !== '' && maxBookings != null) params.set('maxBookings', maxBookings)
   return ownerFetch(`/clients?${params}`)
 }
 
