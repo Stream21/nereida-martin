@@ -83,6 +83,30 @@ router.post('/micropigmentation', upload.single('photo'), async (req, res) => {
       ? [{ filename: req.file.filename, path: req.file.path }]
       : [];
 
+    try {
+      const clientImport = require('../services/clientImportService');
+      const { query } = require('../db/pool');
+      const { clientId } = await clientImport.findOrCreateByContact({ name, phone, email });
+      if (req.file) {
+        const relativePath = path.join('micro-requests', req.file.filename).replace(/\\/g, '/');
+        try {
+          await query(
+            `INSERT INTO henna_assessments (client_id, photo_path, status, source, notes)
+             VALUES ($1, $2, 'pending', 'micro_request', $3)`,
+            [clientId, relativePath, notes || null]
+          );
+        } catch {
+          await query(
+            `INSERT INTO henna_assessments (client_id, photo_path, status)
+             VALUES ($1, $2, 'pending')`,
+            [clientId, relativePath]
+          );
+        }
+      }
+    } catch (persistErr) {
+      console.error('Micro request persist error:', persistErr.message);
+    }
+
     const emailService = require('../services/emailService');
     await emailService.sendOwnerAlert({
       subject: `Solicitud micropigmentación – ${name} | Nereida Martín Studio`,

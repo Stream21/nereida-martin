@@ -1,5 +1,6 @@
 const { query } = require('../db/pool');
 const { TIMEZONE } = require('../utils/studioTimezone');
+const { formatIntakeForOwner } = require('../config/intakeQuestions');
 
 const CONFIRMED_FILTER = `b.status = 'confirmed'`;
 const TZ = TIMEZONE.replace(/'/g, "''");
@@ -507,13 +508,23 @@ async function getClientDetail(clientId) {
 
   const row = clientRes.rows[0];
   const historyRes = await query(
-    `SELECT b.id, b.start_time, b.end_time, b.status, b.source,
-            t.name AS treatment_name, t.tag AS treatment_tag, t.price
+    `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
+            t.name AS treatment_name, t.tag AS treatment_tag, t.price,
+            b.intake_id, i.flagged AS intake_flagged,
+            EXISTS (
+              SELECT 1 FROM henna_assessments ha WHERE ha.booking_id = b.id
+            ) AS has_photo
      FROM bookings b
      LEFT JOIN treatments t ON b.treatment_id = t.id
+     LEFT JOIN booking_intakes i ON i.id = b.intake_id
      WHERE b.client_id = $1
      ORDER BY b.start_time DESC
      LIMIT 50`,
+    [clientId]
+  );
+
+  const photos = await listAssessmentPhotos(
+    `WHERE client_id = $1 ORDER BY created_at DESC LIMIT 40`,
     [clientId]
   );
 
@@ -536,10 +547,15 @@ async function getClientDetail(clientId) {
       endTime: b.end_time,
       status: b.status,
       source: b.source,
+      treatmentId: b.treatment_id,
       treatmentName: b.treatment_name,
       treatmentTag: b.treatment_tag,
       price: b.price != null ? Number(b.price) : null,
+      hasIntake: Boolean(b.intake_id),
+      intakeFlagged: Boolean(b.intake_flagged),
+      hasPhoto: Boolean(b.has_photo),
     })),
+    photos,
   };
 }
 
@@ -603,10 +619,21 @@ async function listCalendarEvents({ from, to }) {
   const result = await query(
     `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
-            t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min
+            t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min,
+            b.intake_id, i.flagged AS intake_flagged,
+            EXISTS (
+              SELECT 1 FROM henna_assessments ha
+              WHERE ha.booking_id = b.id
+                 OR (
+                   ha.client_id = b.client_id
+                   AND ha.booking_id IS NULL
+                   AND b.treatment_id = 'micropigmentacion-soft-pixel'
+                 )
+            ) AS has_photo
      FROM bookings b
      JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
+     LEFT JOIN booking_intakes i ON i.id = b.intake_id
      WHERE b.status IN ('confirmed', 'pending_review')
        AND b.start_time < $2
        AND b.end_time > $1
@@ -627,7 +654,126 @@ async function listCalendarEvents({ from, to }) {
     clientId: row.client_id,
     clientName: row.client_name,
     clientPhone: row.client_phone,
+    hasIntake: Boolean(row.intake_id),
+    intakeFlagged: Boolean(row.intake_flagged),
+    hasPhoto: Boolean(row.has_photo),
   }));
+}
+
+function toUploadUrl(photoPath) {
+  if (!photoPath || String(photoPath).includes('..')) return null;
+  const clean = String(photoPath).replace(/\\/g, '/').replace(/^\/+/, '');
+  return `/uploads/${clean}`;
+}
+
+function mapAssessmentPhoto(row) {
+  if (!row?.photo_path) return null;
+  const photoUrl = toUploadUrl(row.photo_path);
+  if (!photoUrl) return null;
+  const inferredSource = String(row.photo_path).replace(/\\/g, '/').startsWith('micro-requests/')
+    ? 'micro_request'
+    : 'booking';
+  return {
+    id: row.id,
+    photoPath: row.photo_path,
+    photoUrl,
+    status: row.status,
+    source: row.source || inferredSource,
+    notes: row.notes || '',
+    createdAt: row.created_at,
+    bookingId: row.booking_id || null,
+  };
+}
+
+async function listAssessmentPhotos(whereSql, params) {
+  try {
+    const result = await query(
+      `SELECT id, photo_path, status, source, notes, booking_id, created_at
+       FROM henna_assessments
+       ${whereSql}`,
+      params
+    );
+    return result.rows.map(mapAssessmentPhoto).filter(Boolean);
+  } catch (err) {
+    const result = await query(
+      `SELECT id, photo_path, status, booking_id, created_at
+       FROM henna_assessments
+       ${whereSql}`,
+      params
+    );
+    return result.rows.map(mapAssessmentPhoto).filter(Boolean);
+  }
+}
+
+function mapIntake(row) {
+  if (!row.intake_pk) return null;
+  return {
+    id: row.intake_pk,
+    type: row.intake_type,
+    flagged: Boolean(row.flagged),
+    flagReason: row.flag_reason || '',
+    signerName: row.signer_name || '',
+    signedAt: row.signed_at,
+    signatureData: row.signature_data || null,
+    createdAt: row.intake_created_at,
+    answers: formatIntakeForOwner(row.answers),
+  };
+}
+
+async function getBookingDetail(bookingId) {
+  const result = await query(
+    `SELECT
+       b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id, b.visit_context,
+       b.intake_id,
+       c.id AS client_id, c.name AS client_name, c.email AS client_email, c.phone AS client_phone,
+       t.name AS treatment_name, t.tag AS treatment_tag, t.price, t.category AS treatment_category,
+       i.id AS intake_pk, i.intake_type, i.answers, i.flagged, i.flag_reason,
+       i.signer_name, i.signed_at, i.signature_data, i.created_at AS intake_created_at
+     FROM bookings b
+     JOIN clients c ON c.id = b.client_id
+     LEFT JOIN treatments t ON t.id = b.treatment_id
+     LEFT JOIN booking_intakes i ON i.id = b.intake_id
+     WHERE b.id = $1`,
+    [bookingId]
+  );
+
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  const intake = mapIntake(row);
+
+  const photos = await listAssessmentPhotos(
+    `WHERE booking_id = $1
+        OR (
+          client_id = $2
+          AND booking_id IS NULL
+          AND $3 = 'micropigmentacion-soft-pixel'
+        )
+     ORDER BY created_at DESC`,
+    [row.id, row.client_id, row.treatment_id]
+  );
+
+  return {
+    id: row.id,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    status: row.status,
+    source: row.source,
+    visitContext: row.visit_context,
+    treatmentId: row.treatment_id,
+    treatmentName: row.treatment_name || 'Cita',
+    treatmentTag: row.treatment_tag || '',
+    treatmentCategory: row.treatment_category || '',
+    price: row.price != null ? Number(row.price) : null,
+    clientId: row.client_id,
+    clientName: row.client_name,
+    clientEmail: row.client_email,
+    clientPhone: row.client_phone,
+    hasIntake: Boolean(intake),
+    intakeFlagged: Boolean(intake?.flagged),
+    intake,
+    hasPhoto: photos.length > 0,
+    photos,
+  };
 }
 
 async function listOwnerTreatments() {
@@ -822,6 +968,7 @@ module.exports = {
   getClientDetail,
   updateClient,
   listCalendarEvents,
+  getBookingDetail,
   listOwnerTreatments,
   listServices,
   listServicesForExport,

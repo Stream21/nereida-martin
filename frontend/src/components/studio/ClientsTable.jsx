@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
+import ClientHistoryModal from './ClientHistoryModal'
 import {
   createClient,
   disableClient,
@@ -92,7 +93,7 @@ function statusMeta(client) {
   }
 }
 
-function ClientFichaModal({ clientId, onClose, onSaved }) {
+function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -210,9 +211,23 @@ function ClientFichaModal({ clientId, onClose, onSaved }) {
             </button>
 
             <div className="pt-2 border-t border-outline-variant/20">
-              <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary mb-3">
-                Historial de citas
-              </p>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                  Historial de citas
+                </p>
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenHistory?.(clientId)
+                      onClose()
+                    }}
+                    className="cursor-pointer text-xs text-primary hover:bg-primary/10 rounded-lg px-2 py-1.5 min-h-9"
+                  >
+                    Ver en cards
+                  </button>
+                )}
+              </div>
               {history.length === 0 ? (
                 <p className="text-sm text-on-surface-variant">Sin citas registradas.</p>
               ) : (
@@ -222,8 +237,17 @@ function ClientFichaModal({ clientId, onClose, onSaved }) {
                       key={b.id}
                       className="rounded-xl bg-surface-container-low px-3 py-2 text-sm"
                     >
-                      <div className="font-medium text-on-surface">
+                      <div className="font-medium text-on-surface flex items-center gap-1.5">
                         {b.treatmentName || 'Cita'}
+                        {b.hasIntake && (
+                          <Icon
+                            name={b.intakeFlagged ? 'warning' : 'assignment'}
+                            className={`text-base ${b.intakeFlagged ? 'text-error' : 'text-primary'}`}
+                          />
+                        )}
+                        {b.hasPhoto && (
+                          <Icon name="photo_camera" className="text-base text-primary" />
+                        )}
                       </div>
                       <div className="text-xs text-on-surface-variant">
                         {formatDateTime(b.startTime)} · {b.status}
@@ -262,6 +286,7 @@ export default function ClientsTable() {
   const [addError, setAddError] = useState('')
   const [importing, setImporting] = useState(false)
   const [fichaId, setFichaId] = useState(null)
+  const [historyId, setHistoryId] = useState(null)
   const fileRef = useRef(null)
   const tableTopRef = useRef(null)
 
@@ -704,6 +729,15 @@ export default function ClientsTable() {
                       >
                         <Icon name="edit" className="text-lg" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryId(client.id)}
+                        title="Ver historial de citas"
+                        aria-label="Ver historial de citas"
+                        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Icon name="history" className="text-lg" />
+                      </button>
                       {client.accountStatus !== 'active' && client.accountStatus !== 'disabled' && (
                         <button
                           type="button"
@@ -782,11 +816,15 @@ export default function ClientsTable() {
         <ClientFichaModal
           clientId={fichaId}
           onClose={() => setFichaId(null)}
+          onOpenHistory={(id) => setHistoryId(id)}
           onSaved={() => {
             showToast('Ficha actualizada')
             loadClients()
           }}
         />
+      )}
+      {historyId && (
+        <ClientHistoryModal clientId={historyId} onClose={() => setHistoryId(null)} />
       )}
     </div>
   )

@@ -137,6 +137,23 @@ router.get('/treatments', async (req, res) => {
   }
 });
 
+router.get('/bookings/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const booking = await dashboard.getBookingDetail(id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Cita no encontrada' });
+    }
+    res.json({ booking });
+  } catch (err) {
+    console.error('Owner get booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/bookings', async (req, res) => {
   try {
     const { clientId, treatmentId, startTime, date, time } = req.body || {};

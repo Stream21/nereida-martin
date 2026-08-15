@@ -175,6 +175,45 @@ async function createManualClient({ name, phone, email }) {
   return { client: mapClientRow(result.rows[0]) };
 }
 
+async function findOrCreateByContact({ name, phone, email }) {
+  const nameTrim = String(name || '').trim();
+  const phoneRaw = phone ? String(phone).trim() : '';
+  const phoneNorm = normalizePhone(phoneRaw);
+  const emailNorm = email ? String(email).trim().toLowerCase() : null;
+  const emailValid = emailNorm && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm) ? emailNorm : null;
+
+  if (phoneNorm) {
+    const existing = await query(`SELECT id FROM clients WHERE phone_normalized = $1`, [phoneNorm]);
+    if (existing.rows[0]) return { clientId: existing.rows[0].id, created: false };
+  }
+  if (emailValid) {
+    const existing = await query(`SELECT id FROM clients WHERE LOWER(email) = $1`, [emailValid]);
+    if (existing.rows[0]) return { clientId: existing.rows[0].id, created: false };
+  }
+
+  try {
+    const result = await query(
+      `INSERT INTO clients (name, email, phone, phone_normalized, account_status)
+       VALUES ($1, $2, $3, $4, 'invited')
+       RETURNING id`,
+      [nameTrim, emailValid, phoneRaw || null, phoneNorm]
+    );
+    return { clientId: result.rows[0].id, created: true };
+  } catch (err) {
+    if (err.code === '23505') {
+      if (phoneNorm) {
+        const again = await query(`SELECT id FROM clients WHERE phone_normalized = $1`, [phoneNorm]);
+        if (again.rows[0]) return { clientId: again.rows[0].id, created: false };
+      }
+      if (emailValid) {
+        const again = await query(`SELECT id FROM clients WHERE LOWER(email) = $1`, [emailValid]);
+        if (again.rows[0]) return { clientId: again.rows[0].id, created: false };
+      }
+    }
+    throw err;
+  }
+}
+
 function mapClientRow(row) {
   return {
     id: row.id,
@@ -226,6 +265,7 @@ module.exports = {
   parseXlsxBuffer,
   parseXlsxFile,
   createManualClient,
+  findOrCreateByContact,
   setAccountStatus,
   mapClientRow,
 };

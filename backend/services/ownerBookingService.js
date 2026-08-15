@@ -95,6 +95,17 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
     );
     const booking = bookingResult.rows[0];
 
+    if (treatmentId === 'micropigmentacion-soft-pixel') {
+      await client.query(
+        `UPDATE henna_assessments
+         SET booking_id = $1
+         WHERE client_id = $2
+           AND booking_id IS NULL
+           AND photo_path LIKE 'micro-requests/%'`,
+        [booking.id, clientId]
+      );
+    }
+
     await client.query(
       `UPDATE clients SET
          first_booking_at = COALESCE(first_booking_at, NOW()),

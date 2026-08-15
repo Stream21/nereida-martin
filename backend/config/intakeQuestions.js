@@ -153,6 +153,11 @@ const INTAKE_LABELS = {
 
 const YES_NO_LABELS = { yes: 'Sí', no: 'No' };
 const PREGNANCY_LABELS = { no: 'No', pregnant: 'Embarazada', breastfeeding: 'Lactancia' };
+const PURPOSE_LABELS = {
+  treatment: 'Recibir un tratamiento de belleza',
+  consultation: 'Asesoramiento profesional',
+  maintenance: 'Mantenimiento de un tratamiento previo',
+};
 
 function isYes(value) {
   return value === true || value === 'yes';
@@ -203,18 +208,45 @@ function formatAnswerValue(key, value) {
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
   if (YES_NO_LABELS[value]) return YES_NO_LABELS[value];
   if (key === 'pregnancy' && PREGNANCY_LABELS[value]) return PREGNANCY_LABELS[value];
+  if (key === 'purpose' && PURPOSE_LABELS[value]) return PURPOSE_LABELS[value];
   return String(value);
 }
 
+function parseIntakeAnswers(answers) {
+  if (!answers) return null;
+  if (typeof answers === 'string') {
+    try {
+      return JSON.parse(answers);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof answers === 'object') return answers;
+  return null;
+}
+
 function formatIntakeSummary(answers) {
-  if (!answers || typeof answers !== 'object') return null;
-  return Object.entries(answers)
+  const parsed = parseIntakeAnswers(answers);
+  if (!parsed) return null;
+  return Object.entries(parsed)
     .filter(([key]) => !key.startsWith('_'))
     .map(([key, value]) => {
       const label = INTAKE_LABELS[key] || key;
       return `${label}: ${formatAnswerValue(key, value)}`;
     })
     .join('\n');
+}
+
+function formatIntakeForOwner(answers) {
+  const parsed = parseIntakeAnswers(answers);
+  if (!parsed) return [];
+  return Object.entries(parsed)
+    .filter(([key]) => !key.startsWith('_'))
+    .map(([key, value]) => ({
+      id: key,
+      label: INTAKE_LABELS[key] || key,
+      displayValue: formatAnswerValue(key, value),
+    }));
 }
 
 function getStudioQuestions() {
@@ -230,6 +262,7 @@ module.exports = {
   getTreatmentQuestions,
   evaluateIntakeFlags,
   formatIntakeSummary,
+  formatIntakeForOwner,
   INTAKE_LABELS,
   FIRST_TREATMENT_QUESTIONS,
 };

@@ -139,6 +139,17 @@ export function fetchOwnerTreatments() {
   return ownerFetch('/treatments')
 }
 
+export function fetchOwnerBooking(bookingId) {
+  return ownerFetch(`/bookings/${bookingId}`)
+}
+
+export function ownerUploadUrl(photoUrlOrPath) {
+  if (!photoUrlOrPath) return ''
+  if (/^https?:\/\//i.test(photoUrlOrPath)) return photoUrlOrPath
+  const path = photoUrlOrPath.startsWith('/') ? photoUrlOrPath : `/uploads/${photoUrlOrPath}`
+  return `${API_URL}${path}`
+}
+
 export function createOwnerBooking({ clientId, treatmentId, startTime, date, time }) {
   return ownerFetch('/bookings', {
     method: 'POST',

@@ -19,6 +19,7 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
+import BookingDetailModal from './BookingDetailModal'
 import {
   createOwnerBooking,
   fetchClients,
@@ -494,84 +495,6 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   )
 }
 
-function EventDetailModal({ event, onClose }) {
-  const google = isGoogleEvent(event)
-  const start = new Date(event.startTime)
-  const end = new Date(event.endTime)
-  const durationMins = Math.max(0, Math.round((end - start) / 60000))
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-surface-container-lowest shadow-[0_20px_50px_rgba(67,61,60,0.14)] p-5 sm:p-6 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="font-headline text-xl text-on-surface">{event.clientName}</h3>
-            <p className="text-sm text-on-surface-variant mt-1">{event.treatmentName}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer p-2.5 min-h-11 min-w-11 rounded-full hover:bg-surface-container shrink-0"
-            aria-label="Cerrar"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-
-        <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 px-4 py-3.5 space-y-2.5">
-          <div className="grid grid-cols-[1.25rem_1fr] gap-x-3 items-start">
-            <Icon name="schedule" className="text-primary text-xl leading-none w-5 h-5 flex items-center justify-center" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary leading-none">
-                Horario
-              </p>
-              <p className="text-base font-medium text-on-surface tabular-nums mt-1">
-                {format(start, 'HH:mm')} – {format(end, 'HH:mm')}
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-[1.25rem_1fr] gap-x-3 items-center">
-            <Icon name="timelapse" className="text-on-surface-variant text-xl leading-none w-5 h-5 flex items-center justify-center" />
-            <p className="text-sm text-on-surface-variant">
-              Duración · {formatDurationLabel(durationMins)}
-            </p>
-          </div>
-          <div className="grid grid-cols-[1.25rem_1fr] gap-x-3 items-center">
-            <Icon name="calendar_today" className="text-on-surface-variant text-xl leading-none w-5 h-5 flex items-center justify-center" />
-            <p className="text-xs text-on-surface-variant capitalize">
-              {format(start, "EEEE d MMMM yyyy", { locale: es })}
-            </p>
-          </div>
-        </div>
-
-        {google ? (
-          <div className="flex items-start gap-3 rounded-2xl bg-surface-container-low border border-outline-variant/30 px-4 py-3">
-            <Icon name="lock" className="text-on-surface-variant text-lg shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-on-surface">Cita de Google Calendar</p>
-              <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                Solo lectura aquí. Edítala en Google Calendar.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-on-surface-variant flex items-center gap-1.5">
-            <Icon name="event" className="text-base" />
-            {event.source === 'owner' ? 'Agenda estudio' : 'Reserva web'}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="cursor-pointer w-full rounded-2xl border border-outline-variant/40 py-3 min-h-12 text-sm font-medium hover:bg-surface-container-low"
-        >
-          Cerrar
-        </button>
-      </div>
-    </div>
-  )
-}
 
 /**
  * Timed grid shared by Day (1 col) and Week (5 cols) — Apple/Google Calendar layout.
@@ -728,7 +651,13 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                           e.stopPropagation()
                           onEventClick(ev)
                         }}
-                        title={`${formatRange(ev)} · ${ev.clientName} · ${ev.treatmentName}`}
+                        title={`${formatRange(ev)} · ${ev.clientName} · ${ev.treatmentName}${
+                          ev.hasIntake
+                            ? ev.intakeFlagged
+                              ? ' · Revisar cuestionario'
+                              : ' · Cuestionario'
+                            : ''
+                        }${ev.hasPhoto ? ' · Fotos' : ''}`}
                         className={`cursor-pointer absolute z-[2] rounded-md sm:rounded-lg px-1 sm:px-1.5 py-0.5 text-left overflow-hidden border transition-shadow hover:z-[3] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
                           google
                             ? 'bg-surface-container border-outline-variant/40 text-on-surface-variant'
@@ -744,6 +673,18 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                         <div className="flex items-start gap-0.5 min-w-0">
                           {google && (
                             <Icon name="lock" className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-80" />
+                          )}
+                          {!google && ev.hasIntake && (
+                            <Icon
+                              name={ev.intakeFlagged ? 'warning' : 'assignment'}
+                              className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-90"
+                            />
+                          )}
+                          {!google && ev.hasPhoto && !ev.hasIntake && (
+                            <Icon
+                              name="photo_camera"
+                              className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-90"
+                            />
                           )}
                           <div className="min-w-0 flex-1 leading-tight">
                             <p
@@ -1053,7 +994,12 @@ export default function StudioCalendar() {
       )}
 
       {detailEvent && (
-        <EventDetailModal event={detailEvent} onClose={() => setDetailEvent(null)} />
+        <BookingDetailModal
+          key={detailEvent.id}
+          bookingId={detailEvent.id}
+          preview={detailEvent}
+          onClose={() => setDetailEvent(null)}
+        />
       )}
     </div>
   )
