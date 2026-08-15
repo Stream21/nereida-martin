@@ -1,4 +1,5 @@
 const { query } = require('../db/pool');
+const { blockedWeeksFromBookings } = require('../utils/perfiladoSpacing');
 
 const IMPORTED_EMAIL = 'imported@studio.local';
 
@@ -75,6 +76,7 @@ async function lookupClientByEmail(email) {
           declaredProfile: client.declared_profile,
         }
       : null,
+    perfiladoBlockedWeeks: blockedWeeksFromBookings(bookings),
   };
 }
 

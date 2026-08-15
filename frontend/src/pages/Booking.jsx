@@ -660,7 +660,14 @@ export default function Booking() {
 
       if (!res.ok) {
         if (res.status === 409) {
-          setBookingError(data.message || 'Este horario ya no está disponible.')
+          if (data.code === 'PERFILADO_WEEKLY_LIMIT') {
+            setBookingError(
+              data.message ||
+                'Solo puedes reservar un perfilado por semana. Elige una fecha de la semana siguiente.'
+            )
+          } else {
+            setBookingError(data.message || 'Este horario ya no está disponible.')
+          }
           const calIdx = flow.indexOf('calendar')
           setDirection(-1)
           setStepIndex(calIdx >= 0 ? calIdx : 0)
@@ -940,6 +947,7 @@ export default function Booking() {
                 onSelectDate={setSelectedDate}
                 onSelectTime={setSelectedTime}
                 treatmentId={selectedTreatment?.id}
+                perfiladoBlockedWeeks={lookupData?.perfiladoBlockedWeeks || []}
               />
             </motion.div>
           )}

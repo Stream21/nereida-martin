@@ -30,6 +30,7 @@ const {
   REVIEW_TYPE_PHOTO,
 } = require('../utils/photoAssessment');
 const { STUDIO_BRAND } = require('../utils/studioBrand');
+const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
 
 const router = Router();
 
@@ -247,6 +248,15 @@ router.patch('/:id', async (req, res) => {
     }
 
     const newTreatmentId = treatmentId || booking.treatment_id;
+    const perfiladoClash = await findPerfiladoWeekConflict({
+      clientId: booking.client_id,
+      treatmentId: newTreatmentId,
+      startTime: start,
+      excludeBookingId: booking.id,
+    });
+    if (perfiladoClash) {
+      return res.status(409).json(perfiladoClash);
+    }
 
     await query(
       `UPDATE bookings SET start_time = $1, end_time = $2, treatment_id = $3,
@@ -370,6 +380,16 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     const dateStr = formatStudioDate(start);
     const timeStr = formatStudioTime(start);
     const slotAvailable = await availabilityService.hasSlotAvailable(dateStr, timeStr, blockDuration);
+
+    const perfiladoClash = await findPerfiladoWeekConflict({
+      clientId: authClientId,
+      treatmentId,
+      startTime: start,
+    });
+    if (perfiladoClash) {
+      await client.query('ROLLBACK');
+      return res.status(409).json(perfiladoClash);
+    }
 
     if (!slotAvailable) {
       await client.query('ROLLBACK');

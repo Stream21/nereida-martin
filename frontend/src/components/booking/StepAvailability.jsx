@@ -17,6 +17,7 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
+import { isDateInBlockedPerfiladoWeek, isPerfiladoTreatment } from '../../utils/browDesign'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -32,7 +33,14 @@ const slotSkeletonVariants = {
   animate: { opacity: 1, transition: { repeat: Infinity, repeatType: 'reverse', duration: 0.8 } },
 }
 
-export default function StepAvailability({ selectedDate, selectedTime, onSelectDate, onSelectTime, treatmentId }) {
+export default function StepAvailability({
+  selectedDate,
+  selectedTime,
+  onSelectDate,
+  onSelectTime,
+  treatmentId,
+  perfiladoBlockedWeeks = [],
+}) {
   const [currentMonth, setCurrentMonth] = useState(() => selectedDate || new Date())
   const [slots, setSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -47,6 +55,12 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
 
   const today = startOfDay(new Date())
   const goLiveDay = bookingStartDate ? startOfDay(new Date(`${bookingStartDate}T12:00:00`)) : today
+  const applyPerfiladoSpacing = isPerfiladoTreatment(treatmentId)
+  const blockedWeeks = applyPerfiladoSpacing ? perfiladoBlockedWeeks : []
+  const hasBlockedWeeks = blockedWeeks.length > 0
+
+  const isPerfiladoWeekBlocked = (day) =>
+    applyPerfiladoSpacing && isDateInBlockedPerfiladoWeek(day, blockedWeeks)
 
   useEffect(() => {
     fetch(`${API_URL}/api/settings/public`)
@@ -95,14 +109,41 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
   useEffect(() => {
     if (loadingNextSlot || !nextSlot?.date || !nextSlot?.time || initialisedRef.current) return
 
-    initialisedRef.current = true
     const [y, m, d] = nextSlot.date.split('-').map(Number)
     const day = startOfDay(new Date(y, m - 1, d))
+
+    // Si el próximo hueco cae en una semana ya reservada de perfilado, no lo preseleccionamos.
+    if (applyPerfiladoSpacing && isDateInBlockedPerfiladoWeek(day, blockedWeeks)) {
+      initialisedRef.current = true
+      setAnchorDay(null)
+      return
+    }
+
+    initialisedRef.current = true
     setAnchorDay(day)
     pendingTimeRef.current = nextSlot.time
     setCurrentMonth(day)
     onSelectDate(day)
-  }, [loadingNextSlot, nextSlot, onSelectDate])
+  }, [loadingNextSlot, nextSlot, onSelectDate, blockedWeeks, applyPerfiladoSpacing])
+
+  useEffect(() => {
+    if (!selectedDate || !applyPerfiladoSpacing) return
+    if (isDateInBlockedPerfiladoWeek(selectedDate, blockedWeeks)) {
+      onSelectDate(null)
+      onSelectTime(null)
+    }
+  }, [selectedDate, blockedWeeks, applyPerfiladoSpacing, onSelectDate, onSelectTime])
+
+  const nextSlotIsBlocked =
+    applyPerfiladoSpacing &&
+    nextSlot?.date &&
+    isDateInBlockedPerfiladoWeek(
+      (() => {
+        const [y, m, d] = nextSlot.date.split('-').map(Number)
+        return new Date(y, m - 1, d)
+      })(),
+      blockedWeeks
+    )
 
   useEffect(() => {
     if (!selectedDate || !treatmentId) {
@@ -215,7 +256,19 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
 
   return (
     <div>
-      {nextSlot?.date && (
+      {hasBlockedWeeks && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/30 text-center"
+        >
+          <p className="text-sm text-on-surface">
+            Ya tienes un perfilado esta semana. Elige una fecha a partir de la semana siguiente.
+          </p>
+        </motion.div>
+      )}
+
+      {nextSlot?.date && !nextSlotIsBlocked && (
         <motion.div
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
@@ -283,6 +336,7 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
             const isWeekendDay = isWeekend(day)
             const dateStr = format(day, 'yyyy-MM-dd')
             const hasOpenSlots = openDates.has(dateStr)
+            const blockedByPerfilado = isPerfiladoWeekBlocked(day)
             const blockedByBusy =
               inMonth &&
               !isPast &&
@@ -292,7 +346,13 @@ export default function StepAvailability({ selectedDate, selectedTime, onSelectD
               !loadingMonthDates &&
               !hasOpenSlots
             const isDisabled =
-              !inMonth || isPast || isBeforeGoLive || isBeforeAnchor || isWeekendDay || blockedByBusy
+              !inMonth ||
+              isPast ||
+              isBeforeGoLive ||
+              isBeforeAnchor ||
+              isWeekendDay ||
+              blockedByBusy ||
+              blockedByPerfilado
 
             return (
               <motion.button

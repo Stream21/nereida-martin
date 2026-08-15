@@ -257,7 +257,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
 
   useEffect(() => {
     const t = setTimeout(() => {
-      fetchClients({ search: clientSearch, page: 1, limit: 15 })
+      fetchClients({ search: clientSearch, page: 1, limit: 15, status: 'active' })
         .then((res) => setClients(res.clients || []))
         .catch(() => setClients([]))
     }, 250)
@@ -368,11 +368,16 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
             type="search"
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
-            placeholder="Buscar…"
+            placeholder="Buscar clienta activa…"
             className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-4 py-3 text-sm outline-none focus:border-primary"
           />
           <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
-            {clients.map((c) => (
+            {clients.length === 0 ? (
+              <p className="text-xs text-on-surface-variant px-1 py-2">
+                Solo aparecen clientas con cuenta activa. Invítala o actívala en Clientes.
+              </p>
+            ) : (
+              clients.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -387,7 +392,8 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                 {c.name}
                 {c.phone ? <span className="text-on-surface-variant"> · {c.phone}</span> : null}
               </button>
-            ))}
+              ))
+            )}
           </div>
         </label>
 
