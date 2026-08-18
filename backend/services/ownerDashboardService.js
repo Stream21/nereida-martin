@@ -149,7 +149,7 @@ async function getOverview() {
   const webFed = webFedSql();
   const imported = importedSql();
 
-  const [overviewRes, bestMonthRes, cancelledRes] = await Promise.all([
+  const [overviewRes, bestMonthRes, cancelledRes, clientsRes] = await Promise.all([
     query(
       `SELECT
          COUNT(*) FILTER (
@@ -179,11 +179,6 @@ async function getOverview() {
              AND t.price IS NOT NULL
          )::int AS priced_month_bookings,
          COUNT(*) FILTER (WHERE ${webFed} AND t.price IS NULL)::int AS bookings_without_price,
-         COUNT(DISTINCT c.id) FILTER (
-           WHERE ${notImportedClientSql()}
-             AND ${studioMonthExpr('c.created_at')} = $1
-             AND ${studioMonthNumExpr('c.created_at')} = $2
-         )::int AS new_clients_month,
          COUNT(*) FILTER (WHERE ${imported})::int AS imported_total,
          COUNT(*) FILTER (
            WHERE ${imported}
@@ -237,6 +232,22 @@ async function getOverview() {
          AND ${webFedSql()}`,
       [currentYear, currentMonth]
     ),
+    query(
+      `SELECT
+         COUNT(*) FILTER (WHERE account_status = 'active')::int AS active_clients,
+         COUNT(*) FILTER (
+           WHERE ${studioMonthExpr('created_at')} = $1
+             AND ${studioMonthNumExpr('created_at')} = $2
+         )::int AS new_clients_month,
+         COUNT(*) FILTER (
+           WHERE account_status = 'active'
+             AND ${studioMonthExpr('COALESCE(registered_at, created_at)')} = $1
+             AND ${studioMonthNumExpr('COALESCE(registered_at, created_at)')} = $2
+         )::int AS new_active_month
+       FROM clients
+       WHERE ${notImportedClientSql('clients')}`,
+      [currentYear, currentMonth]
+    ),
   ]);
 
   const row = overviewRes.rows[0];
@@ -266,6 +277,7 @@ async function getOverview() {
     : null;
 
   const cancelledRow = cancelledRes.rows[0] || {};
+  const clientsRow = clientsRes.rows[0] || {};
 
   return {
     period: { year: currentYear, month: currentMonth, label: formatMonthLabel(currentYear, currentMonth) },
@@ -274,7 +286,9 @@ async function getOverview() {
     monthBookings,
     yearBookings: row.year_bookings || 0,
     averageTicket: pricedCount > 0 ? Math.round((monthRevenue / pricedCount) * 100) / 100 : 0,
-    newClientsMonth: row.new_clients_month || 0,
+    newClientsMonth: clientsRow.new_clients_month || 0,
+    activeClients: clientsRow.active_clients || 0,
+    newActiveMonth: clientsRow.new_active_month || 0,
     bookingsWithoutPrice: row.bookings_without_price || 0,
     cancelledBookings: cancelledRow.total_cancelled || 0,
     cancelledBookingsMonth: cancelledRow.month_cancelled || 0,

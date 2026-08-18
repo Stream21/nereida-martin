@@ -53,11 +53,6 @@ export default function MetricsOverview({ overview }) {
             hint={`Ticket medio ${formatEuro(overview.averageTicket)}`}
           />
           <KpiCard
-            label="Clientas nuevas"
-            value={overview.newClientsMonth}
-            hint="Este mes"
-          />
-          <KpiCard
             label="Citas canceladas"
             value={overview.cancelledBookings ?? 0}
             hint={`${overview.cancelledBookingsMonth ?? 0} este mes · ${overview.cancelledBookingsYear ?? 0} este año`}
@@ -67,7 +62,17 @@ export default function MetricsOverview({ overview }) {
 
       <div className="space-y-2">
         <SectionTitle>Actividad del estudio</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          <KpiCard
+            label="Clientas activas"
+            value={overview.activeClients ?? 0}
+            hint="Cuentas con acceso a la web"
+          />
+          <KpiCard
+            label="Altas este mes"
+            value={overview.newClientsMonth}
+            hint={`${overview.newActiveMonth ?? 0} activadas este mes`}
+          />
           <KpiCard
             label="Próximos 7 días"
             value={overview.upcomingWeekBookings ?? 0}
