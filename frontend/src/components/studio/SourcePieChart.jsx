@@ -4,7 +4,7 @@ import { CHART_COLORS, ChartCard } from './ChartCard'
 export default function SourcePieChart({ sources }) {
   if (!sources?.length) {
     return (
-      <ChartCard title="Origen de citas" subtitle="Web vs Google Calendar">
+      <ChartCard title="Tipo de visita" subtitle="Primera visita, nuevo tratamiento o clienta conocida">
         <p className="text-sm text-on-surface-variant py-8 text-center">Sin datos todavía.</p>
       </ChartCard>
     )
@@ -16,7 +16,7 @@ export default function SourcePieChart({ sources }) {
   }))
 
   return (
-    <ChartCard title="Origen de citas" subtitle="Web vs Google Calendar">
+    <ChartCard title="Tipo de visita" subtitle="Primera visita, nuevo tratamiento o clienta conocida">
       <div className="w-full min-h-[260px] h-[260px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

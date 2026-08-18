@@ -18,7 +18,7 @@ export default function BestMonthCard({ bestMonth }) {
         <p className="text-xs uppercase tracking-wide text-on-primary-container/70">Mejor mes histórico</p>
         <p className="font-headline text-2xl text-on-primary-container">{bestMonth.label}</p>
         <p className="text-sm text-on-primary-container/80 mt-1">
-          {bestMonth.bookingCount} citas confirmadas
+          {bestMonth.bookingCount} citas web y de agenda
         </p>
       </div>
     </div>

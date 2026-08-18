@@ -119,7 +119,7 @@ export default function StudioDashboard() {
 
                 {overview?.bookingsWithoutPrice > 0 && (
                   <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-2xl px-4 py-3">
-                    {overview.bookingsWithoutPrice} citas confirmadas sin precio asignado (importadas o sin tarifa).
+                    {overview.bookingsWithoutPrice} citas web confirmadas sin precio asignado.
                   </p>
                 )}
 

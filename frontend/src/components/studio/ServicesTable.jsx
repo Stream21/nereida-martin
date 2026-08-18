@@ -14,7 +14,6 @@ const PAGE_SIZE = 10
 const SOURCE_OPTIONS = [
   { value: '', label: 'Todos' },
   { value: 'web', label: 'Web' },
-  { value: 'google', label: 'Google' },
   { value: 'owner', label: 'Agenda' },
 ]
 

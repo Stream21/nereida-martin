@@ -1,9 +1,33 @@
 const { query } = require('../db/pool');
 const { TIMEZONE } = require('../utils/studioTimezone');
 const { formatIntakeForOwner } = require('../config/intakeQuestions');
+const { IMPORTED_CLIENT_EMAIL } = require('./studioSettings');
 
 const CONFIRMED_FILTER = `b.status = 'confirmed'`;
 const TZ = TIMEZONE.replace(/'/g, "''");
+const IMPORTED_EMAIL_SQL = IMPORTED_CLIENT_EMAIL.replace(/'/g, "''");
+const IMPORTED_SOURCES_SQL = `'google', 'google_sync', 'google_import'`;
+
+/** Citas reales de la app (web + agenda). Excluye bloques Importado Google. */
+function webFedSql(bookingAlias = 'b', clientAlias = 'c') {
+  return `(
+    ${clientAlias}.email IS DISTINCT FROM '${IMPORTED_EMAIL_SQL}'
+    AND COALESCE(${bookingAlias}.source, 'web') NOT IN (${IMPORTED_SOURCES_SQL})
+    AND COALESCE(${bookingAlias}.treatment_id, '') IS DISTINCT FROM 'imported'
+  )`;
+}
+
+function importedSql(bookingAlias = 'b', clientAlias = 'c') {
+  return `(
+    ${clientAlias}.email = '${IMPORTED_EMAIL_SQL}'
+    OR COALESCE(${bookingAlias}.source, '') IN (${IMPORTED_SOURCES_SQL})
+    OR ${bookingAlias}.treatment_id = 'imported'
+  )`;
+}
+
+function notImportedClientSql(clientAlias = 'c') {
+  return `${clientAlias}.email IS DISTINCT FROM '${IMPORTED_EMAIL_SQL}'`;
+}
 
 const MONTH_LABELS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -93,18 +117,22 @@ function buildServiceFilters({
   }
 
   if (source === 'google') {
-    conditions.push(`b.source = 'google'`);
+    conditions.push(`COALESCE(b.source, '') IN (${IMPORTED_SOURCES_SQL})`);
   } else if (source === 'owner') {
     conditions.push(`b.source = 'owner'`);
   } else if (source === 'web') {
     conditions.push(`(b.source = 'web' OR b.source IS NULL OR b.source = '')`);
   }
 
+  conditions.push(notImportedClientSql('c'));
+
   return { conditions, params, nextIdx: idx };
 }
 
 function mapServiceSource(source) {
-  if (source === 'google') return 'google';
+  if (source === 'google' || source === 'google_sync' || source === 'google_import') {
+    return 'google';
+  }
   if (source === 'owner') return 'owner';
   return 'web';
 }
@@ -118,30 +146,62 @@ async function getOverview() {
     new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, month: 'numeric' }).format(now)
   );
 
+  const webFed = webFedSql();
+  const imported = importedSql();
+
   const [overviewRes, bestMonthRes, cancelledRes] = await Promise.all([
     query(
       `SELECT
          COUNT(*) FILTER (
-           WHERE ${studioMonthExpr('b.start_time')} = $1
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
          )::int AS month_bookings,
          COALESCE(SUM(t.price) FILTER (
-           WHERE ${studioMonthExpr('b.start_time')} = $1
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
          ), 0)::numeric AS month_revenue,
          COUNT(*) FILTER (
-           WHERE ${studioMonthExpr('b.start_time')} = $1
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
          )::int AS year_bookings,
          COALESCE(SUM(t.price) FILTER (
-           WHERE ${studioMonthExpr('b.start_time')} = $1
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
              AND t.price IS NOT NULL
          ), 0)::numeric AS year_revenue,
-         COUNT(*) FILTER (WHERE t.price IS NULL)::int AS bookings_without_price,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+             AND t.price IS NOT NULL
+         )::int AS priced_month_bookings,
+         COUNT(*) FILTER (WHERE ${webFed} AND t.price IS NULL)::int AS bookings_without_price,
          COUNT(DISTINCT c.id) FILTER (
-           WHERE ${studioMonthExpr('c.created_at')} = $1
+           WHERE ${notImportedClientSql()}
+             AND ${studioMonthExpr('c.created_at')} = $1
              AND ${studioMonthNumExpr('c.created_at')} = $2
-         )::int AS new_clients_month
+         )::int AS new_clients_month,
+         COUNT(*) FILTER (WHERE ${imported})::int AS imported_total,
+         COUNT(*) FILTER (
+           WHERE ${imported}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+         )::int AS imported_month,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+             AND b.visit_context = 'first_studio_visit'
+         )::int AS first_visits_month,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+             AND b.visit_context = 'returning'
+         )::int AS returning_month
        FROM bookings b
        JOIN clients c ON b.client_id = c.id
        LEFT JOIN treatments t ON b.treatment_id = t.id
@@ -150,11 +210,13 @@ async function getOverview() {
     ),
     query(
       `SELECT
-         ${studioMonthExpr('start_time')} AS year,
-         ${studioMonthNumExpr('start_time')} AS month,
+         ${studioMonthExpr('b.start_time')} AS year,
+         ${studioMonthNumExpr('b.start_time')} AS month,
          COUNT(*)::int AS booking_count
-       FROM bookings
-       WHERE status = 'confirmed'
+       FROM bookings b
+       JOIN clients c ON b.client_id = c.id
+       WHERE ${CONFIRMED_FILTER}
+         AND ${webFedSql()}
        GROUP BY 1, 2
        ORDER BY booking_count DESC, year DESC, month DESC
        LIMIT 1`
@@ -172,7 +234,7 @@ async function getOverview() {
        FROM bookings b
        JOIN clients c ON b.client_id = c.id
        WHERE b.status = 'cancelled'
-         AND c.email != 'imported@studio.local'`,
+         AND ${webFedSql()}`,
       [currentYear, currentMonth]
     ),
   ]);
@@ -180,17 +242,18 @@ async function getOverview() {
   const row = overviewRes.rows[0];
   const monthBookings = row.month_bookings || 0;
   const monthRevenue = Number(row.month_revenue) || 0;
-  const pricedMonthBookings = await query(
+  const returningMonth = row.returning_month || 0;
+  const pricedCount = row.priced_month_bookings || 0;
+
+  const upcomingRes = await query(
     `SELECT COUNT(*)::int AS count
      FROM bookings b
-     LEFT JOIN treatments t ON b.treatment_id = t.id
-     WHERE ${CONFIRMED_FILTER}
-       AND ${studioMonthExpr('b.start_time')} = $1
-       AND ${studioMonthNumExpr('b.start_time')} = $2
-       AND t.price IS NOT NULL`,
-    [currentYear, currentMonth]
+     JOIN clients c ON b.client_id = c.id
+     WHERE b.status IN ('confirmed', 'pending_review')
+       AND ${webFedSql()}
+       AND b.start_time >= NOW()
+       AND b.start_time < NOW() + INTERVAL '7 days'`
   );
-  const pricedCount = pricedMonthBookings.rows[0]?.count || 0;
 
   const bestRow = bestMonthRes.rows[0];
   const bestMonth = bestRow
@@ -216,6 +279,12 @@ async function getOverview() {
     cancelledBookings: cancelledRow.total_cancelled || 0,
     cancelledBookingsMonth: cancelledRow.month_cancelled || 0,
     cancelledBookingsYear: cancelledRow.year_cancelled || 0,
+    importedBookingsTotal: row.imported_total || 0,
+    importedBookingsMonth: row.imported_month || 0,
+    upcomingWeekBookings: upcomingRes.rows[0]?.count || 0,
+    firstVisitsMonth: row.first_visits_month || 0,
+    returningRateMonth:
+      monthBookings > 0 ? Math.round((returningMonth / monthBookings) * 100) : 0,
     bestMonth,
   };
 }
@@ -228,8 +297,10 @@ async function getMonthlySeries(months = 12) {
        COUNT(*)::int AS booking_count,
        COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL), 0)::numeric AS revenue
      FROM bookings b
+     JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
+       AND ${webFedSql()}
      GROUP BY 1, 2
      ORDER BY year DESC, month DESC
      LIMIT $1`,
@@ -259,7 +330,7 @@ async function getTopClients(limit = 5) {
      JOIN bookings b ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
-       AND c.email != 'imported@studio.local'
+       AND ${webFedSql()}
      GROUP BY c.id, c.name, c.email
      ORDER BY total_spent DESC, booking_count DESC
      LIMIT $1`,
@@ -284,8 +355,10 @@ async function getByTreatment() {
        COUNT(b.id)::int AS booking_count,
        COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL), 0)::numeric AS revenue
      FROM bookings b
+     JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
+       AND ${webFedSql()}
      GROUP BY t.id, t.name, t.category
      ORDER BY booking_count DESC, revenue DESC`
   );
@@ -302,22 +375,29 @@ async function getByTreatment() {
 async function getBySource() {
   const result = await query(
     `SELECT
-       CASE WHEN b.source = 'google' THEN 'google' ELSE 'web' END AS source,
+       CASE
+         WHEN b.visit_context = 'first_studio_visit' THEN 'first_studio_visit'
+         WHEN b.visit_context = 'first_treatment' THEN 'first_treatment'
+         ELSE 'returning'
+       END AS source,
        COUNT(*)::int AS booking_count
      FROM bookings b
+     JOIN clients c ON b.client_id = c.id
      WHERE ${CONFIRMED_FILTER}
+       AND ${webFedSql()}
      GROUP BY 1
      ORDER BY booking_count DESC`
   );
 
+  const labels = {
+    first_studio_visit: 'Primera visita',
+    first_treatment: 'Nuevo tratamiento',
+    returning: 'Clienta conocida',
+  };
+
   return result.rows.map((row) => ({
     source: row.source,
-    label:
-      row.source === 'google'
-        ? 'Google Calendar'
-        : row.source === 'owner'
-          ? 'Agenda estudio'
-          : 'Reserva web',
+    label: labels[row.source] || 'Clienta conocida',
     bookingCount: row.booking_count,
   }));
 }
@@ -348,6 +428,8 @@ async function listClients({
     params.push(`%${search.trim()}%`);
     idx += 1;
   }
+
+  whereParts.push(notImportedClientSql('c'));
 
   const statusKey = typeof status === 'string' ? status.trim() : '';
   if (statusKey === 'disabled' || statusKey === 'active') {

@@ -23,14 +23,14 @@ export default function TreatmentsPieChart({ treatments }) {
 
   if (!data.length) {
     return (
-      <ChartCard title="Tratamientos" subtitle="Distribución de citas por servicio">
+      <ChartCard title="Tratamientos" subtitle="Reservas web y de agenda por servicio">
         <p className="text-sm text-on-surface-variant py-8 text-center">Sin datos todavía.</p>
       </ChartCard>
     )
   }
 
   return (
-    <ChartCard title="Tratamientos" subtitle="Distribución de citas por servicio">
+    <ChartCard title="Tratamientos" subtitle="Reservas web y de agenda por servicio">
       <div className="w-full min-h-[260px] h-[260px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

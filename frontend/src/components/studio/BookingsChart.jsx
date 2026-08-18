@@ -12,7 +12,7 @@ import { ChartCard } from './ChartCard'
 export default function BookingsChart({ months, bestMonth }) {
   if (!months?.length) {
     return (
-      <ChartCard title="Citas por mes" subtitle="Volumen mensual de citas confirmadas">
+      <ChartCard title="Citas por mes" subtitle="Reservas web y de agenda, sin importadas de Google">
         <p className="text-sm text-on-surface-variant py-8 text-center">Sin datos todavía.</p>
       </ChartCard>
     )
@@ -26,7 +26,7 @@ export default function BookingsChart({ months, bestMonth }) {
   }))
 
   return (
-    <ChartCard title="Citas por mes" subtitle="Volumen mensual — el mes récord aparece más oscuro">
+    <ChartCard title="Citas por mes" subtitle="Reservas web y de agenda — el mes récord aparece más oscuro">
       <div className="w-full min-h-[280px] h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
