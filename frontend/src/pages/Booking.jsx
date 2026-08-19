@@ -581,6 +581,11 @@ export default function Booking() {
     setBookingError(null)
   }, [])
 
+  const handleSelectTime = useCallback((time, meta) => {
+    setSelectedTime(time)
+    setCompanionSlotTime(meta?.companionTime || null)
+  }, [])
+
   const handleQuestionnaireComplete = useCallback(({ signature }) => {
     setIntakeSignature(signature)
     setDirection(1)
@@ -1006,10 +1011,7 @@ export default function Booking() {
                 selectedDate={selectedDate}
                 selectedTime={selectedTime}
                 onSelectDate={setSelectedDate}
-                onSelectTime={(time, meta) => {
-                  setSelectedTime(time)
-                  setCompanionSlotTime(meta?.companionTime || null)
-                }}
+                onSelectTime={handleSelectTime}
                 treatmentId={selectedTreatment?.id}
                 perfiladoBlockedWeeks={mergedPerfiladoBlockedWeeks}
                 jointMode={isJoint}

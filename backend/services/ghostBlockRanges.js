@@ -6,6 +6,67 @@ const { normalizeImportedEventTimes } = require('../utils/importedEventTimes');
 const { getAllDayBlockRange } = require('../utils/studioHours');
 const { addDaysToDateStr, formatStudioDate } = require('../utils/studioTimezone');
 
+const BUSY_CACHE_TTL_MS = 45_000;
+const busyCache = [];
+const busyInflight = new Map();
+
+function pruneBusyCache(now = Date.now()) {
+  for (let i = busyCache.length - 1; i >= 0; i -= 1) {
+    if (now - busyCache[i].at > BUSY_CACHE_TTL_MS) busyCache.splice(i, 1);
+  }
+}
+
+function rangesFromCache(fromMs, toMs) {
+  pruneBusyCache();
+  for (const entry of busyCache) {
+    if (entry.fromMs <= fromMs && entry.toMs >= toMs) {
+      return entry.ranges.filter((r) => r.start < toMs && r.end > fromMs);
+    }
+  }
+  return null;
+}
+
+async function loadBusyFromGoogle(timeMin, timeMax) {
+  try {
+    return await googleCalendar.getFreeBusyRange({ timeMin, timeMax });
+  } catch (err) {
+    console.warn('FreeBusy failed, falling back to listEvents:', err.message);
+    const { events } = await googleCalendar.listEvents({
+      timeMin,
+      timeMax,
+      showDeleted: false,
+    });
+    const ranges = [];
+    for (const event of events) {
+      appendGoogleBusyEventRanges(event, ranges);
+    }
+    return ranges;
+  }
+}
+
+async function fetchBusyRanges(timeMin, timeMax) {
+  const fromMs = new Date(timeMin).getTime();
+  const toMs = new Date(timeMax).getTime();
+  const cached = rangesFromCache(fromMs, toMs);
+  if (cached) return cached;
+
+  const key = `${fromMs}:${toMs}`;
+  if (busyInflight.has(key)) return busyInflight.get(key);
+
+  const pending = loadBusyFromGoogle(timeMin, timeMax)
+    .then((ranges) => {
+      busyCache.push({ fromMs, toMs, ranges, at: Date.now() });
+      if (busyCache.length > 24) busyCache.shift();
+      return ranges;
+    })
+    .finally(() => {
+      busyInflight.delete(key);
+    });
+
+  busyInflight.set(key, pending);
+  return pending;
+}
+
 /**
  * Google Calendar → busy ranges for web availability.
  *
@@ -24,7 +85,6 @@ function appendGoogleBusyEventRanges(event, ranges, { onlyDateStr = null } = {})
 
   if (event.start?.date && !event.start?.dateTime) {
     const startDate = event.start.date;
-    // Google all-day end.date is exclusive
     const endExclusive = event.end?.date || addDaysToDateStr(startDate, 1);
     let cursor = startDate;
     while (cursor < endExclusive) {
@@ -54,32 +114,11 @@ function appendGoogleBusyEventRanges(event, ranges, { onlyDateStr = null } = {})
 async function getGhostBlockRangesForDate(dateStr) {
   const timeMin = new Date(`${dateStr}T00:00:00`).toISOString();
   const timeMax = new Date(`${dateStr}T23:59:59`).toISOString();
-
-  const { events } = await googleCalendar.listEvents({
-    timeMin,
-    timeMax,
-    showDeleted: false,
-  });
-
-  const ranges = [];
-  for (const event of events) {
-    appendGoogleBusyEventRanges(event, ranges, { onlyDateStr: dateStr });
-  }
-  return ranges;
+  return fetchBusyRanges(timeMin, timeMax);
 }
 
 async function getGhostBlockRangesInRange(timeMin, timeMax) {
-  const { events } = await googleCalendar.listEvents({
-    timeMin,
-    timeMax,
-    showDeleted: false,
-  });
-
-  const ranges = [];
-  for (const event of events) {
-    appendGoogleBusyEventRanges(event, ranges);
-  }
-  return ranges;
+  return fetchBusyRanges(timeMin, timeMax);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

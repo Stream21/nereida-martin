@@ -29,12 +29,11 @@ function blockedWeeksFromBookings(bookings) {
   return [...weeks];
 }
 
-async function findPerfiladoWeekConflict({ clientId, treatmentId, startTime, excludeBookingId }) {
-  if (!isPerfiladoTreatment(treatmentId) || !clientId || !startTime) return null;
-
+async function loadPerfiladoBlockedWeekSet(clientId, excludeBookingId) {
+  if (!clientId) return new Set();
   const { query } = require('../db/pool');
   const params = [clientId, PERFILADO_TREATMENT_IDS];
-  let sql = `SELECT id, start_time, treatment_id
+  let sql = `SELECT treatment_id, status, start_time
      FROM bookings
      WHERE client_id = $1
        AND treatment_id = ANY($2::text[])
@@ -43,13 +42,16 @@ async function findPerfiladoWeekConflict({ clientId, treatmentId, startTime, exc
     sql += ' AND id <> $3';
     params.push(excludeBookingId);
   }
-
   const result = await query(sql, params);
+  return new Set(blockedWeeksFromBookings(result.rows));
+}
+
+async function findPerfiladoWeekConflict({ clientId, treatmentId, startTime, excludeBookingId }) {
+  if (!isPerfiladoTreatment(treatmentId) || !clientId || !startTime) return null;
+
+  const weeks = await loadPerfiladoBlockedWeekSet(clientId, excludeBookingId);
   const targetWeek = mondayOfStudioDate(startTime);
-  const clash = result.rows.find(
-    (row) => mondayOfStudioDate(new Date(row.start_time)) === targetWeek
-  );
-  if (!clash) return null;
+  if (!weeks.has(targetWeek)) return null;
 
   return {
     code: 'PERFILADO_WEEKLY_LIMIT',
@@ -65,5 +67,6 @@ module.exports = {
   isPerfiladoTreatment,
   mondayOfStudioDate,
   blockedWeeksFromBookings,
+  loadPerfiladoBlockedWeekSet,
   findPerfiladoWeekConflict,
 };

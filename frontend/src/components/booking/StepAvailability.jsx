@@ -23,6 +23,17 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
+const monthDatesCache = new Map()
+const slotsCache = new Map()
+
+function monthCacheKey(treatmentId, year, month, jointQuery) {
+  return `${treatmentId}|${year}-${month}|${jointQuery}`
+}
+
+function slotsCacheKey(treatmentId, dateStr, jointQuery) {
+  return `${treatmentId}|${dateStr}|${jointQuery}`
+}
+
 const dayVariants = {
   hidden: { opacity: 0, scale: 0.8 },
   visible: { opacity: 1, scale: 1 },
@@ -53,6 +64,12 @@ export default function StepAvailability({
   )
   const pendingTimeRef = useRef(null)
   const initialisedRef = useRef(false)
+  const onSelectTimeRef = useRef(onSelectTime)
+  const onSelectDateRef = useRef(onSelectDate)
+  const loadedDateKeyRef = useRef(null)
+
+  onSelectTimeRef.current = onSelectTime
+  onSelectDateRef.current = onSelectDate
 
   const today = startOfDay(new Date())
   const goLiveDay = bookingStartDate ? startOfDay(new Date(`${bookingStartDate}T12:00:00`)) : today
@@ -137,16 +154,16 @@ export default function StepAvailability({
     setAnchorDay(day)
     pendingTimeRef.current = nextSlot.time
     setCurrentMonth(day)
-    onSelectDate(day)
-  }, [loadingNextSlot, nextSlot, onSelectDate, blockedWeeks, applyPerfiladoSpacing])
+    onSelectDateRef.current(day)
+  }, [loadingNextSlot, nextSlot, blockedWeeks, applyPerfiladoSpacing])
 
   useEffect(() => {
     if (!selectedDate || !applyPerfiladoSpacing) return
     if (isDateInBlockedPerfiladoWeek(selectedDate, blockedWeeks)) {
-      onSelectDate(null)
-      onSelectTime(null)
+      onSelectDateRef.current(null)
+      onSelectTimeRef.current(null)
     }
-  }, [selectedDate, blockedWeeks, applyPerfiladoSpacing, onSelectDate, onSelectTime])
+  }, [selectedDate, blockedWeeks, applyPerfiladoSpacing])
 
   const nextSlotIsBlocked =
     applyPerfiladoSpacing &&
@@ -162,16 +179,40 @@ export default function StepAvailability({
   useEffect(() => {
     if (!selectedDate || !treatmentId || (jointMode && !companionClientId)) {
       setSlots([])
+      loadedDateKeyRef.current = null
       return
     }
 
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
-    let cancelled = false
+    const cacheKey = slotsCacheKey(treatmentId, dateStr, jointQuery)
+    const dateChanged = loadedDateKeyRef.current !== cacheKey
+    if (!dateChanged) return
+    loadedDateKeyRef.current = cacheKey
 
-    setLoadingSlots(true)
     if (!pendingTimeRef.current) {
-      onSelectTime(null)
+      onSelectTimeRef.current(null)
     }
+
+    const cached = slotsCache.get(cacheKey)
+    if (cached) {
+      setSlots(cached)
+      setLoadingSlots(false)
+      const pendingTime = pendingTimeRef.current
+      if (pendingTime) {
+        pendingTimeRef.current = null
+        const match = cached.find((s) => s.time === pendingTime && s.available)
+        if (match) {
+          onSelectTimeRef.current(
+            pendingTime,
+            jointMode ? { companionTime: match.companionTime } : undefined
+          )
+        }
+      }
+      return
+    }
+
+    let cancelled = false
+    setLoadingSlots(true)
 
     const availabilityPath = jointMode
       ? `${API_URL}/api/availability/joint?date=${dateStr}&treatmentId=${treatmentId}${jointQuery}`
@@ -180,18 +221,21 @@ export default function StepAvailability({
     fetch(availabilityPath)
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) {
-          const loadedSlots = data.slots || []
-          setSlots(loadedSlots)
-          setLoadingSlots(false)
+        if (cancelled) return
+        const loadedSlots = data.slots || []
+        slotsCache.set(cacheKey, loadedSlots)
+        setSlots(loadedSlots)
+        setLoadingSlots(false)
 
-          const pendingTime = pendingTimeRef.current
-          if (pendingTime) {
-            pendingTimeRef.current = null
-            const match = loadedSlots.find((s) => s.time === pendingTime && s.available)
-            if (match) {
-              onSelectTime(pendingTime, jointMode ? { companionTime: match.companionTime } : undefined)
-            }
+        const pendingTime = pendingTimeRef.current
+        if (pendingTime) {
+          pendingTimeRef.current = null
+          const match = loadedSlots.find((s) => s.time === pendingTime && s.available)
+          if (match) {
+            onSelectTimeRef.current(
+              pendingTime,
+              jointMode ? { companionTime: match.companionTime } : undefined
+            )
           }
         }
       })
@@ -203,7 +247,7 @@ export default function StepAvailability({
       })
 
     return () => { cancelled = true }
-  }, [selectedDate, treatmentId, jointMode, companionClientId, primaryClientId, jointQuery, onSelectTime])
+  }, [selectedDate, treatmentId, jointMode, companionClientId, primaryClientId, jointQuery])
 
   useEffect(() => {
     if (!treatmentId || (jointMode && !companionClientId)) {
@@ -214,20 +258,51 @@ export default function StepAvailability({
 
     const year = currentMonth.getFullYear()
     const month = currentMonth.getMonth() + 1
-    let cancelled = false
+    const cacheKey = monthCacheKey(treatmentId, year, month, jointQuery)
+    const cached = monthDatesCache.get(cacheKey)
 
-    setLoadingMonthDates(true)
-    setOpenDates(new Set())
+    if (cached) {
+      setOpenDates(cached)
+      setLoadingMonthDates(false)
+    } else {
+      setLoadingMonthDates(true)
+    }
+
+    let cancelled = false
 
     const monthPath = jointMode
       ? `${API_URL}/api/availability/joint/month?year=${year}&month=${month}&treatmentId=${treatmentId}${jointQuery}`
       : `${API_URL}/api/availability/month?year=${year}&month=${month}&treatmentId=${treatmentId}`
 
+    const loadMonth = (y, m, { storeOnly = false } = {}) => {
+      const key = monthCacheKey(treatmentId, y, m, jointQuery)
+      if (storeOnly && monthDatesCache.has(key)) return Promise.resolve()
+      const path = jointMode
+        ? `${API_URL}/api/availability/joint/month?year=${y}&month=${m}&treatmentId=${treatmentId}${jointQuery}`
+        : `${API_URL}/api/availability/month?year=${y}&month=${m}&treatmentId=${treatmentId}`
+      return fetch(path)
+        .then((res) => res.json())
+        .then((data) => {
+          const dates = new Set(Array.isArray(data.dates) ? data.dates : [])
+          monthDatesCache.set(key, dates)
+          return dates
+        })
+        .catch(() => {
+          const empty = new Set()
+          monthDatesCache.set(key, empty)
+          return empty
+        })
+    }
+
     fetch(monthPath)
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
-        setOpenDates(new Set(Array.isArray(data.dates) ? data.dates : []))
+        const dates = new Set(Array.isArray(data.dates) ? data.dates : [])
+        monthDatesCache.set(cacheKey, dates)
+        setOpenDates(dates)
+        const next = new Date(year, month, 1)
+        loadMonth(next.getFullYear(), next.getMonth() + 1, { storeOnly: true }).catch(() => {})
       })
       .catch(() => {
         if (!cancelled) setOpenDates(new Set())

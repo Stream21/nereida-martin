@@ -6,20 +6,24 @@ const {
 } = require('../utils/webCalendarEvent');
 const { TIMEZONE } = require('../utils/studioTimezone');
 
+let authClient = null;
+let calendarApi = null;
+
 function getAuthClient() {
+  if (authClient) return authClient;
+
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN } = process.env;
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
     throw new Error('Google Calendar credentials not configured');
   }
 
-  const oauth2Client = new google.auth.OAuth2(
+  authClient = new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET
   );
-
-  oauth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-  return oauth2Client;
+  authClient.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
+  return authClient;
 }
 
 function getCalendarId() {
@@ -27,7 +31,9 @@ function getCalendarId() {
 }
 
 function getCalendar() {
-  return google.calendar({ version: 'v3', auth: getAuthClient() });
+  if (calendarApi) return calendarApi;
+  calendarApi = google.calendar({ version: 'v3', auth: getAuthClient() });
+  return calendarApi;
 }
 
 async function createEvent({
@@ -156,28 +162,36 @@ async function listEvents({ timeMin, timeMax, syncToken, showDeleted = true }) {
   return { events, nextSyncToken };
 }
 
-async function getFreeBusy(dateStr) {
+function toIso(value) {
+  if (!value) return value;
+  if (typeof value === 'string') return value;
+  return new Date(value).toISOString();
+}
+
+async function getFreeBusyRange({ timeMin, timeMax }) {
   const calendar = getCalendar();
   const calendarId = getCalendarId();
 
-  const timeMin = new Date(`${dateStr}T00:00:00`);
-  const timeMax = new Date(`${dateStr}T23:59:59`);
-
   const result = await calendar.freebusy.query({
     resource: {
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
+      timeMin: toIso(timeMin),
+      timeMax: toIso(timeMax),
       timeZone: TIMEZONE,
       items: [{ id: calendarId }],
     },
   });
 
   const busy = result.data.calendars?.[calendarId]?.busy || [];
-
   return busy.map((b) => ({
     start: new Date(b.start).getTime(),
     end: new Date(b.end).getTime(),
   }));
+}
+
+async function getFreeBusy(dateStr) {
+  const timeMin = new Date(`${dateStr}T00:00:00`).toISOString();
+  const timeMax = new Date(`${dateStr}T23:59:59`).toISOString();
+  return getFreeBusyRange({ timeMin, timeMax });
 }
 
 async function deleteEvent(eventId) {
@@ -222,6 +236,7 @@ module.exports = {
   getEvent,
   listEvents,
   getFreeBusy,
+  getFreeBusyRange,
   deleteEvent,
   watchCalendar,
   stopWatch,

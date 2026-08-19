@@ -53,14 +53,13 @@ async function getBookedRangesForDate(dateStr, excludeBookingId = null) {
 }
 
 async function getBusyRangesForDate(dateStr, excludeBookingId = null) {
-  let ghostRanges = [];
-  try {
-    ghostRanges = await getGhostBlockRangesForDate(dateStr);
-  } catch (err) {
-    console.warn(`Ghost blocks skipped for ${dateStr}:`, err.message);
-  }
-
-  const bookedRanges = await getBookedRangesForDate(dateStr, excludeBookingId);
+  const [bookedRanges, ghostRanges] = await Promise.all([
+    getBookedRangesForDate(dateStr, excludeBookingId),
+    getGhostBlockRangesForDate(dateStr).catch((err) => {
+      console.warn(`Ghost blocks skipped for ${dateStr}:`, err.message);
+      return [];
+    }),
+  ]);
   return [...bookedRanges, ...ghostRanges];
 }
 
@@ -179,18 +178,43 @@ async function findNextAvailableSlot(treatmentId, fromDateStr = null) {
   );
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
-  let cursorDate =
-    fromDateStr || todayStudioDateStr();
+  let cursorDate = fromDateStr || todayStudioDateStr();
 
   if (cursorDate < bookingStartDate) {
     cursorDate = bookingStartDate;
   }
 
+  const lastDate = addDaysToDateStr(cursorDate, MAX_NEXT_SLOT_DAYS - 1);
+  const rangeStart = studioLocalToDate(cursorDate, 0, 0);
+  const rangeEnd = studioLocalToDate(lastDate, 23, 59);
+
+  const [bookedResult, ghostRanges] = await Promise.all([
+    query(
+      `SELECT start_time, end_time FROM bookings
+       WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
+         AND start_time < $2
+         AND end_time > $1`,
+      [rangeStart.toISOString(), rangeEnd.toISOString()]
+    ),
+    getGhostBlockRangesInRange(rangeStart.toISOString(), rangeEnd.toISOString()).catch((err) => {
+      console.warn('Ghost blocks skipped for next slot:', err.message);
+      return [];
+    }),
+  ]);
+
+  const allBusy = [
+    ...bookedResult.rows.map((row) => ({
+      start: new Date(row.start_time).getTime(),
+      end: new Date(row.end_time).getTime(),
+    })),
+    ...ghostRanges,
+  ];
+
   for (let i = 0; i < MAX_NEXT_SLOT_DAYS; i++) {
     const dateStr = addDaysToDateStr(cursorDate, i);
     if (dateStr < bookingStartDate) continue;
 
-    const busyRanges = await getBusyRangesForDate(dateStr);
+    const busyRanges = rangesOverlappingDay(allBusy, dateStr);
     const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges);
     const first = slots.find((s) => s.available);
 
@@ -250,34 +274,30 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
   const blockMinutes = blockDurationMinutes(
     treatment.duration_max || treatment.duration_min
   );
-  const bookingStartDate = await studioSettings.getBookingStartDate();
   const { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd } = monthDateBounds(
     year,
     month
   );
 
-  const bookedResult = await query(
-    `SELECT start_time, end_time FROM bookings
-     WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
-       AND start_time < $2
-       AND end_time > $1`,
-    [rangeStart.toISOString(), rangeEnd.toISOString()]
-  );
+  const [bookingStartDate, bookedResult, ghostRanges] = await Promise.all([
+    studioSettings.getBookingStartDate(),
+    query(
+      `SELECT start_time, end_time FROM bookings
+       WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
+         AND start_time < $2
+         AND end_time > $1`,
+      [rangeStart.toISOString(), rangeEnd.toISOString()]
+    ),
+    getGhostBlockRangesInRange(rangeStart.toISOString(), rangeEnd.toISOString()).catch((err) => {
+      console.warn(`Ghost blocks skipped for ${year}-${month}:`, err.message);
+      return [];
+    }),
+  ]);
 
   const bookedRanges = bookedResult.rows.map((row) => ({
     start: new Date(row.start_time).getTime(),
     end: new Date(row.end_time).getTime(),
   }));
-
-  let ghostRanges = [];
-  try {
-    ghostRanges = await getGhostBlockRangesInRange(
-      rangeStart.toISOString(),
-      rangeEnd.toISOString()
-    );
-  } catch (err) {
-    console.warn(`Ghost blocks skipped for ${year}-${month}:`, err.message);
-  }
 
   const allBusy = [...bookedRanges, ...ghostRanges];
   const dates = [];
@@ -477,30 +497,15 @@ async function getJointAvailabilityForDate(
   );
 
   if (!skipPerfiladoLimit && primaryClientId) {
-    const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
-    const filtered = [];
-    for (const slot of slots) {
-      const [hour, minute] = slot.time.split(':').map(Number);
-      const primaryStart = studioLocalToDate(dateStr, hour, minute);
-      const companionStart = new Date(primaryStart.getTime() + blocks.primaryBlock * 60000);
-
-      const primaryClash = await findPerfiladoWeekConflict({
-        clientId: primaryClientId,
-        treatmentId: blocks.realPrimaryTreatmentId || primaryTreatmentId,
-        startTime: primaryStart,
-      });
-      if (primaryClash) continue;
-
-      const companionClash = await findPerfiladoWeekConflict({
-        clientId: companionClientId,
-        treatmentId: blocks.companionTreatmentId,
-        startTime: companionStart,
-      });
-      if (companionClash) continue;
-
-      filtered.push(slot);
+    const { loadPerfiladoBlockedWeekSet, mondayOfStudioDate } = require('../utils/perfiladoSpacing');
+    const week = mondayOfStudioDate(dateStr);
+    const [primaryWeeks, companionWeeks] = await Promise.all([
+      loadPerfiladoBlockedWeekSet(primaryClientId),
+      loadPerfiladoBlockedWeekSet(companionClientId),
+    ]);
+    if (primaryWeeks.has(week) || companionWeeks.has(week)) {
+      slots = [];
     }
-    slots = filtered;
   }
 
   return {
@@ -527,30 +532,33 @@ async function getJointAvailableDatesForMonth(
   const blocks = await loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId);
   if (blocks.error) return blocks;
 
-  const bookingStartDate = await studioSettings.getBookingStartDate();
   const { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd } = monthDateBounds(year, month);
+  const { loadPerfiladoBlockedWeekSet, mondayOfStudioDate } = require('../utils/perfiladoSpacing');
 
-  const bookedResult = await query(
-    `SELECT start_time, end_time FROM bookings
-     WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
-       AND start_time < $2 AND end_time > $1`,
-    [rangeStart.toISOString(), rangeEnd.toISOString()]
-  );
+  const [bookingStartDate, bookedResult, ghostRanges, primaryWeeks, companionWeeks] = await Promise.all([
+    studioSettings.getBookingStartDate(),
+    query(
+      `SELECT start_time, end_time FROM bookings
+       WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
+         AND start_time < $2 AND end_time > $1`,
+      [rangeStart.toISOString(), rangeEnd.toISOString()]
+    ),
+    getGhostBlockRangesInRange(rangeStart.toISOString(), rangeEnd.toISOString()).catch((err) => {
+      console.warn(`Ghost blocks skipped for joint ${year}-${month}:`, err.message);
+      return [];
+    }),
+    skipPerfiladoLimit || !primaryClientId
+      ? Promise.resolve(new Set())
+      : loadPerfiladoBlockedWeekSet(primaryClientId),
+    skipPerfiladoLimit
+      ? Promise.resolve(new Set())
+      : loadPerfiladoBlockedWeekSet(companionClientId),
+  ]);
 
   const bookedRanges = bookedResult.rows.map((row) => ({
     start: new Date(row.start_time).getTime(),
     end: new Date(row.end_time).getTime(),
   }));
-
-  let ghostRanges = [];
-  try {
-    ghostRanges = await getGhostBlockRangesInRange(
-      rangeStart.toISOString(),
-      rangeEnd.toISOString()
-    );
-  } catch (err) {
-    console.warn(`Ghost blocks skipped for joint ${year}-${month}:`, err.message);
-  }
 
   const allBusy = [...bookedRanges, ...ghostRanges];
   const dates = [];
@@ -560,41 +568,19 @@ async function getJointAvailableDatesForMonth(
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     if (dateStr < bookingStartDate || isWeekendDay(dateStr)) continue;
 
+    if (!skipPerfiladoLimit) {
+      const week = mondayOfStudioDate(dateStr);
+      if (primaryWeeks.has(week) || companionWeeks.has(week)) continue;
+    }
+
     const busyRanges = rangesOverlappingDay(allBusy, dateStr);
-    let slots = getJointSlotsForDate(
+    const slots = getJointSlotsForDate(
       dateStr,
       blocks.primaryBlock,
       blocks.companionBlock,
       busyRanges,
       now
     );
-
-    if (!skipPerfiladoLimit && primaryClientId) {
-      const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
-      const filtered = [];
-      for (const slot of slots) {
-        const [hour, minute] = slot.time.split(':').map(Number);
-        const primaryStart = studioLocalToDate(dateStr, hour, minute);
-        const companionStart = new Date(primaryStart.getTime() + blocks.primaryBlock * 60000);
-
-        const primaryClash = await findPerfiladoWeekConflict({
-          clientId: primaryClientId,
-          treatmentId: primaryTreatmentId,
-          startTime: primaryStart,
-        });
-        if (primaryClash) continue;
-
-        const companionClash = await findPerfiladoWeekConflict({
-          clientId: companionClientId,
-          treatmentId: blocks.companionTreatmentId,
-          startTime: companionStart,
-        });
-        if (companionClash) continue;
-
-        filtered.push(slot);
-      }
-      slots = filtered;
-    }
 
     if (slots.some((s) => s.available)) {
       dates.push(dateStr);
