@@ -408,8 +408,8 @@ async function createWebJointBooking({
   const primaryBookingRes = await dbClient.query(
     `INSERT INTO bookings (
        client_id, treatment_id, start_time, end_time, status, source,
-       cancel_token, visit_context, joint_group_id, joint_role
-     ) VALUES ($1, $2, $3, $4, 'pending_companion', 'web', $5, $6, $7, 'primary')
+       cancel_token, visit_context, joint_role
+     ) VALUES ($1, $2, $3, $4, 'pending_companion', 'web', $5, $6, 'primary')
      RETURNING id, start_time, end_time, status, cancel_token`,
     [
       primaryClientId,
@@ -418,7 +418,6 @@ async function createWebJointBooking({
       primaryEnd.toISOString(),
       primaryCancelToken,
       visitContext,
-      groupId,
     ]
   );
   const primaryBooking = primaryBookingRes.rows[0];
@@ -426,8 +425,8 @@ async function createWebJointBooking({
   const companionBookingRes = await dbClient.query(
     `INSERT INTO bookings (
        client_id, treatment_id, start_time, end_time, status, source,
-       cancel_token, visit_context, joint_group_id, joint_role
-     ) VALUES ($1, $2, $3, $4, 'pending_companion', 'web', $5, $6, $7, 'companion')
+       cancel_token, visit_context, joint_role
+     ) VALUES ($1, $2, $3, $4, 'pending_companion', 'web', $5, $6, 'companion')
      RETURNING id, start_time, end_time, status, cancel_token`,
     [
       companionClientId,
@@ -436,7 +435,6 @@ async function createWebJointBooking({
       companionEnd.toISOString(),
       companionCancelToken,
       companionVisitContext,
-      groupId,
     ]
   );
   const companionBooking = companionBookingRes.rows[0];
@@ -454,6 +452,11 @@ async function createWebJointBooking({
       confirmToken,
       expiresAt.toISOString(),
     ]
+  );
+
+  await dbClient.query(
+    `UPDATE bookings SET joint_group_id = $1 WHERE id IN ($2, $3)`,
+    [groupId, primaryBooking.id, companionBooking.id]
   );
 
   return {
