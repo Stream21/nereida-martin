@@ -529,7 +529,7 @@ export default function Booking() {
 
     setDirection(1)
     setStepIndex((i) => Math.min(i + 1, flow.length - 1))
-  }, [currentStep, advanceFromIdentify, studioHabitual, selectedDate, selectedTime, flow.length, bookingIntent, lookupData, clientInfo.email, applyLookupData, applyMaintenanceIntent, loadingTreatments])
+  }, [currentStep, companionInfo, advanceFromIdentify, studioHabitual, selectedDate, selectedTime, flow.length, bookingIntent, lookupData, clientInfo.email, applyLookupData, applyMaintenanceIntent, loadingTreatments])
 
   const goPrev = useCallback(() => {
     if (stepIndex <= 0) return
@@ -578,6 +578,7 @@ export default function Booking() {
     setCompanionPhone(info.phone || '')
     setSelectedDate(null)
     setSelectedTime(null)
+    setBookingError(null)
   }, [])
 
   const handleQuestionnaireComplete = useCallback(({ signature }) => {
@@ -994,6 +995,7 @@ export default function Booking() {
               <StepCompanionPhone
                 companionInfo={companionInfo}
                 onValidated={handleCompanionValidated}
+                error={bookingError}
               />
             </motion.div>
           )}

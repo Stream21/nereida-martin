@@ -50,12 +50,24 @@ export const BROW_DESIGN_TRIO = [
   BROW_DESIGN_DEFINE,
 ]
 
-const BROW_DISPLAY_PRIORITY = {
-  [BROW_DESIGN_PRIMERA]: 0,
-  [BROW_DESIGN_SEGUIMIENTO]: 1,
-  [PERFILADO_CONJUNTO_ID]: 2,
-  [BROW_DESIGN_DEFINE]: 3,
-}
+/** Orden fijo en Cejas: perfilados juntos, conjunto justo debajo, luego el resto. */
+const TREATMENT_DISPLAY_ORDER = [
+  BROW_DESIGN_PRIMERA,
+  BROW_DESIGN_SEGUIMIENTO,
+  PERFILADO_CONJUNTO_ID,
+  BROW_DESIGN_DEFINE,
+  'brow-lami',
+  'brow-lami-define',
+  'brow-henna',
+  'brow-restored',
+  'micropigmentacion-soft-pixel',
+  'lash-lift-korean',
+  'skin-reset',
+  'skin-boost',
+  'labio-superior',
+  'depilacion-facial',
+  'smile-gem',
+]
 
 function mergeDoneIds(treatmentIds = [], declaredPriorTreatments = []) {
   const ids = new Set(treatmentIds)
@@ -105,11 +117,11 @@ export function resolveMaintenanceBooking(treatmentIds = []) {
 export function sortTreatmentsForDisplay(items, catalogTreatments = []) {
   const catalogOrder = new Map(catalogTreatments.map((t, index) => [t.id, index]))
   return [...items].sort((a, b) => {
-    const pa = BROW_DISPLAY_PRIORITY[a.id]
-    const pb = BROW_DISPLAY_PRIORITY[b.id]
-    if (pa != null && pb != null) return pa - pb
-    if (pa != null) return -1
-    if (pb != null) return 1
+    const ia = TREATMENT_DISPLAY_ORDER.indexOf(a.id)
+    const ib = TREATMENT_DISPLAY_ORDER.indexOf(b.id)
+    const pa = ia === -1 ? 1000 : ia
+    const pb = ib === -1 ? 1000 : ib
+    if (pa !== pb) return pa - pb
     return (catalogOrder.get(a.id) ?? 999) - (catalogOrder.get(b.id) ?? 999)
   })
 }
