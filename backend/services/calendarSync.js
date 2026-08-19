@@ -587,7 +587,8 @@ async function reconcileStaleGoogleBookings() {
     `SELECT id, google_event_id, source FROM bookings
      WHERE status IN ('confirmed', 'google_overlap')
        AND google_event_id IS NOT NULL
-       AND start_time >= NOW() - INTERVAL '1 day'`
+       AND start_time >= NOW() - INTERVAL '1 day'
+       AND start_time < NOW() + INTERVAL '14 days'`
   );
 
   const cancelled = [];

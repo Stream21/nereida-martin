@@ -75,10 +75,13 @@ router.get('/calendar-sync', async (req, res) => {
 
   try {
     const syncResult = await calendarSync.syncIncremental();
-    const upcomingReconcile = await calendarSync.reconcileUpcomingGoogleEvents();
-    const staleReconcile = await calendarSync.reconcileStaleGoogleBookings();
     await calendarSync.reconcilePendingGoogleDeletes();
     await calendarSync.reconcileMissingGoogleEvents();
+
+    let upcomingReconcile = null;
+    if (req.query.full === '1') {
+      upcomingReconcile = await calendarSync.reconcileUpcomingGoogleEvents();
+    }
 
     let watchRenewed = false;
     try {
@@ -91,13 +94,15 @@ router.get('/calendar-sync', async (req, res) => {
     res.json({
       sync: syncResult,
       upcomingReconcile,
-      staleReconcile,
       watchRenewed,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     console.error('Cron calendar-sync error:', err);
-    res.status(500).json({ error: 'Error en sincronización de calendario' });
+    res.status(500).json({
+      error: 'Error en sincronización de calendario',
+      detail: err.message,
+    });
   }
 });
 
