@@ -35,6 +35,31 @@ export default function MetricsOverview({ overview }) {
   return (
     <div className="space-y-5">
       <div className="space-y-2">
+        <SectionTitle>Servicios contratados</SectionTitle>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          <KpiCard
+            label="Importe contratado"
+            value={formatEuro(overview.contractedRevenue)}
+            hint={
+              overview.pendingReviewBookings
+                ? `${overview.contractedBookings} servicios · ${overview.pendingReviewBookings} en revisión`
+                : `${overview.contractedBookings} servicios · cuenta prevista`
+            }
+          />
+          <KpiCard
+            label="Contratado este año"
+            value={formatEuro(overview.yearContractedRevenue)}
+            hint={`${overview.yearContractedBookings ?? 0} servicios`}
+          />
+          <KpiCard
+            label="Contratado este mes"
+            value={formatEuro(overview.monthContractedRevenue)}
+            hint={`${overview.monthContractedBookings ?? 0} servicios · ${overview.period?.label}`}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <SectionTitle>Citas ya realizadas</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
           <KpiCard

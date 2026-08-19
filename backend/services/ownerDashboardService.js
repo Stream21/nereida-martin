@@ -5,6 +5,7 @@ const { IMPORTED_CLIENT_EMAIL } = require('./studioSettings');
 const { listGoogleCalendarItemsInRange } = require('./ghostBlockRanges');
 
 const CONFIRMED_FILTER = `b.status = 'confirmed'`;
+const CONTRACTED_FILTER = `b.status IN ('confirmed', 'pending_review')`;
 const COMPLETED_SQL = `b.start_time <= NOW()`;
 const TZ = TIMEZONE.replace(/'/g, "''");
 const IMPORTED_EMAIL_SQL = IMPORTED_CLIENT_EMAIL.replace(/'/g, "''");
@@ -156,12 +157,14 @@ async function getOverview() {
       `SELECT
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
          )::int AS month_bookings,
          COALESCE(SUM(t.price) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
@@ -169,23 +172,57 @@ async function getOverview() {
          ), 0)::numeric AS month_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
          )::int AS year_bookings,
          COALESCE(SUM(t.price) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND t.price IS NOT NULL
          ), 0)::numeric AS year_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
          )::int AS priced_month_bookings,
-         COUNT(*) FILTER (WHERE ${webFed} AND t.price IS NULL)::int AS bookings_without_price,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+         )::int AS contracted_bookings,
+         COALESCE(SUM(t.price) FILTER (
+           WHERE ${webFed}
+             AND t.price IS NOT NULL
+         ), 0)::numeric AS contracted_revenue,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+         )::int AS year_contracted_bookings,
+         COALESCE(SUM(t.price) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND t.price IS NOT NULL
+         ), 0)::numeric AS year_contracted_revenue,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+         )::int AS month_contracted_bookings,
+         COALESCE(SUM(t.price) FILTER (
+           WHERE ${webFed}
+             AND ${studioMonthExpr('b.start_time')} = $1
+             AND ${studioMonthNumExpr('b.start_time')} = $2
+             AND t.price IS NOT NULL
+         ), 0)::numeric AS month_contracted_revenue,
+         COUNT(*) FILTER (
+           WHERE ${webFed}
+             AND b.status = 'pending_review'
+         )::int AS pending_review_bookings,
+         COUNT(*) FILTER (WHERE ${webFed} AND ${CONFIRMED_FILTER} AND t.price IS NULL)::int AS bookings_without_price,
          COUNT(*) FILTER (WHERE ${imported})::int AS imported_total,
          COUNT(*) FILTER (
            WHERE ${imported}
@@ -194,6 +231,7 @@ async function getOverview() {
          )::int AS imported_month,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
@@ -201,6 +239,7 @@ async function getOverview() {
          )::int AS first_visits_month,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${CONFIRMED_FILTER}
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
@@ -209,7 +248,7 @@ async function getOverview() {
        FROM bookings b
        JOIN clients c ON b.client_id = c.id
        LEFT JOIN treatments t ON b.treatment_id = t.id
-       WHERE ${CONFIRMED_FILTER}`,
+       WHERE ${CONTRACTED_FILTER}`,
       [currentYear, currentMonth]
     ),
     query(
@@ -295,6 +334,13 @@ async function getOverview() {
     yearRevenue: Number(row.year_revenue) || 0,
     monthBookings,
     yearBookings: row.year_bookings || 0,
+    contractedRevenue: Number(row.contracted_revenue) || 0,
+    contractedBookings: row.contracted_bookings || 0,
+    yearContractedRevenue: Number(row.year_contracted_revenue) || 0,
+    yearContractedBookings: row.year_contracted_bookings || 0,
+    monthContractedRevenue: Number(row.month_contracted_revenue) || 0,
+    monthContractedBookings: row.month_contracted_bookings || 0,
+    pendingReviewBookings: row.pending_review_bookings || 0,
     averageTicket: pricedCount > 0 ? Math.round((monthRevenue / pricedCount) * 100) / 100 : 0,
     newClientsMonth: clientsRow.new_clients_month || 0,
     activeClients: clientsRow.active_clients || 0,
