@@ -189,24 +189,49 @@ function layoutOverlaps(dayEvents) {
     .filter(Boolean)
     .sort((a, b) => a.start - b.start || b.end - a.end)
 
-  const columnEnds = []
-  for (const item of items) {
-    let col = columnEnds.findIndex((end) => end <= item.start)
-    if (col === -1) {
-      col = columnEnds.length
-      columnEnds.push(item.end)
+  if (items.length === 0) return []
+
+  // Group into clusters of mutually overlapping events
+  const clusters = []
+  let cluster = [items[0]]
+  let clusterEnd = items[0].end
+
+  for (let i = 1; i < items.length; i++) {
+    if (items[i].start < clusterEnd) {
+      cluster.push(items[i])
+      clusterEnd = Math.max(clusterEnd, items[i].end)
     } else {
-      columnEnds[col] = item.end
+      clusters.push(cluster)
+      cluster = [items[i]]
+      clusterEnd = items[i].end
     }
-    item.col = col
   }
-  const colCount = Math.max(1, columnEnds.length)
-  return items.map((item) => ({
-    ...item,
-    colCount,
-    leftPct: (item.col / colCount) * 100,
-    widthPct: 100 / colCount,
-  }))
+  clusters.push(cluster)
+
+  const result = []
+  for (const group of clusters) {
+    const columnEnds = []
+    for (const item of group) {
+      let col = columnEnds.findIndex((end) => end <= item.start)
+      if (col === -1) {
+        col = columnEnds.length
+        columnEnds.push(item.end)
+      } else {
+        columnEnds[col] = item.end
+      }
+      item.col = col
+    }
+    const colCount = Math.max(1, columnEnds.length)
+    for (const item of group) {
+      result.push({
+        ...item,
+        colCount,
+        leftPct: (item.col / colCount) * 100,
+        widthPct: 100 / colCount,
+      })
+    }
+  }
+  return result
 }
 
 function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClose, onCreated }) {

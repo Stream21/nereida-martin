@@ -40,5 +40,5 @@ ALTER TABLE bookings ADD CONSTRAINT no_overlap EXCLUDE USING gist (
 
 -- Virtual treatment for joint perfilado bookings
 INSERT INTO treatments (id, category, name, tag, duration_min, duration_max, price, active)
-VALUES ('perfilado-conjunto', 'cejas', 'Perfilado Conjunto', 'Dos perfilados seguidos · precio según historial', 90, NULL, NULL, true)
+VALUES ('perfilado-conjunto', 'cejas', 'Perfilado Conjunto', 'Dos perfilados seguidos · precio según historial', 60, NULL, NULL, true)
 ON CONFLICT (id) DO NOTHING;
