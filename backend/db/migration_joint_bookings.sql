@@ -38,7 +38,13 @@ ALTER TABLE bookings ADD CONSTRAINT no_overlap EXCLUDE USING gist (
   tstzrange(start_time, end_time) WITH &&
 ) WHERE (status IN ('confirmed', 'pending_review', 'pending_companion'));
 
--- Virtual treatment for joint perfilado bookings
+-- Virtual treatment for joint perfilado bookings (1 h en total: 30 min cada una)
 INSERT INTO treatments (id, category, name, tag, duration_min, duration_max, price, active)
 VALUES ('perfilado-conjunto', 'cejas', 'Perfilado Conjunto', 'Dos perfilados seguidos · precio según historial', 60, NULL, NULL, true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  duration_min = 60,
+  duration_max = NULL,
+  category = EXCLUDED.category,
+  name = EXCLUDED.name,
+  tag = EXCLUDED.tag,
+  active = true;

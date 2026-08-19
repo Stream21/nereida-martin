@@ -18,7 +18,19 @@ const BROW_DESIGN_TRIO = [BROW_DESIGN_PRIMERA, BROW_DESIGN_SEGUIMIENTO, BROW_DES
 const PERFILADO_CONJUNTO_ID = 'perfilado-conjunto';
 
 const JOINT_EXPIRY_HOURS = 24;
+const JOINT_TOTAL_MINUTES_FALLBACK = 60;
 const OCCUPIED_STATUSES = ['confirmed', 'pending_review', 'pending_companion', 'google_overlap'];
+
+async function getJointPersonBlockMinutes() {
+  const result = await query(
+    'SELECT duration_min, duration_max FROM treatments WHERE id = $1',
+    [PERFILADO_CONJUNTO_ID]
+  );
+  const total = result.rows[0]
+    ? result.rows[0].duration_max || result.rows[0].duration_min || JOINT_TOTAL_MINUTES_FALLBACK
+    : JOINT_TOTAL_MINUTES_FALLBACK;
+  return blockDurationMinutes(total / 2);
+}
 
 async function resolveCompanionTreatment(companionClientId) {
   return _resolvePerfiladoForClient(companionClientId);
@@ -43,7 +55,12 @@ async function _resolvePerfiladoForClient(clientId) {
        AND treatment_id = ANY($2::text[])`,
     [clientId, BROW_DESIGN_TRIO]
   );
-  const hasHistory = historyRes.rows.length > 0;
+  const flaggedRes = await query(
+    `SELECT has_perfilado_history FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  const hasHistory =
+    historyRes.rows.length > 0 || flaggedRes.rows[0]?.has_perfilado_history === true;
 
   const treatmentId = hasHistory ? BROW_DESIGN_SEGUIMIENTO : BROW_DESIGN_PRIMERA;
   const treatment = byId[treatmentId];
@@ -341,10 +358,13 @@ async function createWebJointBooking({
   const companionInfo = await resolveCompanionTreatment(companionClientId);
   if (companionInfo.error) return companionInfo;
 
-  const primaryBlock = blockDurationMinutes(
-    primaryTreatment.duration_max || primaryTreatment.duration_min
-  );
-  const companionBlock = companionInfo.blockMinutes;
+  const personBlock = isJointTreatment(primaryTreatmentId)
+    ? await getJointPersonBlockMinutes()
+    : null;
+  const primaryBlock =
+    personBlock ||
+    blockDurationMinutes(primaryTreatment.duration_max || primaryTreatment.duration_min);
+  const companionBlock = personBlock || companionInfo.blockMinutes;
 
   const start = new Date(startTime);
   const primaryEnd = new Date(start.getTime() + primaryBlock * 60000);
@@ -524,6 +544,7 @@ module.exports = {
   OCCUPIED_STATUSES,
   isPerfiladoTreatment,
   isJointTreatment,
+  getJointPersonBlockMinutes,
   resolveCompanionTreatment,
   resolvePrimaryTreatment,
   lookupCompanionByPhone,

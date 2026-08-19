@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   startOfMonth,
   endOfMonth,
@@ -28,11 +28,6 @@ const dayVariants = {
   visible: { opacity: 1, scale: 1 },
 }
 
-const slotSkeletonVariants = {
-  initial: { opacity: 0.4 },
-  animate: { opacity: 1, transition: { repeat: Infinity, repeatType: 'reverse', duration: 0.8 } },
-}
-
 export default function StepAvailability({
   selectedDate,
   selectedTime,
@@ -53,7 +48,9 @@ export default function StepAvailability({
   const [loadingNextSlot, setLoadingNextSlot] = useState(() => !!treatmentId)
   const [anchorDay, setAnchorDay] = useState(null)
   const [openDates, setOpenDates] = useState(() => new Set())
-  const [loadingMonthDates, setLoadingMonthDates] = useState(false)
+  const [loadingMonthDates, setLoadingMonthDates] = useState(
+    () => !!treatmentId && (!jointMode || !!companionClientId)
+  )
   const pendingTimeRef = useRef(null)
   const initialisedRef = useRef(false)
 
@@ -220,6 +217,7 @@ export default function StepAvailability({
     let cancelled = false
 
     setLoadingMonthDates(true)
+    setOpenDates(new Set())
 
     const monthPath = jointMode
       ? `${API_URL}/api/availability/joint/month?year=${year}&month=${month}&treatmentId=${treatmentId}${jointQuery}`
@@ -252,8 +250,11 @@ export default function StepAvailability({
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: es })
 
   const handleSelectDate = (day) => {
+    if (loadingMonthDates) return
     onSelectDate(day)
   }
+
+  const calendarLocked = loadingMonthDates
 
   const availableSlots = slots.filter((s) => s.available)
 
@@ -307,7 +308,7 @@ export default function StepAvailability({
             Cita conjunta · Acompañante: <strong>{companionTreatmentName}</strong>
           </p>
           <p className="text-xs text-on-surface-variant mt-1">
-            Mostramos huecos de 90 min consecutivos (tu perfilado + el de tu acompañante)
+            La cita conjunta dura 1 hora (30 min cada una).
           </p>
         </motion.div>
       )}
@@ -347,24 +348,34 @@ export default function StepAvailability({
           <h3 className="font-headline text-xl text-on-surface capitalize">{monthLabel}</h3>
           <div className="flex gap-4">
             <button
-              onClick={() => canGoPrevMonth && setCurrentMonth((m) => subMonths(m, 1))}
-              disabled={!canGoPrevMonth}
+              type="button"
+              onClick={() => canGoPrevMonth && !calendarLocked && setCurrentMonth((m) => subMonths(m, 1))}
+              disabled={!canGoPrevMonth || calendarLocked}
               className={`p-2 rounded-full transition-colors ${
-                canGoPrevMonth ? 'hover:bg-surface-container' : 'opacity-30 cursor-default'
+                canGoPrevMonth && !calendarLocked ? 'hover:bg-surface-container' : 'opacity-30 cursor-default'
               }`}
             >
               <Icon name="chevron_left" className="text-primary" />
             </button>
             <button
-              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
-              className="p-2 hover:bg-surface-container rounded-full transition-colors"
+              type="button"
+              onClick={() => !calendarLocked && setCurrentMonth((m) => addMonths(m, 1))}
+              disabled={calendarLocked}
+              className={`p-2 rounded-full transition-colors ${
+                calendarLocked ? 'opacity-30 cursor-default' : 'hover:bg-surface-container'
+              }`}
             >
               <Icon name="chevron_right" className="text-primary" />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-y-4 text-center">
+        <div className="relative min-h-[22rem]" aria-busy={calendarLocked}>
+          <div
+            className={`grid grid-cols-7 gap-y-4 text-center transition-opacity duration-200 ${
+              calendarLocked ? 'pointer-events-none opacity-40' : 'opacity-100'
+            }`}
+          >
           {WEEKDAYS.map((day) => (
             <div key={day} className="text-[10px] font-bold uppercase tracking-widest text-outline pb-2">
               {day}
@@ -387,9 +398,9 @@ export default function StepAvailability({
               !isBeforeGoLive &&
               !isBeforeAnchor &&
               !isWeekendDay &&
-              !loadingMonthDates &&
               !hasOpenSlots
             const isDisabled =
+              calendarLocked ||
               !inMonth ||
               isPast ||
               isBeforeGoLive ||
@@ -430,6 +441,31 @@ export default function StepAvailability({
               </motion.button>
             )
           })}
+          </div>
+
+          <AnimatePresence>
+            {calendarLocked && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-background/80 backdrop-blur-[2px]"
+              >
+                <motion.div
+                  className="w-11 h-11 rounded-full border-[3px] border-primary/20 border-t-primary mb-4"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.85, repeat: Infinity, ease: 'linear' }}
+                />
+                <p className="font-label text-[10px] tracking-[0.2em] uppercase text-primary font-bold">
+                  Cargando
+                </p>
+                <p className="mt-2 text-sm text-on-surface-variant text-center px-6">
+                  Comprobando días libres de este mes…
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </section>
 
@@ -447,17 +483,18 @@ export default function StepAvailability({
           </div>
 
           {loadingSlots ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <motion.div
-                  key={i}
-                  variants={slotSkeletonVariants}
-                  initial="initial"
-                  animate="animate"
-                  className="py-4 px-6 rounded-xl bg-surface-container-low"
-                  style={{ animationDelay: `${i * 0.1}s` }}
-                />
-              ))}
+            <div className="relative min-h-[10rem] flex flex-col items-center justify-center py-10">
+              <motion.div
+                className="w-10 h-10 rounded-full border-[3px] border-primary/20 border-t-primary mb-4"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.85, repeat: Infinity, ease: 'linear' }}
+              />
+              <p className="font-label text-[10px] tracking-[0.2em] uppercase text-primary font-bold">
+                Cargando
+              </p>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Validando horarios de este día…
+              </p>
             </div>
           ) : availableSlots.length === 0 ? (
             <div className="text-center py-8">

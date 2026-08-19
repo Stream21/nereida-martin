@@ -20,18 +20,19 @@ router.get('/', async (req, res) => {
          CASE id
            WHEN 'brow-design-primera' THEN 1
            WHEN 'brow-design-seguimiento' THEN 2
-           WHEN 'brow-define' THEN 3
-           WHEN 'brow-lami' THEN 4
-           WHEN 'brow-lami-define' THEN 5
-           WHEN 'brow-henna' THEN 6
-           WHEN 'brow-restored' THEN 7
-           WHEN 'micropigmentacion-soft-pixel' THEN 8
-           WHEN 'lash-lift-korean' THEN 9
-           WHEN 'skin-reset' THEN 10
-           WHEN 'skin-boost' THEN 11
-           WHEN 'labio-superior' THEN 12
-           WHEN 'depilacion-facial' THEN 13
-           WHEN 'smile-gem' THEN 14
+           WHEN 'perfilado-conjunto' THEN 3
+           WHEN 'brow-define' THEN 4
+           WHEN 'brow-lami' THEN 5
+           WHEN 'brow-lami-define' THEN 6
+           WHEN 'brow-henna' THEN 7
+           WHEN 'brow-restored' THEN 8
+           WHEN 'micropigmentacion-soft-pixel' THEN 9
+           WHEN 'lash-lift-korean' THEN 10
+           WHEN 'skin-reset' THEN 11
+           WHEN 'skin-boost' THEN 12
+           WHEN 'labio-superior' THEN 13
+           WHEN 'depilacion-facial' THEN 14
+           WHEN 'smile-gem' THEN 15
            ELSE 99
          END,
          name`

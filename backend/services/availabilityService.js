@@ -305,7 +305,7 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
 }
 
 async function loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId) {
-  const { resolveCompanionTreatment, resolvePrimaryTreatment, isJointTreatment } = require('./jointBookingService');
+  const { resolveCompanionTreatment, resolvePrimaryTreatment, isJointTreatment, getJointPersonBlockMinutes } = require('./jointBookingService');
 
   let primaryBlock;
   let realPrimaryTreatmentId = primaryTreatmentId;
@@ -328,6 +328,12 @@ async function loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, p
 
   const companionInfo = await resolveCompanionTreatment(companionClientId);
   if (companionInfo.error) return companionInfo;
+
+  if (isJointTreatment(primaryTreatmentId)) {
+    const personBlock = await getJointPersonBlockMinutes();
+    primaryBlock = personBlock;
+    companionInfo.blockMinutes = personBlock;
+  }
 
   return {
     primaryBlock,

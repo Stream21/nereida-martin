@@ -32,6 +32,14 @@ const treatments = {
           'Mantén la forma perfecta de tus cejas con nuestro servicio de seguimiento. Realizamos una limpieza y perfilado de alta precisión (hilo o pinza) para conservar la simetría y potenciar tu mirada respetando siempre tu esencia natural.',
       },
       {
+        name: 'Perfilado Conjunto',
+        tag: 'Dos perfilados seguidos',
+        bookingId: 'perfilado-conjunto',
+        duration: '1 hora',
+        description:
+          'Ven con una amiga y reservad el mismo hueco. Dos perfilados consecutivos de 30 minutos cada una, una hora en total. El precio se calcula según el historial de cada una (primera vez o mantenimiento).',
+      },
+      {
         name: 'Brow Define',
         tag: 'Diseño + Tinte + Perfilado',
         bookingId: 'brow-define',

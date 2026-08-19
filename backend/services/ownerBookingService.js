@@ -222,6 +222,7 @@ async function createOwnerJointBooking({
     resolveCompanionTreatment,
     resolvePrimaryTreatment,
     isJointTreatment,
+    getJointPersonBlockMinutes,
     syncGoogleCalendarForBooking,
   } = require('./jointBookingService');
 
@@ -307,10 +308,13 @@ async function createOwnerJointBooking({
       return companionInfo;
     }
 
-    const primaryBlock = blockDurationMinutes(
-      primaryTreatment.duration_max || primaryTreatment.duration_min
-    );
-    const companionBlock = companionInfo.blockMinutes;
+    const personBlock = isJointTreatment(treatmentId)
+      ? await getJointPersonBlockMinutes()
+      : null;
+    const primaryBlock =
+      personBlock ||
+      blockDurationMinutes(primaryTreatment.duration_max || primaryTreatment.duration_min);
+    const companionBlock = personBlock || companionInfo.blockMinutes;
     const primaryEnd = new Date(start.getTime() + primaryBlock * 60000);
     const companionStart = primaryEnd;
     const companionEnd = new Date(companionStart.getTime() + companionBlock * 60000);

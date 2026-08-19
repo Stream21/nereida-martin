@@ -10,7 +10,8 @@ async function lookupClientByEmail(email) {
   }
 
   const clientResult = await query(
-    `SELECT id, name, email, phone, declared_profile, first_booking_at, last_booking_at, created_at
+    `SELECT id, name, email, phone, declared_profile, first_booking_at, last_booking_at, created_at,
+            COALESCE(has_perfilado_history, false) AS has_perfilado_history
      FROM clients WHERE email = $1`,
     [normalized]
   );
@@ -30,6 +31,10 @@ async function lookupClientByEmail(email) {
   const bookings = bookingsResult.rows;
   const confirmedCount = bookings.filter((b) => b.status === 'confirmed').length;
   const treatmentIds = [...new Set(bookings.map((b) => b.treatment_id).filter(Boolean))];
+  if (clientResult.rows[0]?.has_perfilado_history) {
+    treatmentIds.push('brow-design-seguimiento');
+  }
+  const uniqueTreatmentIds = [...new Set(treatmentIds)];
 
   const client = clientResult.rows[0] || null;
 
@@ -56,7 +61,7 @@ async function lookupClientByEmail(email) {
   return {
     isKnownClient: confirmedCount > 0,
     visitCount: confirmedCount,
-    treatmentIds,
+    treatmentIds: uniqueTreatmentIds,
     treatmentsDone: bookings
       .filter((b) => b.status === 'confirmed')
       .map((b) => ({

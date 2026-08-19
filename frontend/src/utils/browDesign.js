@@ -53,7 +53,8 @@ export const BROW_DESIGN_TRIO = [
 const BROW_DISPLAY_PRIORITY = {
   [BROW_DESIGN_PRIMERA]: 0,
   [BROW_DESIGN_SEGUIMIENTO]: 1,
-  [BROW_DESIGN_DEFINE]: 2,
+  [PERFILADO_CONJUNTO_ID]: 2,
+  [BROW_DESIGN_DEFINE]: 3,
 }
 
 function mergeDoneIds(treatmentIds = [], declaredPriorTreatments = []) {

@@ -256,7 +256,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const lockedTime = hasGap ? initialTime || minsToLabel(gapStart) : null
   const isPerfilado = isPerfiladoTreatment(treatmentId)
   const isJoint = treatmentId === 'perfilado-conjunto'
-  const jointEligible = isJoint && (!hasGap || gapMinutes >= 90)
+  const jointEligible = isJoint && (!hasGap || gapMinutes >= 60)
 
   const treatmentsWithFit = useMemo(() => {
     return treatments
