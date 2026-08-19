@@ -28,6 +28,7 @@ import {
   fetchOwnerJointAvailability,
   fetchOwnerCalendar,
   fetchOwnerTreatments,
+  fetchOwnerBooking,
 } from '../../utils/ownerApi'
 import { isPerfiladoTreatment } from '../../utils/browDesign'
 import { isGoogleBookingSource } from '../../utils/studioFormat'
@@ -808,6 +809,8 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                         className={`cursor-pointer absolute z-[2] rounded-md sm:rounded-lg px-1 sm:px-1.5 py-0.5 text-left overflow-hidden border transition-shadow hover:z-[3] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
                           google
                             ? 'bg-surface-container border-outline-variant/40 text-on-surface-variant'
+                            : ev.status === 'pending_review'
+                              ? 'bg-tertiary-container/80 border-tertiary/30 text-on-surface'
                             : 'bg-primary/90 border-primary/30 text-on-primary'
                         }`}
                         style={{
@@ -937,7 +940,7 @@ function MonthGrid({ monthDays, anchor, countsByDay, onOpenDay }) {
   )
 }
 
-export default function StudioCalendar() {
+export default function StudioCalendar({ initialBookingId = null }) {
   const [view, setView] = useState('week')
   const [anchor, setAnchor] = useState(() => snapToWorkday(new Date()))
   const [events, setEvents] = useState([])
@@ -975,6 +978,27 @@ export default function StudioCalendar() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const id = Number(initialBookingId)
+    if (!Number.isFinite(id) || id <= 0) return undefined
+    let cancelled = false
+    fetchOwnerBooking(id)
+      .then((res) => {
+        if (cancelled || !res.booking) return
+        const booking = res.booking
+        if (booking.startTime) {
+          setAnchor(snapToWorkday(new Date(booking.startTime)))
+        }
+        setDetailEvent(booking)
+      })
+      .catch(() => {
+        /* la agenda sigue usable aunque el deep link falle */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [initialBookingId])
 
   const title = useMemo(() => {
     if (view === 'day') return format(anchor, 'EEE d MMM', { locale: es })
@@ -1155,6 +1179,14 @@ export default function StudioCalendar() {
           bookingId={detailEvent.id}
           preview={detailEvent}
           onClose={() => setDetailEvent(null)}
+          onUpdated={(updated) => {
+            load()
+            if (!updated || updated.status === 'cancelled') {
+              setDetailEvent(null)
+              return
+            }
+            setDetailEvent((prev) => ({ ...prev, ...updated }))
+          }}
         />
       )}
     </div>

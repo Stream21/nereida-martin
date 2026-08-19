@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import StudioLayout from '../components/studio/StudioLayout'
 import MetricsOverview from '../components/studio/MetricsOverview'
@@ -29,8 +29,16 @@ const tabVariants = {
 
 export default function StudioDashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { user, loading, logout, isAuthenticated } = useOwnerAuth()
-  const [activeTab, setActiveTab] = useState('overview')
+  const tabFromUrl = searchParams.get('tab')
+  const citaFromUrl = searchParams.get('cita')
+  const [activeTab, setActiveTab] = useState(
+    tabFromUrl === 'agenda' || tabFromUrl === 'clients' || tabFromUrl === 'services'
+      ? tabFromUrl
+      : 'overview'
+  )
   const [overview, setOverview] = useState(null)
   const [monthly, setMonthly] = useState([])
   const [topClients, setTopClients] = useState([])
@@ -41,9 +49,10 @@ export default function StudioDashboard() {
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      navigate('/studio', { replace: true })
+      const next = `${location.pathname}${location.search}`
+      navigate(`/studio?next=${encodeURIComponent(next)}`, { replace: true })
     }
-  }, [loading, isAuthenticated, navigate])
+  }, [loading, isAuthenticated, navigate, location.pathname, location.search])
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
@@ -140,7 +149,7 @@ export default function StudioDashboard() {
 
         {activeTab === 'agenda' && (
           <motion.div key="agenda" variants={tabVariants} initial="initial" animate="animate" exit="exit">
-            <StudioCalendar />
+            <StudioCalendar initialBookingId={citaFromUrl} />
           </motion.div>
         )}
 

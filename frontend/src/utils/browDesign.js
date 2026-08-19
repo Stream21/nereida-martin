@@ -50,6 +50,10 @@ export const BROW_DESIGN_TRIO = [
   BROW_DESIGN_DEFINE,
 ]
 
+export function isAutoPerfiladoIntent(intent) {
+  return intent === 'mantenimiento' || intent === 'perfilado'
+}
+
 /** Orden fijo en Cejas: perfilados juntos, conjunto justo debajo, luego el resto. */
 const TREATMENT_DISPLAY_ORDER = [
   BROW_DESIGN_PRIMERA,
@@ -83,20 +87,21 @@ export function hasAnyBrowDesignHistory(treatmentIds = [], declaredPriorTreatmen
   return BROW_DESIGN_TRIO.some((id) => done.has(id))
 }
 
-export function shouldShowBrowDesignPrimera(treatmentIds = [], declaredPriorTreatments = []) {
-  return !hasAnyBrowDesignHistory(treatmentIds, declaredPriorTreatments)
-}
-
-export function shouldShowBrowDesignFollowUps(treatmentIds = [], declaredPriorTreatments = []) {
-  return hasAnyBrowDesignHistory(treatmentIds, declaredPriorTreatments)
-}
-
 export function hasBrowDesignHistoryInDb(treatmentIds = []) {
   return BROW_DESIGN_TRIO.some((id) => treatmentIds.includes(id))
 }
 
-/** Tras identificación con intent=mantenimiento: mantenimiento si hay Perfilado en BD, si no primera vez. */
-export function resolveMaintenanceBooking(treatmentIds = []) {
+/** Primera vez vs mantenimiento: solo historial real en el estudio, no lo que declare la clienta. */
+export function shouldShowBrowDesignPrimera(treatmentIds = []) {
+  return !hasBrowDesignHistoryInDb(treatmentIds)
+}
+
+export function shouldShowBrowDesignFollowUps(treatmentIds = []) {
+  return hasBrowDesignHistoryInDb(treatmentIds)
+}
+
+/** Tras identificación con intent perfilado/mantenimiento: mantenimiento si hay Perfilado en BD, si no primera vez. */
+export function resolveMaintenanceBooking(treatmentIds = [], { silent = false } = {}) {
   if (hasBrowDesignHistoryInDb(treatmentIds)) {
     return {
       mode: 'maintenance',
@@ -109,8 +114,9 @@ export function resolveMaintenanceBooking(treatmentIds = []) {
     mode: 'primera',
     treatmentId: BROW_DESIGN_PRIMERA,
     skipQuestionnaire: false,
-    notice:
-      'No encontramos Perfilado previo en tu historial con nosotros. Para mantenimiento necesitas haberlo realizado antes; hemos preparado tu cita de primera vez.',
+    notice: silent
+      ? null
+      : 'No encontramos Perfilado previo en tu historial con nosotros. Para mantenimiento necesitas haberlo realizado antes; hemos preparado tu cita de primera vez.',
   }
 }
 
@@ -126,9 +132,9 @@ export function sortTreatmentsForDisplay(items, catalogTreatments = []) {
   })
 }
 
-export function filterTreatmentsForClient(treatments, { treatmentIds = [], declaredPriorTreatments = [] } = {}) {
-  const showPrimera = shouldShowBrowDesignPrimera(treatmentIds, declaredPriorTreatments)
-  const showFollowUps = shouldShowBrowDesignFollowUps(treatmentIds, declaredPriorTreatments)
+export function filterTreatmentsForClient(treatments, { treatmentIds = [] } = {}) {
+  const showPrimera = shouldShowBrowDesignPrimera(treatmentIds)
+  const showFollowUps = shouldShowBrowDesignFollowUps(treatmentIds)
 
   return treatments.filter((t) => {
     if (!BROW_DESIGN_TRIO.includes(t.id)) return true
@@ -144,15 +150,6 @@ export function buildPriorTreatmentOptions(treatments) {
 
   for (const t of treatments) {
     if (t.id === BROW_DESIGN_PRIMERA || t.id === BROW_DESIGN_SEGUIMIENTO) {
-      if (!seen.has(BROW_DESIGN_DECLARED)) {
-        seen.add(BROW_DESIGN_DECLARED)
-        options.push({
-          id: BROW_DESIGN_DECLARED,
-          label: 'Perfilado',
-          tag: 'Primera vez o mantenimiento',
-          category: 'cejas',
-        })
-      }
       continue
     }
     // Micro no se reserva online; se inyecta al final para historial declarado

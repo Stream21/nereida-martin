@@ -5,7 +5,7 @@ import {
   BROW_DESIGN_PRIMERA,
   BROW_DESIGN_SEGUIMIENTO,
   filterTreatmentsForClient,
-  hasAnyBrowDesignHistory,
+  hasBrowDesignHistoryInDb,
   sortTreatmentsForDisplay,
 } from '../../utils/browDesign'
 import { requiresPhotoAssessment } from '../../utils/photoAssessment'
@@ -45,8 +45,8 @@ export default function StepTreatments({ treatments, categories, onSelect, clien
   )
 
   const visibleTreatments = useMemo(
-    () => filterTreatmentsForClient(treatments, { treatmentIds, declaredPriorTreatments }),
-    [treatments, treatmentIds, declaredPriorTreatments]
+    () => filterTreatmentsForClient(treatments, { treatmentIds }),
+    [treatments, treatmentIds]
   )
 
   const filteredTreatments = visibleTreatments.filter((t) => t.category === activeCategory)
@@ -57,7 +57,7 @@ export default function StepTreatments({ treatments, categories, onSelect, clien
   )
 
   const isKnownReturning = clientProfile?.isKnownClient || (clientProfile?.visitCount > 0)
-  const hasBrowHistory = hasAnyBrowDesignHistory(treatmentIds, declaredPriorTreatments)
+  const hasBrowHistory = hasBrowDesignHistoryInDb(treatmentIds)
   const isFirstBrowVisit = !hasBrowHistory
 
   const getTreatmentMeta = (treatment) => {

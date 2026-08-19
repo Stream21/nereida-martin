@@ -461,10 +461,13 @@ async function sendOwnerFlaggedAlert(payload) {
     subject: `⚠️ Cuestionario marcado – ${payload.clientName} | Nereida Martín Studio`,
     title: 'Revisar cuestionario de aptitud',
     body: payload.body,
+    actions: payload.reviewUrl
+      ? [{ label: 'Revisar en la agenda', url: payload.reviewUrl }]
+      : undefined,
   });
 }
 
-async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath, treatmentName }) {
+async function sendOwnerHennaAssessment({ body, reviewUrl, photoPath, treatmentName }) {
   const to = getOwnerEmail();
   if (!to) return;
   const transport = getTransporter();
@@ -478,12 +481,11 @@ async function sendOwnerHennaAssessment({ body, approveUrl, rejectUrl, photoPath
     to,
     subject: `📷 Valoración pendiente – ${label} | Nereida Martín Studio`,
     html: ownerAlertHTML({
-      title: `Nueva valoración por foto – ${label}`,
+      title: `Nueva solicitud para revisar – ${label}`,
       body,
-      actions: [
-        { label: 'Aprobar', url: approveUrl },
-        { label: 'Rechazar y cancelar', url: rejectUrl, danger: true },
-      ],
+      actions: reviewUrl
+        ? [{ label: 'Revisar en la agenda', url: reviewUrl }]
+        : [],
     }),
     attachments,
   });

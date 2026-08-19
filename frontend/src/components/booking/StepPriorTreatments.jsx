@@ -94,8 +94,8 @@ export default function StepPriorTreatments({
             Tratamientos realizados anteriormente
           </p>
           <p className="text-xs text-on-surface-variant mb-4">
-            Selecciona todos los que apliquen. Si has hecho Perfilado, te mostraremos mantenimiento y Define.
-            Para el resto de tratamientos, te mostraremos solo lo que te corresponde según tu historial.
+            Selecciona todos los que apliquen. El Perfilado se asigna solo: primera vez si eres nueva
+            en la plataforma, mantenimiento si ya consta en tu historial del estudio.
           </p>
 
           {options.map((opt, i) => {

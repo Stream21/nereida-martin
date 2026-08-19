@@ -16,13 +16,13 @@ const {
   isFirstStudioVisit,
   hasTreatmentBefore,
   resolveVisitContext,
+  clientHasPerfiladoHistory,
 } = require('../services/clientService');
 const {
   evaluateIntakeFlags,
   getStudioQuestions,
   getTreatmentQuestions,
 } = require('../config/intakeQuestions');
-const { createOwnerActionToken, buildOwnerActionUrl } = require('../utils/ownerTokens');
 const requireClientAuth = require('../middleware/requireClientAuth');
 const { normalizePhone } = require('../utils/phone');
 const {
@@ -451,7 +451,6 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     await client.query('BEGIN');
 
     const {
-      treatmentId,
       startTime,
       clientName,
       clientEmail,
@@ -463,6 +462,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
       intakeSignature,
       hennaAssessmentId,
     } = req.body;
+    let { treatmentId } = req.body;
 
     const authClientId = req.clientAuth.clientId;
 
@@ -489,6 +489,13 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
           'La micropigmentación se agenda con el estudio. Solicítala desde la web o por WhatsApp.',
         code: 'MICRO_REQUEST_ONLY',
       });
+    }
+
+    if (treatmentId === 'brow-design-seguimiento') {
+      const hasPerfiladoHistory = await clientHasPerfiladoHistory(authClientId);
+      if (!hasPerfiladoHistory) {
+        treatmentId = 'brow-design-primera';
+      }
     }
 
     const treatmentResult = await client.query(
@@ -866,6 +873,7 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
     const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
     const frontendUrl = process.env.FRONTEND_URL || '';
     const cancelUrl = `${frontendUrl}/cancelar/${cancelToken}`;
+    const studioReviewUrl = `${String(frontendUrl).replace(/\/$/, '')}/studio/panel?tab=agenda&cita=${booking.id}`;
     const pendingReview = bookingStatus === 'pending_review';
 
     const calendarFile = require('../services/calendarFile');
@@ -989,25 +997,15 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
             await emailService.sendOwnerFlaggedAlert({
               clientName,
               body: `${ownerBody}\n\n⚠️ Motivo: ${flagReason}`,
+              reviewUrl: studioReviewUrl,
             });
           }
 
           if (needsPhoto && hennaAssessmentId) {
-            const approveToken = await createOwnerActionToken({
-              action: 'henna_approve',
-              entityType: 'henna_assessment',
-              entityId: hennaAssessmentId,
-            });
-            const rejectToken = await createOwnerActionToken({
-              action: 'henna_reject',
-              entityType: 'henna_assessment',
-              entityId: hennaAssessmentId,
-            });
             const photoRes = await query('SELECT photo_path FROM henna_assessments WHERE id = $1', [hennaAssessmentId]);
             await emailService.sendOwnerHennaAssessment({
-              body: ownerBody,
-              approveUrl: buildOwnerActionUrl(approveToken, 'approve'),
-              rejectUrl: buildOwnerActionUrl(rejectToken, 'reject'),
+              body: `${ownerBody}\n\nRevisa el cuestionario y las fotos en la agenda y confirma o descarta la cita desde allí.`,
+              reviewUrl: studioReviewUrl,
               photoPath: photoRes.rows[0]?.photo_path,
               treatmentName: treatment.name,
             });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import GoldButton from '../components/ui/GoldButton'
 import StudioLogo from '../components/studio/StudioLogo'
@@ -7,6 +7,10 @@ import { useOwnerAuth } from '../hooks/useOwnerAuth'
 
 export default function StudioLogin() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const nextPath = searchParams.get('next')?.startsWith('/studio/panel')
+    ? searchParams.get('next')
+    : '/studio/panel'
   const { user, loading, login, isAuthenticated } = useOwnerAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -15,9 +19,9 @@ export default function StudioLogin() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      navigate('/studio/panel', { replace: true })
+      navigate(nextPath, { replace: true })
     }
-  }, [loading, isAuthenticated, navigate])
+  }, [loading, isAuthenticated, navigate, nextPath])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -25,7 +29,7 @@ export default function StudioLogin() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('/studio/panel', { replace: true })
+      navigate(nextPath, { replace: true })
     } catch (err) {
       setError(err.message === 'UNAUTHORIZED' ? 'Sesión no válida' : err.message)
     } finally {

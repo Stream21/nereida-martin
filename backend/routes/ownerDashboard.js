@@ -154,6 +154,43 @@ router.get('/bookings/:id', async (req, res) => {
   }
 });
 
+router.post('/bookings/:id/confirm-review', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const review = require('../services/reviewBookingService');
+    const result = await review.confirmPendingReview(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    const booking = await dashboard.getBookingDetail(id);
+    res.json({ booking, alreadyConfirmed: Boolean(result.alreadyConfirmed) });
+  } catch (err) {
+    console.error('Owner confirm review error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/bookings/:id/reject-review', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const review = require('../services/reviewBookingService');
+    const result = await review.rejectPendingReview(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.json({ ok: true, alreadyCancelled: Boolean(result.alreadyCancelled) });
+  } catch (err) {
+    console.error('Owner reject review error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/bookings/joint', async (req, res) => {
   try {
     const { primaryClientId, companionClientId, treatmentId, startTime, date, time } = req.body || {};

@@ -143,6 +143,14 @@ export function fetchOwnerBooking(bookingId) {
   return ownerFetch(`/bookings/${bookingId}`)
 }
 
+export function confirmOwnerBookingReview(bookingId) {
+  return ownerFetch(`/bookings/${bookingId}/confirm-review`, { method: 'POST' })
+}
+
+export function rejectOwnerBookingReview(bookingId) {
+  return ownerFetch(`/bookings/${bookingId}/reject-review`, { method: 'POST' })
+}
+
 export function ownerUploadUrl(photoUrlOrPath) {
   if (!photoUrlOrPath) return ''
   if (/^https?:\/\//i.test(photoUrlOrPath)) return photoUrlOrPath

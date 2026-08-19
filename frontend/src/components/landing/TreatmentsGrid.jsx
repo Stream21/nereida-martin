@@ -17,19 +17,11 @@ const treatments = {
     items: [
       {
         name: 'Perfilado',
-        tag: 'Primera vez',
-        bookingId: 'brow-design-primera',
+        tag: 'Primera vez o mantenimiento',
+        bookingIntent: 'perfilado',
         duration: '45 minutos',
         description:
-          'El punto de partida para transformar tu mirada. Incluye un estudio completo de visajismo personalizado para diseñar la forma ideal según tus facciones, seguido de una epilación limpia y detallada con hilo o pinza.',
-      },
-      {
-        name: 'Perfilado',
-        tag: 'Mantenimiento',
-        bookingId: 'brow-design-seguimiento',
-        duration: '45 minutos',
-        description:
-          'Mantén la forma perfecta de tus cejas con nuestro servicio de seguimiento. Realizamos una limpieza y perfilado de alta precisión (hilo o pinza) para conservar la simetría y potenciar tu mirada respetando siempre tu esencia natural.',
+          'El punto de partida para transformar tu mirada. Incluye un estudio de visajismo y una epilación precisa con hilo o pinza. Si es tu primera visita en la plataforma, reservamos Perfilado primera vez; si ya constas en el estudio, te asignamos mantenimiento automáticamente.',
       },
       {
         name: 'Perfilado Conjunto',
@@ -159,7 +151,7 @@ function TreatmentCard({ treatment, onBook, onRequest }) {
   const ctaFullLabel = isRequestOnly ? 'Solicitar cita' : 'Reservar cita'
   const handleCta = () => {
     if (isRequestOnly) onRequest?.()
-    else onBook(treatment.bookingId)
+    else onBook(treatment)
   }
 
   return (
@@ -187,7 +179,7 @@ function TreatmentCard({ treatment, onBook, onRequest }) {
                 <span className="text-sm text-on-surface-variant">{treatment.duration}</span>
               </div>
             )}
-            {treatment.bookingId && (
+            {(treatment.bookingId || treatment.bookingIntent) && (
               <motion.span
                 whileTap={{ scale: 0.97 }}
                 role="button"
@@ -233,7 +225,7 @@ function TreatmentCard({ treatment, onBook, onRequest }) {
                 <p className="text-sm italic text-primary/70">{treatment.note}</p>
               )}
 
-              {treatment.bookingId && (
+              {(treatment.bookingId || treatment.bookingIntent) && (
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={handleCta}
@@ -310,8 +302,12 @@ export default function TreatmentsGrid() {
     return undefined
   }, [searchParams, scrollToTab])
 
-  const handleBookTreatment = useCallback((bookingId) => {
-    navigate(`/reservar?treatment=${bookingId}`)
+  const handleBookTreatment = useCallback((treatment) => {
+    if (treatment.bookingIntent) {
+      navigate(`/reservar?intent=${encodeURIComponent(treatment.bookingIntent)}`)
+      return
+    }
+    navigate(`/reservar?treatment=${treatment.bookingId}`)
   }, [navigate])
 
   const handleRequestMicro = useCallback(() => {
@@ -384,7 +380,7 @@ export default function TreatmentsGrid() {
             <div className="space-y-3">
               {activeData.items.map((treatment) => (
                 <TreatmentCard
-                  key={treatment.bookingId || `${treatment.name}-${treatment.tag || ''}`}
+                  key={treatment.bookingId || treatment.bookingIntent || `${treatment.name}-${treatment.tag || ''}`}
                   treatment={treatment}
                   onBook={handleBookTreatment}
                   onRequest={handleRequestMicro}

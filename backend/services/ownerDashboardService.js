@@ -5,6 +5,7 @@ const { IMPORTED_CLIENT_EMAIL } = require('./studioSettings');
 const { listGoogleCalendarItemsInRange } = require('./ghostBlockRanges');
 
 const CONFIRMED_FILTER = `b.status = 'confirmed'`;
+const COMPLETED_SQL = `b.start_time <= NOW()`;
 const TZ = TIMEZONE.replace(/'/g, "''");
 const IMPORTED_EMAIL_SQL = IMPORTED_CLIENT_EMAIL.replace(/'/g, "''");
 const IMPORTED_SOURCES_SQL = `'google', 'google_sync', 'google_import'`;
@@ -155,26 +156,31 @@ async function getOverview() {
       `SELECT
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
          )::int AS month_bookings,
          COALESCE(SUM(t.price) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
          ), 0)::numeric AS month_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
          )::int AS year_bookings,
          COALESCE(SUM(t.price) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND t.price IS NOT NULL
          ), 0)::numeric AS year_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
@@ -188,12 +194,14 @@ async function getOverview() {
          )::int AS imported_month,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND b.visit_context = 'first_studio_visit'
          )::int AS first_visits_month,
          COUNT(*) FILTER (
            WHERE ${webFed}
+             AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND b.visit_context = 'returning'
@@ -213,6 +221,7 @@ async function getOverview() {
        JOIN clients c ON b.client_id = c.id
        WHERE ${CONFIRMED_FILTER}
          AND ${webFedSql()}
+         AND ${COMPLETED_SQL}
        GROUP BY 1, 2
        ORDER BY booking_count DESC, year DESC, month DESC
        LIMIT 1`
@@ -316,6 +325,7 @@ async function getMonthlySeries(months = 12) {
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
        AND ${webFedSql()}
+       AND ${COMPLETED_SQL}
      GROUP BY 1, 2
      ORDER BY year DESC, month DESC
      LIMIT $1`,
@@ -346,6 +356,7 @@ async function getTopClients(limit = 5) {
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
        AND ${webFedSql()}
+       AND ${COMPLETED_SQL}
      GROUP BY c.id, c.name, c.email
      ORDER BY total_spent DESC, booking_count DESC
      LIMIT $1`,
@@ -374,6 +385,7 @@ async function getByTreatment() {
      LEFT JOIN treatments t ON b.treatment_id = t.id
      WHERE ${CONFIRMED_FILTER}
        AND ${webFedSql()}
+       AND ${COMPLETED_SQL}
      GROUP BY t.id, t.name, t.category
      ORDER BY booking_count DESC, revenue DESC`
   );
@@ -400,6 +412,7 @@ async function getBySource() {
      JOIN clients c ON b.client_id = c.id
      WHERE ${CONFIRMED_FILTER}
        AND ${webFedSql()}
+       AND ${COMPLETED_SQL}
      GROUP BY 1
      ORDER BY booking_count DESC`
   );

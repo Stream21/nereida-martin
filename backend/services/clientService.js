@@ -85,6 +85,25 @@ async function lookupClientByEmail(email) {
   };
 }
 
+async function clientHasPerfiladoHistory(clientId) {
+  const flagged = await query(
+    `SELECT COALESCE(has_perfilado_history, false) AS has_perfilado_history
+     FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  if (flagged.rows[0]?.has_perfilado_history) return true;
+
+  const hist = await query(
+    `SELECT 1 FROM bookings
+     WHERE client_id = $1
+       AND status IN ('confirmed', 'pending_review', 'pending_companion')
+       AND treatment_id = ANY($2::text[])
+     LIMIT 1`,
+    [clientId, ['brow-design-primera', 'brow-design-seguimiento', 'brow-define']]
+  );
+  return hist.rows.length > 0;
+}
+
 async function hasTreatmentBefore(clientId, treatmentId) {
   const result = await query(
     `SELECT 1 FROM bookings
@@ -116,4 +135,5 @@ module.exports = {
   hasTreatmentBefore,
   isFirstStudioVisit,
   resolveVisitContext,
+  clientHasPerfiladoHistory,
 };

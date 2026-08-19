@@ -7,7 +7,7 @@ import StepPriorTreatments from '../components/booking/StepPriorTreatments'
 import StepQuestionnaire from '../components/booking/StepQuestionnaire'
 import StepTreatmentConfirm from '../components/booking/StepTreatmentConfirm'
 import StepTreatments from '../components/booking/StepTreatments'
-import { shouldAskPriorHistory, resolveMaintenanceBooking, hasBrowDesignHistoryInDb, BROW_DESIGN_SEGUIMIENTO, requiresAptitudeQuestionnaire } from '../utils/browDesign'
+import { shouldAskPriorHistory, resolveMaintenanceBooking, hasBrowDesignHistoryInDb, BROW_DESIGN_PRIMERA, BROW_DESIGN_SEGUIMIENTO, requiresAptitudeQuestionnaire, isJointTreatment, isAutoPerfiladoIntent } from '../utils/browDesign'
 import { requiresPhotoAssessment } from '../utils/photoAssessment'
 import StepHennaAssessment from '../components/booking/StepHennaAssessment'
 import StepAvailability from '../components/booking/StepAvailability'
@@ -18,7 +18,6 @@ import { saveClientProfile } from '../utils/clientSession'
 import { isValidPhone } from '../utils/validation'
 import { getClientToken, updateClientProfile } from '../utils/clientAuth'
 import { useClientAuth } from '../hooks/useClientAuth'
-import { isJointTreatment } from '../utils/browDesign'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -150,7 +149,7 @@ export default function Booking() {
     !skipPriorHistoryFlag &&
     shouldAskPriorHistory(lookupData) &&
     !authUser?.declaredProfile &&
-    bookingIntent !== 'mantenimiento'
+    !isAutoPerfiladoIntent(bookingIntent)
 
   const effectiveClientProfile = useMemo(
     () => ({
@@ -399,9 +398,11 @@ export default function Booking() {
   }, [])
 
   const applyMaintenanceIntent = useCallback((lookup) => {
-    if (bookingIntent !== 'mantenimiento' || treatments.length === 0) return false
+    if (!isAutoPerfiladoIntent(bookingIntent) || treatments.length === 0) return false
 
-    const route = resolveMaintenanceBooking(lookup?.treatmentIds || [])
+    const route = resolveMaintenanceBooking(lookup?.treatmentIds || [], {
+      silent: bookingIntent === 'perfilado',
+    })
     const treatment = treatments.find((t) => t.id === route.treatmentId)
     if (!treatment) return false
 
@@ -454,7 +455,7 @@ export default function Booking() {
   // Logged-in + mantenimiento: apply without waiting for Identificación
   useEffect(() => {
     if (!identityBootstrapped || !skipIdentify) return
-    if (bookingIntent !== 'mantenimiento') return
+    if (!isAutoPerfiladoIntent(bookingIntent)) return
     if (loadingTreatments || treatments.length === 0) return
     if (selectedTreatment) return
     applyMaintenanceIntent(lookupData)
@@ -476,7 +477,7 @@ export default function Booking() {
       const ok = await advanceFromIdentify()
       if (!ok) return
 
-      if (bookingIntent === 'mantenimiento') {
+      if (isAutoPerfiladoIntent(bookingIntent)) {
         if (loadingTreatments) {
           setBookingError('Espera un momento mientras cargamos los tratamientos.')
           return
@@ -630,6 +631,15 @@ export default function Booking() {
 
   useEffect(() => {
     if (!preselectedTreatmentId || loadingTreatments || treatments.length === 0) return
+
+    if (
+      preselectedTreatmentId === BROW_DESIGN_PRIMERA ||
+      preselectedTreatmentId === BROW_DESIGN_SEGUIMIENTO
+    ) {
+      setSearchParams({ intent: 'perfilado' }, { replace: true })
+      return
+    }
+
     const treatment = treatments.find((t) => t.id === preselectedTreatmentId)
     if (!treatment) return
 

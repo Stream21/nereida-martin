@@ -20,7 +20,7 @@ function formatEuro(value) {
 export default function RevenueChart({ months }) {
   if (!months?.length) {
     return (
-      <ChartCard title="Ingresos por mes" subtitle="Reservas web y de agenda con precio">
+      <ChartCard title="Ingresos por mes" subtitle="Citas web y de agenda ya realizadas">
         <p className="text-sm text-on-surface-variant py-8 text-center">Sin datos todavía.</p>
       </ChartCard>
     )
@@ -35,7 +35,7 @@ export default function RevenueChart({ months }) {
   const hasRevenue = data.some((d) => d.revenue > 0)
 
   return (
-    <ChartCard title="Ingresos por mes" subtitle="Reservas web y de agenda con precio">
+    <ChartCard title="Ingresos por mes" subtitle="Citas web y de agenda ya realizadas">
       {!hasRevenue ? (
         <p className="text-sm text-on-surface-variant py-8 text-center">
           Aún no hay ingresos registrados en reservas web.

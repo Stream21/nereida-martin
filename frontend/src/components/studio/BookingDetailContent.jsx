@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import IntakeAnswers from './IntakeAnswers'
 import AssessmentPhotos from './AssessmentPhotos'
-import { fetchOwnerBooking } from '../../utils/ownerApi'
+import { fetchOwnerBooking, confirmOwnerBookingReview, rejectOwnerBookingReview } from '../../utils/ownerApi'
 import {
   bookingSourceLabel,
   bookingStatusLabel,
@@ -68,11 +68,15 @@ export default function BookingDetailContent({
   bookingId,
   preview,
   initialView = 'summary',
+  onUpdated,
 }) {
   const [fetched, setFetched] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [view, setView] = useState(initialView)
+  const [actionError, setActionError] = useState('')
+  const [actionLoading, setActionLoading] = useState('')
+  const [confirmReject, setConfirmReject] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -106,6 +110,90 @@ export default function BookingDetailContent({
   const hasPhoto = Boolean(booking?.hasPhoto || (booking?.photos && booking.photos.length > 0))
   const google = isGoogleBookingSource(booking?.source)
   const priceLabel = formatEuro(booking?.price)
+  const pendingReview = booking?.status === 'pending_review'
+  const numericId = Number(booking?.id || bookingId)
+
+  const handleConfirmReview = async () => {
+    if (!Number.isFinite(numericId) || actionLoading) return
+    setActionError('')
+    setActionLoading('confirm')
+    try {
+      const res = await confirmOwnerBookingReview(numericId)
+      if (res.booking) setFetched(res.booking)
+      onUpdated?.(res.booking || { ...booking, status: 'confirmed' })
+    } catch (err) {
+      setActionError(err.message || 'No se pudo confirmar la cita')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const handleRejectReview = async () => {
+    if (!Number.isFinite(numericId) || actionLoading) return
+    setActionError('')
+    setActionLoading('reject')
+    try {
+      await rejectOwnerBookingReview(numericId)
+      onUpdated?.({ ...booking, status: 'cancelled' })
+    } catch (err) {
+      setActionError(err.message || 'No se pudo cancelar la cita')
+      setActionLoading('')
+    }
+  }
+
+  const reviewActions = pendingReview && !google && (
+    <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-4 space-y-3">
+      <p className="text-sm text-on-surface leading-relaxed">
+        Solicitud pendiente. Revisa el cuestionario y las fotos, y confirma o descarta la cita aquí.
+        El correo solo avisa de que hay un caso que revisar.
+      </p>
+      {actionError && <p className="text-sm text-error">{actionError}</p>}
+      {confirmReject ? (
+        <div className="space-y-3">
+          <p className="text-sm text-on-surface-variant">
+            Se cancelará la cita y avisaremos a la clienta de que no es apta.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmReject(false)}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium bg-surface-container-lowest border border-outline-variant/30 text-on-surface"
+            >
+              Volver
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(actionLoading)}
+              onClick={handleRejectReview}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium bg-error-container text-error disabled:opacity-60"
+            >
+              {actionLoading === 'reject' ? 'Cancelando…' : 'Sí, cancelar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.97 }}
+            disabled={Boolean(actionLoading)}
+            onClick={handleConfirmReview}
+            className="cursor-pointer w-full min-h-12 rounded-2xl px-4 text-sm font-medium coral-gradient text-white disabled:opacity-60"
+          >
+            {actionLoading === 'confirm' ? 'Confirmando…' : 'Confirmar cita'}
+          </motion.button>
+          <button
+            type="button"
+            disabled={Boolean(actionLoading)}
+            onClick={() => setConfirmReject(true)}
+            className="cursor-pointer w-full min-h-12 rounded-2xl px-4 text-sm font-medium bg-surface-container-lowest border border-outline-variant/30 text-on-surface-variant disabled:opacity-60"
+          >
+            No apta · cancelar
+          </button>
+        </div>
+      )}
+    </div>
+  )
 
   const backButton = (
     <button
@@ -144,6 +232,7 @@ export default function BookingDetailContent({
             ) : (
               <IntakeAnswers intake={booking?.intake} />
             )}
+            {reviewActions}
           </motion.div>
         ) : view === 'photos' ? (
           <motion.div
@@ -168,6 +257,7 @@ export default function BookingDetailContent({
             ) : (
               <AssessmentPhotos photos={booking?.photos} />
             )}
+            {reviewActions}
           </motion.div>
         ) : (
           <motion.div
@@ -313,7 +403,9 @@ export default function BookingDetailContent({
               </motion.button>
             )}
 
-            {!loading && !hasIntake && !hasPhoto && !google && (
+            {reviewActions}
+
+            {!loading && !hasIntake && !hasPhoto && !google && !pendingReview && (
               <p className="text-xs text-on-surface-variant">
                 Esta cita no incluye cuestionario ni fotos de valoración.
               </p>

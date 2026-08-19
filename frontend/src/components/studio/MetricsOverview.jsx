@@ -35,17 +35,17 @@ export default function MetricsOverview({ overview }) {
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <SectionTitle>Reservas web y agenda</SectionTitle>
+        <SectionTitle>Citas ya realizadas</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
           <KpiCard
             label="Ingresos del mes"
             value={formatEuro(overview.monthRevenue)}
-            hint={overview.period?.label}
+            hint={`${overview.period?.label} · citas ya realizadas`}
           />
           <KpiCard
             label="Ingresos del año"
             value={formatEuro(overview.yearRevenue)}
-            hint={`${overview.yearBookings} citas`}
+            hint={`${overview.yearBookings} citas realizadas`}
           />
           <KpiCard
             label="Citas del mes"
