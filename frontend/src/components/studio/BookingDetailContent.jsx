@@ -10,6 +10,7 @@ import {
   formatEuro,
   formatStudioTime,
   formatStudioWeekday,
+  isGoogleBookingSource,
 } from '../../utils/studioFormat'
 
 const slideVariants = {
@@ -39,6 +40,8 @@ function mergeBooking(preview, fetched) {
 function statusClass(status) {
   if (status === 'cancelled') return 'bg-error-container text-error'
   if (status === 'pending_review') return 'bg-tertiary-container/50 text-on-surface'
+  if (status === 'pending_companion') return 'bg-amber-100 text-amber-900'
+  if (status === 'google_overlap') return 'bg-amber-100 text-amber-900'
   return 'bg-primary/15 text-primary'
 }
 
@@ -73,6 +76,12 @@ export default function BookingDetailContent({
 
   useEffect(() => {
     let cancelled = false
+    const liveGoogle = preview?.liveGoogle || String(bookingId || '').startsWith('gcal:')
+    if (liveGoogle) {
+      setLoading(false)
+      setError('')
+      return undefined
+    }
     setLoading(true)
     setError('')
     fetchOwnerBooking(bookingId)
@@ -88,14 +97,14 @@ export default function BookingDetailContent({
     return () => {
       cancelled = true
     }
-  }, [bookingId])
+  }, [bookingId, preview?.liveGoogle])
 
   const booking = useMemo(() => mergeBooking(preview, fetched), [preview, fetched])
   const start = booking?.startTime ? new Date(booking.startTime) : null
   const end = booking?.endTime ? new Date(booking.endTime) : null
   const hasIntake = Boolean(booking?.hasIntake || booking?.intake)
   const hasPhoto = Boolean(booking?.hasPhoto || (booking?.photos && booking.photos.length > 0))
-  const google = booking?.source === 'google'
+  const google = isGoogleBookingSource(booking?.source)
   const priceLabel = formatEuro(booking?.price)
 
   const backButton = (
@@ -188,6 +197,27 @@ export default function BookingDetailContent({
               >
                 {bookingStatusLabel(booking.status)}
               </span>
+            )}
+
+            {booking?.isJoint && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary ml-2">
+                <Icon name="group" className="text-sm" />
+                Conjunta
+              </span>
+            )}
+
+            {booking?.jointPartner && (
+              <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3 text-sm text-on-surface">
+                <p className="font-medium">
+                  {booking.jointRole === 'primary' ? 'Acompañante' : 'Clienta principal'}:{' '}
+                  {booking.jointPartner.name}
+                </p>
+                {booking.jointPartner.treatmentName && (
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    {booking.jointPartner.treatmentName}
+                  </p>
+                )}
+              </div>
             )}
 
             <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 px-4 py-3.5 space-y-3">

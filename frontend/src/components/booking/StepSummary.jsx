@@ -15,6 +15,9 @@ export default function StepSummary({
   isSubmitting,
   consents,
   onConsentsChange,
+  jointBooking = false,
+  companionInfo,
+  companionSlotTime,
 }) {
   const [consentError, setConsentError] = useState(null)
 
@@ -64,12 +67,22 @@ export default function StepSummary({
               <div className="flex items-center gap-1.5 mt-2">
                 <Icon name="schedule" className="text-xs text-primary/70" />
                 <span className="text-xs text-on-surface-variant font-medium">{treatment.duration}</span>
-                {treatment.priceLabel && (
+                {jointBooking && companionInfo?.primaryPrice != null && companionInfo?.companionPrice != null ? (
+                  <>
+                    <span className="text-xs text-on-surface-variant/40">·</span>
+                    <span className="text-xs font-bold text-primary">
+                      {companionInfo.primaryPrice + companionInfo.companionPrice} €
+                    </span>
+                    <span className="text-[10px] text-on-surface-variant/60">
+                      ({companionInfo.primaryPrice} € + {companionInfo.companionPrice} €)
+                    </span>
+                  </>
+                ) : treatment.priceLabel ? (
                   <>
                     <span className="text-xs text-on-surface-variant/40">·</span>
                     <span className="text-xs font-bold text-primary">{treatment.priceLabel}</span>
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -91,10 +104,38 @@ export default function StepSummary({
                 Fecha y hora
               </p>
               <p className="font-headline text-lg text-on-surface capitalize">{dateLabel}</p>
-              <p className="text-sm text-on-surface-variant mt-0.5">{time}h</p>
+              <p className="text-sm text-on-surface-variant mt-0.5">
+                Tu cita · {time}h
+                {jointBooking && companionSlotTime ? ` · Acompañante · ${companionSlotTime}h` : ''}
+              </p>
             </div>
           </div>
         </motion.div>
+
+        {jointBooking && companionInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22, duration: 0.4 }}
+            className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/10"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Icon name="group" className="text-primary text-lg" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-label font-bold tracking-[0.15em] uppercase text-on-surface-variant mb-1">
+                  Acompañante
+                </p>
+                <h3 className="font-headline text-lg text-on-surface">{companionInfo.name}</h3>
+                <p className="text-sm text-on-surface-variant mt-0.5">
+                  {companionInfo.companionTreatmentName}
+                  {companionInfo.companionPrice != null ? ` · ${companionInfo.companionPrice} €` : ''}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Client */}
         <motion.div
@@ -143,9 +184,11 @@ export default function StepSummary({
             <Icon name="info" className="text-primary shrink-0 mt-0.5 text-lg" />
             <div>
               <p className="text-sm text-on-surface-variant leading-relaxed">
-                {pendingReview
-                  ? 'Tu cita quedará pendiente de valoración por foto. Te avisaremos por email cuando confirmemos tu aptitud.'
-                  : 'Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
+                {jointBooking
+                  ? 'Tu reserva quedará pendiente hasta que tu acompañante confirme por email en 24 horas. No recibirás confirmación final hasta entonces.'
+                  : pendingReview
+                    ? 'Tu cita quedará pendiente de valoración por foto. Te avisaremos por email cuando confirmemos tu aptitud.'
+                    : 'Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
               </p>
             </div>
           </div>
@@ -172,7 +215,7 @@ export default function StepSummary({
               <span>Reservando...</span>
             </>
           ) : (
-            <span>{pendingReview ? 'Solicitar cita' : 'Confirmar Reserva'}</span>
+            <span>{pendingReview ? 'Solicitar cita' : jointBooking ? 'Reservar cita conjunta' : 'Confirmar Reserva'}</span>
           )}
         </motion.button>
       </motion.div>

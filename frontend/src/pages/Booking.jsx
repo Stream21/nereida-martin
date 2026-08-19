@@ -12,11 +12,13 @@ import { requiresPhotoAssessment } from '../utils/photoAssessment'
 import StepHennaAssessment from '../components/booking/StepHennaAssessment'
 import StepAvailability from '../components/booking/StepAvailability'
 import StepSummary from '../components/booking/StepSummary'
+import StepCompanionPhone from '../components/booking/StepCompanionPhone'
 import BookingSuccess from '../components/booking/BookingSuccess'
 import { saveClientProfile } from '../utils/clientSession'
 import { isValidPhone } from '../utils/validation'
 import { getClientToken, updateClientProfile } from '../utils/clientAuth'
 import { useClientAuth } from '../hooks/useClientAuth'
+import { isJointTreatment } from '../utils/browDesign'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -42,6 +44,7 @@ const STEP_META = {
   treatment: 'Tratamiento',
   treatment_confirm: 'Confirmación',
   treatment_q: 'Aptitud',
+  companion_phone: 'Acompañante',
   henna: 'Valoración',
   calendar: 'Fecha',
   summary: 'Resumen',
@@ -71,6 +74,7 @@ function buildFlow({
   skipPhotoAssessment,
   skipIdentify,
   skipPriorHistory,
+  isJoint,
 }) {
   const flow = []
   if (!skipIdentify) flow.push('identify')
@@ -79,6 +83,7 @@ function buildFlow({
   if (!skipQuestionnaires && needsTreatmentConfirm) flow.push('treatment_confirm')
   if (!skipQuestionnaires && needsTreatmentQuestionnaire) flow.push('treatment_q')
   if (!skipPhotoAssessment && needsPhotoAssessment) flow.push('henna')
+  if (isJoint) flow.push('companion_phone')
   flow.push('calendar', 'summary')
   return flow
 }
@@ -123,6 +128,9 @@ export default function Booking() {
   const [hennaAssessmentId, setHennaAssessmentId] = useState(null)
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedTime, setSelectedTime] = useState(null)
+  const [companionInfo, setCompanionInfo] = useState(null)
+  const [companionPhone, setCompanionPhone] = useState('')
+  const [companionSlotTime, setCompanionSlotTime] = useState(null)
 
   const [treatments, setTreatments] = useState([])
   const [loadingTreatments, setLoadingTreatments] = useState(true)
@@ -152,6 +160,14 @@ export default function Booking() {
     [lookupData, declaredPriorTreatments]
   )
 
+  const isJoint = isJointTreatment(selectedTreatment?.id)
+
+  const mergedPerfiladoBlockedWeeks = useMemo(() => {
+    const primary = lookupData?.perfiladoBlockedWeeks || []
+    const companion = companionInfo?.perfiladoBlockedWeeks || []
+    return [...new Set([...primary, ...companion])]
+  }, [lookupData?.perfiladoBlockedWeeks, companionInfo?.perfiladoBlockedWeeks])
+
   const flow = useMemo(
     () => buildFlow({
       needsTreatmentConfirm,
@@ -162,8 +178,9 @@ export default function Booking() {
       skipPhotoAssessment: skipHenna,
       skipIdentify,
       skipPriorHistory: !needsPriorHistory,
+      isJoint,
     }),
-    [needsTreatmentConfirm, needsTreatmentQuestionnaire, needsPhotoAssessment, skipTreatment, skipQuestionnaires, skipHenna, skipIdentify, needsPriorHistory]
+    [needsTreatmentConfirm, needsTreatmentQuestionnaire, needsPhotoAssessment, skipTreatment, skipQuestionnaires, skipHenna, skipIdentify, needsPriorHistory, isJoint]
   )
 
   const currentStep = flow[stepIndex] || 'identify'
@@ -419,6 +436,7 @@ export default function Booking() {
       skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
+      isJoint: false,
     })
 
     const targetStep = needQ ? 'treatment_q' : 'calendar'
@@ -502,6 +520,11 @@ export default function Booking() {
       })
     }
 
+    if (currentStep === 'companion_phone' && !companionInfo) {
+      setBookingError('Valida el teléfono de tu acompañante antes de continuar')
+      return
+    }
+
     if (currentStep === 'calendar' && (!selectedDate || !selectedTime)) return
 
     setDirection(1)
@@ -523,6 +546,8 @@ export default function Booking() {
     setIntakeSignature(null)
     setSignerName(clientInfo.name?.trim() || '')
     setHennaAssessmentId(null)
+    setCompanionInfo(null)
+    setCompanionPhone('')
 
     const { needsTreatmentConfirm: needConfirm, needsTreatmentQuestionnaire: needQ } =
       resolveTreatmentFlow(treatment, lookupData)
@@ -541,11 +566,19 @@ export default function Booking() {
       skipPhotoAssessment: false,
       skipIdentify: skipIdentify,
       skipPriorHistory: !needsPriorHistory,
+      isJoint: isJointTreatment(treatment.id),
     })
 
     setDirection(1)
     setStepIndex(stepIndexAfter(nextFlow, 'treatment'))
   }, [lookupData, needsPriorHistory, resolveTreatmentFlow, skipIdentify, clientInfo.name])
+
+  const handleCompanionValidated = useCallback((info) => {
+    setCompanionInfo(info)
+    setCompanionPhone(info.phone || '')
+    setSelectedDate(null)
+    setSelectedTime(null)
+  }, [])
 
   const handleQuestionnaireComplete = useCallback(({ signature }) => {
     setIntakeSignature(signature)
@@ -574,13 +607,16 @@ export default function Booking() {
       skipPhotoAssessment: false,
       skipIdentify: skipIdentify,
       skipPriorHistory: !needsPriorHistory,
+      isJoint: isJointTreatment(selectedTreatment?.id),
     })
 
     if (isFirstTime) {
       setDirection(1)
       setStepIndex(nextFlow.indexOf('treatment_q'))
     } else {
-      const target = nextFlow.includes('henna') ? 'henna' : 'calendar'
+      let target = 'calendar'
+      if (nextFlow.includes('henna')) target = 'henna'
+      else if (nextFlow.includes('companion_phone')) target = 'companion_phone'
       setDirection(1)
       setStepIndex(nextFlow.indexOf(target))
     }
@@ -650,6 +686,15 @@ export default function Booking() {
       return
     }
 
+    if (isJoint) {
+      if (!companionPhone) {
+        setBookingError('Falta validar el teléfono de tu acompañante')
+        setIsSubmitting(false)
+        return
+      }
+      body.companionPhone = companionPhone
+    }
+
     try {
       const res = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -689,7 +734,7 @@ export default function Booking() {
   }, [
     isSubmitting, selectedTreatment, selectedDate, selectedTime, clientInfo, allConsents,
     lookupData, studioHabitual, needsTreatmentQuestionnaire, treatmentAnswers, intakeSignature,
-    needsPhotoAssessment, hennaAssessmentId, flow,
+    needsPhotoAssessment, hennaAssessmentId, flow, isJoint, companionPhone,
   ])
 
   const handleReserveAnotherDay = useCallback(() => {
@@ -712,10 +757,11 @@ export default function Booking() {
       skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
+      isJoint,
     })
     setStepIndex(nextFlow.indexOf('calendar'))
     setDirection(1)
-  }, [needsPhotoAssessment])
+  }, [needsPhotoAssessment, isJoint])
 
   const handleReserveAnotherTreatment = useCallback(() => {
     setBookingResult(null)
@@ -729,6 +775,8 @@ export default function Booking() {
     setSkipTreatment(false)
     setNeedsTreatmentConfirm(false)
     setNeedsTreatmentQuestionnaire(false)
+    setCompanionInfo(null)
+    setCompanionPhone('')
     if (clientInfo.email) {
       handleLookup(clientInfo.email.trim())
     }
@@ -741,6 +789,7 @@ export default function Booking() {
       skipPhotoAssessment: true,
       skipIdentify: true,
       skipPriorHistory: true,
+      isJoint: false,
     })
     setStepIndex(nextFlow.indexOf('treatment'))
     setDirection(1)
@@ -748,8 +797,9 @@ export default function Booking() {
 
   const handleClose = useCallback(() => navigate('/'), [navigate])
 
-  const showContinueButton = ['identify', 'prior_history', 'calendar'].includes(currentStep)
+  const showContinueButton = ['identify', 'prior_history', 'calendar', 'companion_phone'].includes(currentStep)
   const canAdvanceCalendar = currentStep === 'calendar' && selectedDate && selectedTime
+  const canAdvanceCompanion = currentStep === 'companion_phone' && companionInfo
 
   if (bookingResult) {
     return (
@@ -939,15 +989,31 @@ export default function Booking() {
             </motion.div>
           )}
 
+          {currentStep === 'companion_phone' && (
+            <motion.div key="companion_phone" custom={direction} variants={stepVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.4 }}>
+              <StepCompanionPhone
+                companionInfo={companionInfo}
+                onValidated={handleCompanionValidated}
+              />
+            </motion.div>
+          )}
+
           {currentStep === 'calendar' && (
             <motion.div key="calendar" custom={direction} variants={stepVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.4 }}>
               <StepAvailability
                 selectedDate={selectedDate}
                 selectedTime={selectedTime}
                 onSelectDate={setSelectedDate}
-                onSelectTime={setSelectedTime}
+                onSelectTime={(time, meta) => {
+                  setSelectedTime(time)
+                  setCompanionSlotTime(meta?.companionTime || null)
+                }}
                 treatmentId={selectedTreatment?.id}
-                perfiladoBlockedWeeks={lookupData?.perfiladoBlockedWeeks || []}
+                perfiladoBlockedWeeks={mergedPerfiladoBlockedWeeks}
+                jointMode={isJoint}
+                companionClientId={companionInfo?.clientId}
+                primaryClientId={authUser?.id}
+                companionTreatmentName={companionInfo?.companionTreatmentName}
               />
             </motion.div>
           )}
@@ -964,6 +1030,9 @@ export default function Booking() {
                 onConsentsChange={setConsents}
                 onConfirm={handleConfirm}
                 isSubmitting={isSubmitting}
+                jointBooking={isJoint}
+                companionInfo={companionInfo}
+                companionSlotTime={companionSlotTime}
               />
             </motion.div>
           )}
@@ -972,11 +1041,17 @@ export default function Booking() {
         {showContinueButton && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8">
             <motion.button
-              whileTap={(currentStep === 'identify' || canAdvanceCalendar) ? { scale: 0.97 } : {}}
+              whileTap={(currentStep === 'identify' || canAdvanceCalendar || canAdvanceCompanion) ? { scale: 0.97 } : {}}
               onClick={goNext}
-              disabled={currentStep === 'calendar' && !canAdvanceCalendar}
+              disabled={
+                (currentStep === 'calendar' && !canAdvanceCalendar) ||
+                (currentStep === 'companion_phone' && !canAdvanceCompanion)
+              }
               className={`w-full flex items-center justify-center gap-2 coral-gradient text-white rounded-2xl py-4 font-label text-sm tracking-widest uppercase font-bold editorial-shadow transition-opacity ${
-                currentStep === 'calendar' && !canAdvanceCalendar ? 'opacity-35 cursor-not-allowed' : 'opacity-100'
+                (currentStep === 'calendar' && !canAdvanceCalendar) ||
+                (currentStep === 'companion_phone' && !canAdvanceCompanion)
+                  ? 'opacity-35 cursor-not-allowed'
+                  : 'opacity-100'
               }`}
             >
               <span>Continuar</span>

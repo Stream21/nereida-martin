@@ -29,8 +29,9 @@ export default function BookingSuccess({
 }) {
   if (!bookingData) return null
 
-  const { booking, icsUrl, googleCalendarUrl, client, cancelUrl, cancellationDeadline } = bookingData
+  const { booking, icsUrl, googleCalendarUrl, client, cancelUrl, cancellationDeadline, jointBooking, pendingCompanion, companionBooking, expiresAt } = bookingData
   const pendingReview = booking.pendingReview || booking.status === 'pending_review'
+  const pendingJoint = pendingCompanion || booking.status === 'pending_companion' || jointBooking
   const startDate = new Date(booking.startTime)
   const endDate = new Date(booking.endTime)
   const dateLabel = format(startDate, "EEEE, d 'de' MMMM", { locale: es })
@@ -50,7 +51,7 @@ export default function BookingSuccess({
         initial="hidden"
         animate="visible"
         className={`w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(183,139,125,0.35)] ${
-          pendingReview ? 'bg-amber-400' : 'bg-linear-to-br from-primary to-primary/70'
+          pendingReview || pendingJoint ? 'bg-amber-400' : 'bg-linear-to-br from-primary to-primary/70'
         }`}
       >
         <svg viewBox="0 0 24 24" fill="none" className="w-10 h-10">
@@ -60,6 +61,17 @@ export default function BookingSuccess({
               stroke="white"
               strokeWidth="2.5"
               strokeLinecap="round"
+              variants={checkVariants}
+              initial="hidden"
+              animate="visible"
+            />
+          ) : pendingJoint ? (
+            <motion.path
+              d="M12 8v4l3 3"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               variants={checkVariants}
               initial="hidden"
               animate="visible"
@@ -85,12 +97,23 @@ export default function BookingSuccess({
         transition={{ delay: 0.5, duration: 0.4 }}
       >
         <h2 className="font-headline text-2xl md:text-3xl text-on-surface mb-2">
-          {pendingReview ? 'Solicitud recibida' : '¡Reserva Confirmada!'}
+          {pendingReview
+            ? 'Solicitud recibida'
+            : pendingJoint
+              ? 'Reserva pendiente'
+              : '¡Reserva Confirmada!'}
         </h2>
         <p className="text-sm text-on-surface-variant">
-          {pendingReview
-            ? <>Hemos recibido tu solicitud. Te avisaremos a <strong>{client.email}</strong> tras la valoración.</>
-            : <>Te hemos enviado un email de confirmación a <strong>{client.email}</strong></>}
+          {pendingReview ? (
+            <>Hemos recibido tu solicitud. Te avisaremos a <strong>{client.email}</strong> tras la valoración.</>
+          ) : pendingJoint ? (
+            <>
+              Hemos enviado un email a <strong>{companionBooking?.clientName || 'tu acompañante'}</strong> para
+              que confirme en 24 h. Tu cita quedará confirmada cuando lo haga.
+            </>
+          ) : (
+            <>Te hemos enviado un email de confirmación a <strong>{client.email}</strong></>
+          )}
         </p>
       </motion.div>
 
@@ -116,10 +139,25 @@ export default function BookingSuccess({
             <p className="font-headline text-lg text-on-surface capitalize">{dateLabel}</p>
             <p className="text-sm text-on-surface-variant">{timeLabel}</p>
           </div>
+          {pendingJoint && companionBooking && (
+            <>
+              <div className="h-px bg-outline-variant/10" />
+              <div>
+                <p className="text-[10px] font-label font-bold tracking-[0.15em] uppercase text-primary mb-1">
+                  Acompañante · {companionBooking.clientName}
+                </p>
+                <p className="font-headline text-lg text-on-surface">{companionBooking.treatmentName}</p>
+                <p className="text-sm text-on-surface-variant mt-0.5">
+                  {format(new Date(companionBooking.startTime), 'HH:mm')} –{' '}
+                  {format(new Date(companionBooking.endTime), 'HH:mm')}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
 
-      {!pendingReview && (
+      {!pendingReview && !pendingJoint && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -155,7 +193,24 @@ export default function BookingSuccess({
         </motion.div>
       )}
 
-      {(cancelUrl || cancellationDeadline) && !pendingReview && (
+      {pendingJoint && expiresAt && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.75, duration: 0.4 }}
+          className="mt-6 bg-amber-50 rounded-2xl p-5 border border-amber-200/60 text-left"
+        >
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            Plazo de confirmación de la acompañante:{' '}
+            <strong>
+              {format(new Date(expiresAt), "d MMM yyyy 'a las' HH:mm", { locale: es })}
+            </strong>
+            . Si no confirma, se cancelarán ambas citas.
+          </p>
+        </motion.div>
+      )}
+
+      {(cancelUrl || cancellationDeadline) && !pendingReview && !pendingJoint && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}

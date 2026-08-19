@@ -10,6 +10,7 @@
     "calendar:init:year": "node scripts/sync-calendar-init.js --year=2026",
     "calendar:sync": "node scripts/sync-calendar.js",
     "calendar:audit": "node scripts/calendar-audit-overlaps.js",
+    "calendar:gaps": "node scripts/calendar-gap-audit.js",
     "cron:calendar-sync": "node scripts/trigger-calendar-sync.js",
     "db:up": "node scripts/db-up.js",
     "db:down": "node scripts/db-down.js",

@@ -72,6 +72,7 @@ async function main() {
   console.log(`  Unchanged:      ${result.stats.unchanged}`);
   console.log(`  Skipped:        ${result.stats.skipped}`);
   console.log(`  Fantasma skip:  ${result.stats.fantasmaSkipped || result.stats.overlapSkipped || 0}`);
+  console.log(`  Overlap insert: ${result.stats.insertedOverlap || 0}`);
   console.log(`  [Bloqueo] skip: ${result.stats.ghostSkipped || 0}`);
   console.log(`  Orphans:        ${result.stats.orphansCancelled}`);
 

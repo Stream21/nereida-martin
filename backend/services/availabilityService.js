@@ -35,7 +35,7 @@ async function getBookedRangesForDate(dateStr, excludeBookingId = null) {
 
   const params = [first.start.toISOString(), last.end.toISOString()];
   let sql = `SELECT start_time, end_time FROM bookings
-     WHERE status IN ('confirmed', 'pending_review')
+     WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
        AND start_time < $2
        AND end_time > $1`;
 
@@ -258,7 +258,7 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
 
   const bookedResult = await query(
     `SELECT start_time, end_time FROM bookings
-     WHERE status IN ('confirmed', 'pending_review')
+     WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
        AND start_time < $2
        AND end_time > $1`,
     [rangeStart.toISOString(), rangeEnd.toISOString()]
@@ -304,6 +304,310 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
   };
 }
 
+async function loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId) {
+  const { resolveCompanionTreatment, resolvePrimaryTreatment, isJointTreatment } = require('./jointBookingService');
+
+  let primaryBlock;
+  let realPrimaryTreatmentId = primaryTreatmentId;
+
+  if (isJointTreatment(primaryTreatmentId) && primaryClientId) {
+    const primaryInfo = await resolvePrimaryTreatment(primaryClientId);
+    if (primaryInfo.error) return primaryInfo;
+    primaryBlock = primaryInfo.blockMinutes;
+    realPrimaryTreatmentId = primaryInfo.companionTreatmentId;
+  } else {
+    const primaryRes = await query(
+      'SELECT duration_min, duration_max FROM treatments WHERE id = $1 AND active = true',
+      [primaryTreatmentId]
+    );
+    if (primaryRes.rows.length === 0) return { error: 'not_found' };
+    primaryBlock = blockDurationMinutes(
+      primaryRes.rows[0].duration_max || primaryRes.rows[0].duration_min
+    );
+  }
+
+  const companionInfo = await resolveCompanionTreatment(companionClientId);
+  if (companionInfo.error) return companionInfo;
+
+  return {
+    primaryBlock,
+    companionBlock: companionInfo.blockMinutes,
+    companionTreatmentId: companionInfo.companionTreatmentId,
+    companionTreatmentName: companionInfo.companionTreatmentName,
+    realPrimaryTreatmentId,
+  };
+}
+
+function getJointSlotsForDate(
+  dateStr,
+  primaryBlockMinutes,
+  companionBlockMinutes,
+  busyRanges,
+  now = Date.now()
+) {
+  if (isWeekendDay(dateStr)) return [];
+
+  const primarySlots = getSlotsForDate(dateStr, primaryBlockMinutes, busyRanges, now);
+  const jointSlots = [];
+
+  for (const slot of primarySlots) {
+    if (!slot.available) continue;
+
+    const [hour, minute] = slot.time.split(':').map(Number);
+    const primaryStart = studioLocalToDate(dateStr, hour, minute);
+    const primaryEnd = new Date(primaryStart.getTime() + primaryBlockMinutes * 60000);
+    const companionStart = primaryEnd;
+    const companionEnd = new Date(companionStart.getTime() + companionBlockMinutes * 60000);
+
+    if (!slotFitsInWorkWindows(dateStr, companionStart.getTime(), companionEnd.getTime())) {
+      continue;
+    }
+
+    if (
+      hasOverlapWithRanges(primaryStart, primaryEnd, busyRanges) ||
+      hasOverlapWithRanges(companionStart, companionEnd, busyRanges)
+    ) {
+      continue;
+    }
+
+    jointSlots.push({
+      time: slot.time,
+      available: true,
+      companionTime: formatStudioTime(companionStart),
+      companionEndTime: formatStudioTime(companionEnd),
+      primaryEndTime: formatStudioTime(primaryEnd),
+    });
+  }
+
+  return jointSlots;
+}
+
+async function hasJointSlotAvailable(
+  dateStr,
+  timeStr,
+  primaryTreatmentId,
+  companionClientId,
+  primaryClientId,
+  { skipPerfiladoLimit = false, skipLeadTime = false } = {}
+) {
+  const blocks = await loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId);
+  if (blocks.error) return false;
+
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const primaryStart = studioLocalToDate(dateStr, hour, minute);
+  const primaryEnd = new Date(primaryStart.getTime() + blocks.primaryBlock * 60000);
+  const companionStart = primaryEnd;
+  const companionEnd = new Date(companionStart.getTime() + blocks.companionBlock * 60000);
+
+  if (!isOnGrid(primaryStart)) return false;
+  if (!slotFitsInWorkWindows(dateStr, primaryStart.getTime(), primaryEnd.getTime())) return false;
+  if (!slotFitsInWorkWindows(dateStr, companionStart.getTime(), companionEnd.getTime())) return false;
+
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  if (dateStr < bookingStartDate) return false;
+  if (!skipLeadTime && isBeforeMinLead(primaryStart.getTime())) return false;
+
+  const busyRanges = await getBusyRangesForDate(dateStr);
+  if (
+    hasOverlapWithRanges(primaryStart, primaryEnd, busyRanges) ||
+    hasOverlapWithRanges(companionStart, companionEnd, busyRanges)
+  ) {
+    return false;
+  }
+
+  if (!skipPerfiladoLimit) {
+    const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+    const primaryClash = await findPerfiladoWeekConflict({
+      clientId: primaryClientId,
+      treatmentId: primaryTreatmentId,
+      startTime: primaryStart,
+    });
+    if (primaryClash) return false;
+
+    const companionClash = await findPerfiladoWeekConflict({
+      clientId: companionClientId,
+      treatmentId: blocks.companionTreatmentId,
+      startTime: companionStart,
+    });
+    if (companionClash) return false;
+  }
+
+  return true;
+}
+
+async function getJointAvailabilityForDate(
+  dateStr,
+  primaryTreatmentId,
+  companionClientId,
+  primaryClientId,
+  { skipPerfiladoLimit = false, skipLeadTime = false } = {}
+) {
+  const blocks = await loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId);
+  if (blocks.error) return blocks;
+
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  if (dateStr < bookingStartDate || isWeekendDay(dateStr)) {
+    return {
+      slots: [],
+      date: dateStr,
+      treatmentId: primaryTreatmentId,
+      realPrimaryTreatmentId: blocks.realPrimaryTreatmentId,
+      companionTreatmentId: blocks.companionTreatmentId,
+      companionTreatmentName: blocks.companionTreatmentName,
+      bookingStartDate,
+      primaryBlockMinutes: blocks.primaryBlock,
+      companionBlockMinutes: blocks.companionBlock,
+    };
+  }
+
+  const busyRanges = await getBusyRangesForDate(dateStr);
+  const now = skipLeadTime ? 0 : Date.now();
+  let slots = getJointSlotsForDate(
+    dateStr,
+    blocks.primaryBlock,
+    blocks.companionBlock,
+    busyRanges,
+    now
+  );
+
+  if (!skipPerfiladoLimit && primaryClientId) {
+    const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+    const filtered = [];
+    for (const slot of slots) {
+      const [hour, minute] = slot.time.split(':').map(Number);
+      const primaryStart = studioLocalToDate(dateStr, hour, minute);
+      const companionStart = new Date(primaryStart.getTime() + blocks.primaryBlock * 60000);
+
+      const primaryClash = await findPerfiladoWeekConflict({
+        clientId: primaryClientId,
+        treatmentId: blocks.realPrimaryTreatmentId || primaryTreatmentId,
+        startTime: primaryStart,
+      });
+      if (primaryClash) continue;
+
+      const companionClash = await findPerfiladoWeekConflict({
+        clientId: companionClientId,
+        treatmentId: blocks.companionTreatmentId,
+        startTime: companionStart,
+      });
+      if (companionClash) continue;
+
+      filtered.push(slot);
+    }
+    slots = filtered;
+  }
+
+  return {
+    slots,
+    date: dateStr,
+    treatmentId: primaryTreatmentId,
+    realPrimaryTreatmentId: blocks.realPrimaryTreatmentId,
+    companionTreatmentId: blocks.companionTreatmentId,
+    companionTreatmentName: blocks.companionTreatmentName,
+    bookingStartDate,
+    primaryBlockMinutes: blocks.primaryBlock,
+    companionBlockMinutes: blocks.companionBlock,
+  };
+}
+
+async function getJointAvailableDatesForMonth(
+  year,
+  month,
+  primaryTreatmentId,
+  companionClientId,
+  primaryClientId,
+  { skipPerfiladoLimit = false, skipLeadTime = false } = {}
+) {
+  const blocks = await loadJointTreatmentBlocks(primaryTreatmentId, companionClientId, primaryClientId);
+  if (blocks.error) return blocks;
+
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  const { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd } = monthDateBounds(year, month);
+
+  const bookedResult = await query(
+    `SELECT start_time, end_time FROM bookings
+     WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
+       AND start_time < $2 AND end_time > $1`,
+    [rangeStart.toISOString(), rangeEnd.toISOString()]
+  );
+
+  const bookedRanges = bookedResult.rows.map((row) => ({
+    start: new Date(row.start_time).getTime(),
+    end: new Date(row.end_time).getTime(),
+  }));
+
+  let ghostRanges = [];
+  try {
+    ghostRanges = await getGhostBlockRangesInRange(
+      rangeStart.toISOString(),
+      rangeEnd.toISOString()
+    );
+  } catch (err) {
+    console.warn(`Ghost blocks skipped for joint ${year}-${month}:`, err.message);
+  }
+
+  const allBusy = [...bookedRanges, ...ghostRanges];
+  const dates = [];
+  const now = skipLeadTime ? 0 : Date.now();
+
+  for (let day = 1; day <= lastDayNum; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (dateStr < bookingStartDate || isWeekendDay(dateStr)) continue;
+
+    const busyRanges = rangesOverlappingDay(allBusy, dateStr);
+    let slots = getJointSlotsForDate(
+      dateStr,
+      blocks.primaryBlock,
+      blocks.companionBlock,
+      busyRanges,
+      now
+    );
+
+    if (!skipPerfiladoLimit && primaryClientId) {
+      const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+      const filtered = [];
+      for (const slot of slots) {
+        const [hour, minute] = slot.time.split(':').map(Number);
+        const primaryStart = studioLocalToDate(dateStr, hour, minute);
+        const companionStart = new Date(primaryStart.getTime() + blocks.primaryBlock * 60000);
+
+        const primaryClash = await findPerfiladoWeekConflict({
+          clientId: primaryClientId,
+          treatmentId: primaryTreatmentId,
+          startTime: primaryStart,
+        });
+        if (primaryClash) continue;
+
+        const companionClash = await findPerfiladoWeekConflict({
+          clientId: companionClientId,
+          treatmentId: blocks.companionTreatmentId,
+          startTime: companionStart,
+        });
+        if (companionClash) continue;
+
+        filtered.push(slot);
+      }
+      slots = filtered;
+    }
+
+    if (slots.some((s) => s.available)) {
+      dates.push(dateStr);
+    }
+  }
+
+  return {
+    year,
+    month,
+    treatmentId: primaryTreatmentId,
+    companionTreatmentId: blocks.companionTreatmentId,
+    companionTreatmentName: blocks.companionTreatmentName,
+    bookingStartDate,
+    dates,
+    primaryBlockMinutes: blocks.primaryBlock,
+    companionBlockMinutes: blocks.companionBlock,
+  };
+}
+
 module.exports = {
   getBookedRangesForDate,
   getBusyRangesForDate,
@@ -312,4 +616,9 @@ module.exports = {
   getAvailableDatesForMonth,
   hasSlotAvailable,
   findNextAvailableSlot,
+  loadJointTreatmentBlocks,
+  getJointSlotsForDate,
+  hasJointSlotAvailable,
+  getJointAvailabilityForDate,
+  getJointAvailableDatesForMonth,
 };

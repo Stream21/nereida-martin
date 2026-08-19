@@ -5,6 +5,7 @@ import RequireClientAuth from './components/auth/RequireClientAuth'
 const Home = lazy(() => import('./pages/Home'))
 const Booking = lazy(() => import('./pages/Booking'))
 const CancelBooking = lazy(() => import('./pages/CancelBooking'))
+const ConfirmCompanionBooking = lazy(() => import('./pages/ConfirmCompanionBooking'))
 const MicroRequest = lazy(() => import('./pages/MicroRequest'))
 const ClientLogin = lazy(() => import('./pages/ClientLogin'))
 const ClientRegister = lazy(() => import('./pages/ClientRegister'))
@@ -34,6 +35,7 @@ export default function App() {
         />
         <Route path="/solicitar-micro" element={<MicroRequest />} />
         <Route path="/cancelar/:token" element={<CancelBooking />} />
+        <Route path="/confirmar-cita/:token" element={<ConfirmCompanionBooking />} />
         <Route path="/studio" element={<StudioLogin />} />
         <Route path="/studio/panel" element={<StudioDashboard />} />
       </Routes>

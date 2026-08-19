@@ -154,6 +154,100 @@ router.get('/bookings/:id', async (req, res) => {
   }
 });
 
+router.post('/bookings/joint', async (req, res) => {
+  try {
+    const { primaryClientId, companionClientId, treatmentId, startTime, date, time } = req.body || {};
+    if (
+      !primaryClientId ||
+      !companionClientId ||
+      !treatmentId ||
+      (!startTime && !(date && time))
+    ) {
+      return res.status(400).json({
+        error: 'primaryClientId, companionClientId, treatmentId y startTime (o date+time) son obligatorios',
+      });
+    }
+    const ownerBooking = require('../services/ownerBookingService');
+    const result = await ownerBooking.createOwnerJointBooking({
+      primaryClientId: Number(primaryClientId),
+      companionClientId: Number(companionClientId),
+      treatmentId,
+      startTime,
+      date,
+      time,
+    });
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        message: result.message,
+        code: result.code,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Owner create joint booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/availability/joint', async (req, res) => {
+  try {
+    const { date, treatmentId, companionClientId, primaryClientId } = req.query;
+    if (!date || !treatmentId || !companionClientId || !primaryClientId) {
+      return res.status(400).json({
+        error: 'date, treatmentId, companionClientId y primaryClientId son obligatorios',
+      });
+    }
+    const availabilityService = require('../services/availabilityService');
+    const data = await availabilityService.getJointAvailabilityForDate(
+      date,
+      treatmentId,
+      Number(companionClientId),
+      Number(primaryClientId),
+      { skipPerfiladoLimit: true, skipLeadTime: true }
+    );
+    if (data.error === 'not_found') {
+      return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Owner joint availability error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/availability/joint/month', async (req, res) => {
+  try {
+    const { year, month, treatmentId, companionClientId, primaryClientId } = req.query;
+    if (!treatmentId || !companionClientId || !primaryClientId) {
+      return res.status(400).json({
+        error: 'treatmentId, companionClientId y primaryClientId son obligatorios',
+      });
+    }
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+      return res.status(400).json({ error: 'year y month son obligatorios (month 1-12)' });
+    }
+    const availabilityService = require('../services/availabilityService');
+    const data = await availabilityService.getJointAvailableDatesForMonth(
+      y,
+      m,
+      treatmentId,
+      Number(companionClientId),
+      Number(primaryClientId),
+      { skipPerfiladoLimit: true, skipLeadTime: true }
+    );
+    if (data.error === 'not_found') {
+      return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Owner joint month availability error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/bookings', async (req, res) => {
   try {
     const { clientId, treatmentId, startTime, date, time } = req.body || {};

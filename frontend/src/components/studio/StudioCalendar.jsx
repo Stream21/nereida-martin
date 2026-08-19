@@ -22,11 +22,15 @@ import Icon from '../ui/Icon'
 import BookingDetailModal from './BookingDetailModal'
 import {
   createOwnerBooking,
+  createOwnerJointBooking,
   fetchClients,
   fetchOwnerAvailability,
+  fetchOwnerJointAvailability,
   fetchOwnerCalendar,
   fetchOwnerTreatments,
 } from '../../utils/ownerApi'
+import { isPerfiladoTreatment } from '../../utils/browDesign'
+import { isGoogleBookingSource } from '../../utils/studioFormat'
 
 const WEEKDAY_SHORT = ['L', 'M', 'X', 'J', 'V']
 const WEEKDAY_MED = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
@@ -146,7 +150,7 @@ function toIsoRange(fromDate, toDate) {
 }
 
 function isGoogleEvent(ev) {
-  return ev?.source === 'google'
+  return isGoogleBookingSource(ev?.source)
 }
 
 function formatRange(ev) {
@@ -217,10 +221,17 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [companionSearch, setCompanionSearch] = useState('')
+  const [companionClients, setCompanionClients] = useState([])
+  const [companionClientId, setCompanionClientId] = useState(null)
+  const [companionTreatmentName, setCompanionTreatmentName] = useState('')
 
   const gapMinutes = gapStart != null && gapEnd != null ? gapEnd - gapStart : null
   const hasGap = gapMinutes != null && gapMinutes > 0
   const lockedTime = hasGap ? initialTime || minsToLabel(gapStart) : null
+  const isPerfilado = isPerfiladoTreatment(treatmentId)
+  const isJoint = treatmentId === 'perfilado-conjunto'
+  const jointEligible = isJoint && (!hasGap || gapMinutes >= 90)
 
   const treatmentsWithFit = useMemo(() => {
     return treatments
@@ -265,6 +276,26 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   }, [clientSearch])
 
   useEffect(() => {
+    const t = setTimeout(() => {
+      fetchClients({ search: companionSearch, page: 1, limit: 15, status: 'active' })
+        .then((res) => {
+          const list = (res.clients || []).filter((c) => c.id !== clientId)
+          setCompanionClients(list)
+        })
+        .catch(() => setCompanionClients([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [companionSearch, clientId])
+
+  useEffect(() => {
+    if (!jointEligible) {
+      setCompanionClientId(null)
+      setCompanionSearch('')
+      setCompanionTreatmentName('')
+    }
+  }, [jointEligible])
+
+  useEffect(() => {
     if (hasGap && lockedTime) {
       setTime(lockedTime)
       setSlots([])
@@ -275,13 +306,29 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       setSlots([])
       return
     }
+    if (isJoint && (!companionClientId || !clientId)) {
+      setSlots([])
+      return
+    }
     let cancelled = false
     setLoadingSlots(true)
-    fetchOwnerAvailability({ date, treatmentId })
+    const fetchSlots = isJoint
+      ? fetchOwnerJointAvailability({
+          date,
+          treatmentId,
+          companionClientId,
+          primaryClientId: clientId,
+        })
+      : fetchOwnerAvailability({ date, treatmentId })
+
+    fetchSlots
       .then((res) => {
         if (cancelled) return
         const available = (res.slots || []).filter((s) => s.available)
         setSlots(available)
+        if (res.companionTreatmentName) {
+          setCompanionTreatmentName(res.companionTreatmentName)
+        }
         if (initialTime && available.some((s) => s.time === initialTime)) {
           setTime(initialTime)
         } else if (available.length === 1) {
@@ -299,8 +346,8 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap change
-  }, [date, treatmentId, initialTime, hasGap, lockedTime])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap/joint change
+  }, [date, treatmentId, initialTime, hasGap, lockedTime, isJoint, companionClientId, clientId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -309,10 +356,24 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       setError('Selecciona cliente, tratamiento, fecha y hora')
       return
     }
+    if (isJoint && !companionClientId) {
+      setError('Selecciona la acompañante')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {
-      await createOwnerBooking({ clientId, treatmentId, date, time: bookingTime })
+      if (isJoint) {
+        await createOwnerJointBooking({
+          primaryClientId: clientId,
+          companionClientId,
+          treatmentId,
+          date,
+          time: bookingTime,
+        })
+      } else {
+        await createOwnerBooking({ clientId, treatmentId, date, time: bookingTime })
+      }
       onCreated?.()
       onClose()
     } catch (err) {
@@ -325,7 +386,10 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const selectedFits =
     !hasGap ||
     treatmentsWithFit.find((t) => t.id === treatmentId)?.fits !== false
-  const canSubmit = selectedFits && (hasGap ? !!lockedTime : !!time)
+  const canSubmit =
+    selectedFits &&
+    (hasGap ? !!lockedTime : !!time) &&
+    (!isJoint || !!companionClientId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
@@ -397,6 +461,55 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           </div>
         </label>
 
+        {jointEligible && (
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <p className="text-xs font-label font-bold tracking-widest uppercase text-primary mb-2">
+              Perfilado Conjunto — selecciona acompañante
+            </p>
+            <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+              Acompañante
+            </span>
+            <input
+              type="search"
+              value={companionSearch}
+              onChange={(e) => setCompanionSearch(e.target.value)}
+              placeholder="Buscar acompañante activa…"
+              className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-4 py-3 text-sm outline-none focus:border-primary"
+            />
+            <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
+              {companionClients.length === 0 ? (
+                <p className="text-xs text-on-surface-variant px-1 py-2">
+                  Elige otra clienta activa distinta de la principal.
+                </p>
+              ) : (
+                companionClients.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setCompanionClientId(c.id)
+                      setCompanionSearch(c.name)
+                    }}
+                    className={`cursor-pointer w-full text-left rounded-xl px-3 py-2.5 text-sm min-h-11 ${
+                      companionClientId === c.id
+                        ? 'bg-primary/12 text-primary font-medium'
+                        : 'hover:bg-surface-container-low'
+                    }`}
+                  >
+                    {c.name}
+                    {c.phone ? <span className="text-on-surface-variant"> · {c.phone}</span> : null}
+                  </button>
+                ))
+              )}
+            </div>
+            {companionTreatmentName && (
+              <p className="text-xs text-on-surface-variant mt-2 px-1">
+                Tratamiento acompañante: {companionTreatmentName}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Fecha + hora juntos */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block min-w-0">
@@ -437,6 +550,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                 {slots.map((s) => (
                   <option key={s.time} value={s.time}>
                     {s.time}
+                    {isJoint && s.companionTime ? ` · ella ${s.companionTime}` : ''}
                   </option>
                 ))}
               </select>
@@ -494,7 +608,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           disabled={submitting || !canSubmit}
           className="cursor-pointer w-full rounded-2xl bg-primary text-on-primary py-3.5 min-h-12 text-sm font-medium disabled:opacity-60"
         >
-          {submitting ? 'Creando…' : 'Confirmar cita'}
+          {submitting ? 'Creando…' : isJoint ? 'Confirmar cita conjunta' : 'Confirmar cita'}
         </button>
       </form>
     </div>
@@ -658,6 +772,8 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                           onEventClick(ev)
                         }}
                         title={`${formatRange(ev)} · ${ev.clientName} · ${ev.treatmentName}${
+                          ev.isJoint && ev.jointPartnerName ? ` · Con ${ev.jointPartnerName}` : ''
+                        }${
                           ev.hasIntake
                             ? ev.intakeFlagged
                               ? ' · Revisar cuestionario'
@@ -692,6 +808,12 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                               className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-90"
                             />
                           )}
+                          {!google && ev.isJoint && (
+                            <Icon
+                              name="group"
+                              className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-90"
+                            />
+                          )}
                           <div className="min-w-0 flex-1 leading-tight">
                             <p
                               className={`font-semibold truncate ${
@@ -711,6 +833,9 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                             {!narrow && height > 36 && (
                               <p className="text-[9px] sm:text-[10px] opacity-90 truncate mt-0.5">
                                 {ev.treatmentName}
+                                {ev.isJoint && ev.jointPartnerName
+                                  ? ` · ${ev.jointPartnerName}`
+                                  : ''}
                               </p>
                             )}
                             {narrow && height > 28 && (

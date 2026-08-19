@@ -520,6 +520,80 @@ async function sendClientHennaApproved({ to, clientName, treatment, startTime, e
   });
 }
 
+async function sendJointCompanionConfirmRequest({
+  to,
+  companionName,
+  primaryName,
+  primaryTreatment,
+  companionTreatment,
+  primaryStartTime,
+  primaryEndTime,
+  companionStartTime,
+  companionEndTime,
+  confirmUrl,
+  expiresAt,
+}) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `Confirma tu cita conjunta de perfilado | Nereida Martín Studio`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${companionName}</strong>,</p>
+        <p><strong>${primaryName}</strong> ha reservado una cita conjunta de perfilado contigo.</p>
+        <div style="background:${E.infoBg};border-radius:12px;padding:16px;margin:20px 0;">
+          <p style="margin:0 0 8px;"><strong>${primaryName}:</strong> ${primaryTreatment.name} · ${formatDate(primaryStartTime)} ${formatTime(primaryStartTime)}–${formatTime(primaryEndTime)}</p>
+          <p style="margin:0;"><strong>Tu cita:</strong> ${companionTreatment.name} · ${formatTime(companionStartTime)}–${formatTime(companionEndTime)}</p>
+        </div>
+        <p>Confirma en las próximas <strong>24 horas</strong>.</p>
+        ${emailButton({ href: confirmUrl, label: 'Confirmar mi cita' })}
+        <p style="color:${E.muted};font-size:12px;">Plazo: ${formatDate(expiresAt)} ${formatTime(expiresAt)}</p>
+      </div></body></html>`,
+  });
+}
+
+async function sendJointPrimaryPending({
+  to,
+  clientName,
+  companionName,
+  primaryTreatment,
+  primaryStartTime,
+  primaryEndTime,
+  companionStartTime,
+  companionEndTime,
+}) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `Reserva pendiente – esperando confirmación | Nereida Martín Studio`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${clientName}</strong>,</p>
+        <p>Tu cita conjunta con <strong>${companionName}</strong> queda pendiente hasta que confirme en 24 h.</p>
+        <div style="background:${E.infoBg};border-radius:12px;padding:16px;margin:20px 0;">
+          <p style="margin:0 0 8px;"><strong>Tu cita:</strong> ${primaryTreatment.name} · ${formatDate(primaryStartTime)} ${formatTime(primaryStartTime)}–${formatTime(primaryEndTime)}</p>
+          <p style="margin:0;"><strong>${companionName}:</strong> ${formatTime(companionStartTime)}–${formatTime(companionEndTime)}</p>
+        </div>
+      </div></body></html>`,
+  });
+}
+
+async function sendJointExpired({ to, clientName, companionName, startTime }) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `Cita conjunta expirada | Nereida Martín Studio`,
+    html: `<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;background:${E.bg};padding:24px;">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;">
+        <p>Hola <strong>${clientName}</strong>,</p>
+        <p>La reserva conjunta con ${companionName || 'tu acompañante'} del ${formatDate(startTime)} a las ${formatTime(startTime)} ha expirado.</p>
+      </div></body></html>`,
+  });
+}
+
 async function sendClientHennaRejected({ to, clientName, treatment, startTime }) {
   const transport = getTransporter();
   const dateLine = startTime
@@ -552,4 +626,7 @@ module.exports = {
   sendClientHennaPending,
   sendClientHennaApproved,
   sendClientHennaRejected,
+  sendJointCompanionConfirmRequest,
+  sendJointPrimaryPending,
+  sendJointExpired,
 };

@@ -21,7 +21,7 @@ function blockedWeeksFromBookings(bookings) {
   for (const booking of bookings || []) {
     if (!isPerfiladoTreatment(booking.treatment_id || booking.treatmentId)) continue;
     const status = booking.status;
-    if (status && !['confirmed', 'pending_review'].includes(status)) continue;
+    if (status && !['confirmed', 'pending_review', 'pending_companion'].includes(status)) continue;
     const start = booking.start_time || booking.startTime;
     if (!start) continue;
     weeks.add(mondayOfStudioDate(new Date(start)));
@@ -38,7 +38,7 @@ async function findPerfiladoWeekConflict({ clientId, treatmentId, startTime, exc
      FROM bookings
      WHERE client_id = $1
        AND treatment_id = ANY($2::text[])
-       AND status IN ('confirmed', 'pending_review')`;
+       AND status IN ('confirmed', 'pending_review', 'pending_companion')`;
   if (excludeBookingId) {
     sql += ' AND id <> $3';
     params.push(excludeBookingId);

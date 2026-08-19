@@ -209,4 +209,250 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
   }
 }
 
-module.exports = { createOwnerBooking, STUDIO_BRAND };
+async function createOwnerJointBooking({
+  primaryClientId,
+  companionClientId,
+  treatmentId,
+  startTime,
+  date,
+  time,
+}) {
+  const { isPerfiladoTreatment } = require('../utils/perfiladoSpacing');
+  const {
+    resolveCompanionTreatment,
+    resolvePrimaryTreatment,
+    isJointTreatment,
+    syncGoogleCalendarForBooking,
+  } = require('./jointBookingService');
+
+  if (!isPerfiladoTreatment(treatmentId) && !isJointTreatment(treatmentId)) {
+    return { error: 'Solo disponible para perfilado', status: 400, code: 'NOT_PERFILADO' };
+  }
+
+  if (primaryClientId === companionClientId) {
+    return { error: 'La acompañante debe ser otra clienta', status: 400, code: 'SAME_CLIENT' };
+  }
+
+  let start;
+  if (date && time) {
+    const [hour, minute] = String(time).split(':').map(Number);
+    const { studioLocalToDate } = require('../utils/studioTimezone');
+    start = studioLocalToDate(date, hour, minute || 0);
+  } else {
+    start = new Date(startTime);
+  }
+  if (isNaN(start.getTime())) {
+    return { error: 'startTime no válido', status: 400 };
+  }
+
+  const dbClient = await getClient();
+  try {
+    await dbClient.query('BEGIN');
+
+    const primaryRes = await dbClient.query(
+      `SELECT id, name, email, phone, account_status FROM clients WHERE id = $1 FOR UPDATE`,
+      [primaryClientId]
+    );
+    if (primaryRes.rows.length === 0) {
+      await dbClient.query('ROLLBACK');
+      return { error: 'Cliente principal no encontrado', status: 404 };
+    }
+    const primaryRow = primaryRes.rows[0];
+    if (primaryRow.account_status !== 'active') {
+      await dbClient.query('ROLLBACK');
+      return { error: 'La clienta principal debe estar activa', status: 403 };
+    }
+
+    const companionRes = await dbClient.query(
+      `SELECT id, name, email, phone, account_status FROM clients WHERE id = $1 FOR UPDATE`,
+      [companionClientId]
+    );
+    if (companionRes.rows.length === 0) {
+      await dbClient.query('ROLLBACK');
+      return { error: 'Acompañante no encontrada', status: 404 };
+    }
+    const companionRow = companionRes.rows[0];
+    if (companionRow.account_status !== 'active') {
+      await dbClient.query('ROLLBACK');
+      return { error: 'La acompañante debe estar activa', status: 403 };
+    }
+
+    let primaryTreatment;
+    let realPrimaryTreatmentId = treatmentId;
+
+    if (isJointTreatment(treatmentId)) {
+      const primaryInfo = await resolvePrimaryTreatment(primaryClientId);
+      if (primaryInfo.error) {
+        await dbClient.query('ROLLBACK');
+        return primaryInfo;
+      }
+      realPrimaryTreatmentId = primaryInfo.companionTreatmentId;
+      primaryTreatment = primaryInfo.treatment;
+    } else {
+      const treatmentRes = await dbClient.query(
+        `SELECT id, name, tag, duration_min, duration_max FROM treatments
+         WHERE id = $1 AND active = true`,
+        [treatmentId]
+      );
+      if (treatmentRes.rows.length === 0) {
+        await dbClient.query('ROLLBACK');
+        return { error: 'Tratamiento no encontrado', status: 404 };
+      }
+      primaryTreatment = treatmentRes.rows[0];
+    }
+
+    const companionInfo = await resolveCompanionTreatment(companionClientId);
+    if (companionInfo.error) {
+      await dbClient.query('ROLLBACK');
+      return companionInfo;
+    }
+
+    const primaryBlock = blockDurationMinutes(
+      primaryTreatment.duration_max || primaryTreatment.duration_min
+    );
+    const companionBlock = companionInfo.blockMinutes;
+    const primaryEnd = new Date(start.getTime() + primaryBlock * 60000);
+    const companionStart = primaryEnd;
+    const companionEnd = new Date(companionStart.getTime() + companionBlock * 60000);
+
+    const dateStr = formatStudioDate(start);
+    const timeStr = formatStudioTime(start);
+    const slotOk = await availabilityService.hasJointSlotAvailable(
+      dateStr,
+      timeStr,
+      treatmentId,
+      companionClientId,
+      primaryClientId,
+      { skipPerfiladoLimit: true, skipLeadTime: true }
+    );
+    if (!slotOk) {
+      await dbClient.query('ROLLBACK');
+      return {
+        error: 'Horario no disponible',
+        message: 'Este hueco conjunto ya está ocupado o no es válido.',
+        status: 409,
+      };
+    }
+
+    const primaryFirstStudio = await isFirstStudioVisit(primaryClientId);
+    const primaryHadTreatment = await hasTreatmentBefore(primaryClientId, realPrimaryTreatmentId);
+    const primaryVisitContext = resolveVisitContext({
+      isFirstStudio: primaryFirstStudio,
+      isFirstTreatment: !primaryHadTreatment,
+    });
+
+    const companionFirstStudio = await isFirstStudioVisit(companionClientId);
+    const companionHadTreatment = await hasTreatmentBefore(
+      companionClientId,
+      companionInfo.companionTreatmentId
+    );
+    const companionVisitContext = resolveVisitContext({
+      isFirstStudio: companionFirstStudio,
+      isFirstTreatment: !companionHadTreatment,
+    });
+
+    const groupId = uuidv4();
+    const confirmToken = uuidv4();
+    const primaryCancelToken = uuidv4();
+    const companionCancelToken = uuidv4();
+
+    const primaryBookingRes = await dbClient.query(
+      `INSERT INTO bookings (
+         client_id, treatment_id, start_time, end_time, status, source,
+         cancel_token, visit_context, joint_group_id, joint_role
+       ) VALUES ($1, $2, $3, $4, 'confirmed', 'owner', $5, $6, $7, 'primary')
+       RETURNING id, start_time, end_time, status`,
+      [
+        primaryClientId,
+        realPrimaryTreatmentId,
+        start.toISOString(),
+        primaryEnd.toISOString(),
+        primaryCancelToken,
+        primaryVisitContext,
+        groupId,
+      ]
+    );
+    const primaryBooking = primaryBookingRes.rows[0];
+
+    const companionBookingRes = await dbClient.query(
+      `INSERT INTO bookings (
+         client_id, treatment_id, start_time, end_time, status, source,
+         cancel_token, visit_context, joint_group_id, joint_role
+       ) VALUES ($1, $2, $3, $4, 'confirmed', 'owner', $5, $6, $7, 'companion')
+       RETURNING id, start_time, end_time, status`,
+      [
+        companionClientId,
+        companionInfo.companionTreatmentId,
+        companionStart.toISOString(),
+        companionEnd.toISOString(),
+        companionCancelToken,
+        companionVisitContext,
+        groupId,
+      ]
+    );
+    const companionBooking = companionBookingRes.rows[0];
+
+    await dbClient.query(
+      `INSERT INTO joint_booking_groups (
+         id, primary_booking_id, companion_booking_id, companion_client_id,
+         status, confirm_token, expires_at, confirmed_at
+       ) VALUES ($1, $2, $3, $4, 'confirmed', $5, NOW(), NOW())`,
+      [
+        groupId,
+        primaryBooking.id,
+        companionBooking.id,
+        companionClientId,
+        confirmToken,
+      ]
+    );
+
+    await dbClient.query(
+      `UPDATE clients SET
+         first_booking_at = COALESCE(first_booking_at, NOW()),
+         last_booking_at = NOW()
+       WHERE id IN ($1, $2)`,
+      [primaryClientId, companionClientId]
+    );
+
+    await dbClient.query('COMMIT');
+
+    await syncGoogleCalendarForBooking(primaryBooking.id);
+    await syncGoogleCalendarForBooking(companionBooking.id);
+
+    return {
+      jointBooking: true,
+      primaryBooking: {
+        id: primaryBooking.id,
+        startTime: primaryBooking.start_time,
+        endTime: primaryBooking.end_time,
+        status: primaryBooking.status,
+        treatmentName: primaryTreatment.name,
+        clientName: primaryRow.name,
+        clientId: primaryClientId,
+      },
+      companionBooking: {
+        id: companionBooking.id,
+        startTime: companionBooking.start_time,
+        endTime: companionBooking.end_time,
+        status: companionBooking.status,
+        treatmentName: companionInfo.companionTreatmentName,
+        clientName: companionRow.name,
+        clientId: companionClientId,
+      },
+    };
+  } catch (err) {
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    if (err.code === '23P01') {
+      return { error: 'Horario no disponible (solape)', status: 409 };
+    }
+    throw err;
+  } finally {
+    dbClient.release();
+  }
+}
+
+module.exports = { createOwnerBooking, createOwnerJointBooking, STUDIO_BRAND };

@@ -40,7 +40,7 @@ function formatDateTime(value) {
 }
 
 function sourceLabel(source) {
-  if (source === 'google') return 'Google'
+  if (typeof source === 'string' && source.startsWith('google')) return 'Google'
   if (source === 'owner') return 'Agenda'
   return 'Web'
 }

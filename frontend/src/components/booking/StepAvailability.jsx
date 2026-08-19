@@ -40,6 +40,10 @@ export default function StepAvailability({
   onSelectTime,
   treatmentId,
   perfiladoBlockedWeeks = [],
+  jointMode = false,
+  companionClientId,
+  primaryClientId,
+  companionTreatmentName,
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => selectedDate || new Date())
   const [slots, setSlots] = useState([])
@@ -59,6 +63,11 @@ export default function StepAvailability({
   const blockedWeeks = applyPerfiladoSpacing ? perfiladoBlockedWeeks : []
   const hasBlockedWeeks = blockedWeeks.length > 0
 
+  const jointQuery =
+    jointMode && companionClientId
+      ? `&companionClientId=${companionClientId}${primaryClientId ? `&primaryClientId=${primaryClientId}` : ''}`
+      : ''
+
   const isPerfiladoWeekBlocked = (day) =>
     applyPerfiladoSpacing && isDateInBlockedPerfiladoWeek(day, blockedWeeks)
 
@@ -72,11 +81,18 @@ export default function StepAvailability({
   }, [])
 
   useEffect(() => {
-    if (!treatmentId) {
-      setNextSlot(null)
-      setLoadingNextSlot(false)
-      setAnchorDay(null)
-      initialisedRef.current = false
+    if (!treatmentId || jointMode) {
+      if (jointMode) {
+        setNextSlot(null)
+        setLoadingNextSlot(false)
+        initialisedRef.current = true
+      }
+      if (!treatmentId) {
+        setNextSlot(null)
+        setLoadingNextSlot(false)
+        setAnchorDay(null)
+        initialisedRef.current = false
+      }
       return
     }
 
@@ -104,9 +120,10 @@ export default function StepAvailability({
       })
 
     return () => { cancelled = true }
-  }, [treatmentId])
+  }, [treatmentId, jointMode])
 
   useEffect(() => {
+    if (jointMode) return
     if (loadingNextSlot || !nextSlot?.date || !nextSlot?.time || initialisedRef.current) return
 
     const [y, m, d] = nextSlot.date.split('-').map(Number)
@@ -146,7 +163,7 @@ export default function StepAvailability({
     )
 
   useEffect(() => {
-    if (!selectedDate || !treatmentId) {
+    if (!selectedDate || !treatmentId || (jointMode && !companionClientId)) {
       setSlots([])
       return
     }
@@ -159,7 +176,11 @@ export default function StepAvailability({
       onSelectTime(null)
     }
 
-    fetch(`${API_URL}/api/availability?date=${dateStr}&treatmentId=${treatmentId}`)
+    const availabilityPath = jointMode
+      ? `${API_URL}/api/availability/joint?date=${dateStr}&treatmentId=${treatmentId}${jointQuery}`
+      : `${API_URL}/api/availability?date=${dateStr}&treatmentId=${treatmentId}`
+
+    fetch(availabilityPath)
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled) {
@@ -171,7 +192,9 @@ export default function StepAvailability({
           if (pendingTime) {
             pendingTimeRef.current = null
             const match = loadedSlots.find((s) => s.time === pendingTime && s.available)
-            if (match) onSelectTime(pendingTime)
+            if (match) {
+              onSelectTime(pendingTime, jointMode ? { companionTime: match.companionTime } : undefined)
+            }
           }
         }
       })
@@ -183,10 +206,10 @@ export default function StepAvailability({
       })
 
     return () => { cancelled = true }
-  }, [selectedDate, treatmentId])
+  }, [selectedDate, treatmentId, jointMode, companionClientId, primaryClientId, jointQuery, onSelectTime])
 
   useEffect(() => {
-    if (!treatmentId) {
+    if (!treatmentId || (jointMode && !companionClientId)) {
       setOpenDates(new Set())
       setLoadingMonthDates(false)
       return
@@ -198,7 +221,11 @@ export default function StepAvailability({
 
     setLoadingMonthDates(true)
 
-    fetch(`${API_URL}/api/availability/month?year=${year}&month=${month}&treatmentId=${treatmentId}`)
+    const monthPath = jointMode
+      ? `${API_URL}/api/availability/joint/month?year=${year}&month=${month}&treatmentId=${treatmentId}${jointQuery}`
+      : `${API_URL}/api/availability/month?year=${year}&month=${month}&treatmentId=${treatmentId}`
+
+    fetch(monthPath)
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
@@ -212,7 +239,7 @@ export default function StepAvailability({
       })
 
     return () => { cancelled = true }
-  }, [treatmentId, currentMonth])
+  }, [treatmentId, currentMonth, jointMode, companionClientId, primaryClientId, jointQuery])
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth)
@@ -237,7 +264,7 @@ export default function StepAvailability({
   const anchorMonth = anchorDay ? startOfMonth(anchorDay) : null
   const canGoPrevMonth = !anchorMonth || isBefore(anchorMonth, startOfMonth(currentMonth))
 
-  if (loadingNextSlot) {
+  if (loadingNextSlot && !jointMode) {
     return (
       <div className="min-h-[calc(100vh-12rem)] flex flex-col items-center justify-center text-center px-6">
         <div className="w-12 h-12 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin mb-8" />
@@ -263,7 +290,24 @@ export default function StepAvailability({
           className="mb-6 p-4 rounded-2xl bg-surface-container-low border border-outline-variant/30 text-center"
         >
           <p className="text-sm text-on-surface">
-            Ya tienes un perfilado esta semana. Elige una fecha a partir de la semana siguiente.
+            {jointMode
+              ? 'Una de vosotras ya tiene perfilado esta semana. Elige una fecha a partir de la semana siguiente.'
+              : 'Ya tienes un perfilado esta semana. Elige una fecha a partir de la semana siguiente.'}
+          </p>
+        </motion.div>
+      )}
+
+      {jointMode && companionTreatmentName && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-2xl bg-primary/8 border border-primary/15 text-center"
+        >
+          <p className="text-sm text-on-surface">
+            Cita conjunta · Acompañante: <strong>{companionTreatmentName}</strong>
+          </p>
+          <p className="text-xs text-on-surface-variant mt-1">
+            Mostramos huecos de 90 min consecutivos (tu perfilado + el de tu acompañante)
           </p>
         </motion.div>
       )}
@@ -433,7 +477,13 @@ export default function StepAvailability({
                   <motion.button
                     key={slot.time}
                     whileTap={slot.available ? { scale: 0.95 } : {}}
-                    onClick={() => slot.available && onSelectTime(slot.time)}
+                    onClick={() =>
+                      slot.available &&
+                      onSelectTime(
+                        slot.time,
+                        jointMode ? { companionTime: slot.companionTime } : undefined
+                      )
+                    }
                     disabled={!slot.available}
                     className={`py-4 px-6 rounded-xl transition-all ${
                       !slot.available
@@ -443,7 +493,12 @@ export default function StepAvailability({
                           : 'border border-outline-variant/20 text-on-surface hover:bg-surface-container-high'
                     }`}
                   >
-                    {slot.time}
+                    <span className="block">{slot.time}</span>
+                    {jointMode && slot.companionTime && slot.available && (
+                      <span className="block text-[10px] font-normal opacity-80 mt-0.5">
+                        Ella · {slot.companionTime}
+                      </span>
+                    )}
                   </motion.button>
                 )
               })}

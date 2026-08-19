@@ -73,6 +73,7 @@ async function main() {
     await runFile(pool, 'migration_client_notes.sql');
     await runFile(pool, 'migration_rebooking_followup.sql');
     await runFile(pool, 'migration_assessment_photos.sql');
+    await runFile(pool, 'migration_joint_bookings.sql');
     await runFile(pool, 'seed.sql');
 
     const counts = await pool.query(`

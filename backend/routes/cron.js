@@ -75,6 +75,7 @@ router.get('/calendar-sync', async (req, res) => {
 
   try {
     const syncResult = await calendarSync.syncIncremental();
+    const upcomingReconcile = await calendarSync.reconcileUpcomingGoogleEvents();
     const staleReconcile = await calendarSync.reconcileStaleGoogleBookings();
     await calendarSync.reconcilePendingGoogleDeletes();
     await calendarSync.reconcileMissingGoogleEvents();
@@ -89,6 +90,7 @@ router.get('/calendar-sync', async (req, res) => {
 
     res.json({
       sync: syncResult,
+      upcomingReconcile,
       staleReconcile,
       watchRenewed,
       timestamp: new Date().toISOString(),
@@ -96,6 +98,65 @@ router.get('/calendar-sync', async (req, res) => {
   } catch (err) {
     console.error('Cron calendar-sync error:', err);
     res.status(500).json({ error: 'Error en sincronización de calendario' });
+  }
+});
+
+router.get('/joint-expiry', async (req, res) => {
+    if (!authorizeCron(req, res)) return;
+
+  try {
+    const { expirePendingJointGroups } = require('../services/jointBookingService');
+    const emailService = require('../services/emailService');
+    const expired = await expirePendingJointGroups();
+
+    let notified = 0;
+    for (const group of expired) {
+      try {
+        const full = await query(
+          `SELECT g.*,
+                  pc.email AS primary_email, pc.name AS primary_name,
+                  cc.email AS companion_email, cc.name AS companion_name,
+                  pb.start_time AS primary_start
+           FROM joint_booking_groups g
+           JOIN bookings pb ON pb.id = g.primary_booking_id
+           JOIN clients pc ON pc.id = pb.client_id
+           JOIN clients cc ON cc.id = g.companion_client_id
+           WHERE g.id = $1`,
+          [group.id]
+        );
+        const row = full.rows[0];
+        if (!row) continue;
+
+        if (row.primary_email) {
+          await emailService.sendJointExpired({
+            to: row.primary_email,
+            clientName: row.primary_name,
+            companionName: row.companion_name,
+            startTime: new Date(row.primary_start),
+          });
+        }
+        if (row.companion_email) {
+          await emailService.sendJointExpired({
+            to: row.companion_email,
+            clientName: row.companion_name,
+            companionName: row.primary_name,
+            startTime: new Date(row.primary_start),
+          });
+        }
+        notified++;
+      } catch (err) {
+        console.error(`Joint expiry email failed for group ${group.id}:`, err.message);
+      }
+    }
+
+    res.json({
+      expired: expired.length,
+      notified,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Cron joint-expiry error:', err);
+    res.status(500).json({ error: 'Error procesando expiración de citas conjuntas' });
   }
 });
 

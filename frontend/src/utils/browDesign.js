@@ -1,12 +1,17 @@
 export const BROW_DESIGN_PRIMERA = 'brow-design-primera'
 export const BROW_DESIGN_SEGUIMIENTO = 'brow-design-seguimiento'
 export const BROW_DESIGN_DEFINE = 'brow-define'
+export const PERFILADO_CONJUNTO_ID = 'perfilado-conjunto'
 
 /** Solo perfilado puro (primera / mantenimiento), no Brow Define ni laminados. */
 export const PERFILADO_TREATMENT_IDS = [BROW_DESIGN_PRIMERA, BROW_DESIGN_SEGUIMIENTO]
 
 export function isPerfiladoTreatment(treatmentId) {
   return PERFILADO_TREATMENT_IDS.includes(treatmentId)
+}
+
+export function isJointTreatment(treatmentId) {
+  return treatmentId === PERFILADO_CONJUNTO_ID
 }
 
 /** Lunes (YYYY-MM-DD) de la semana ISO-like (lun–dom) en zona local del navegador. */

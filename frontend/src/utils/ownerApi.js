@@ -157,9 +157,62 @@ export function createOwnerBooking({ clientId, treatmentId, startTime, date, tim
   })
 }
 
+export function createOwnerJointBooking({
+  primaryClientId,
+  companionClientId,
+  treatmentId,
+  startTime,
+  date,
+  time,
+}) {
+  return ownerFetch('/bookings/joint', {
+    method: 'POST',
+    body: JSON.stringify({
+      primaryClientId,
+      companionClientId,
+      treatmentId,
+      startTime,
+      date,
+      time,
+    }),
+  })
+}
+
 export function fetchOwnerAvailability({ date, treatmentId }) {
   const params = new URLSearchParams({ date, treatmentId })
   return ownerFetch(`/availability?${params}`)
+}
+
+export function fetchOwnerJointAvailability({
+  date,
+  treatmentId,
+  companionClientId,
+  primaryClientId,
+}) {
+  const params = new URLSearchParams({
+    date,
+    treatmentId,
+    companionClientId: String(companionClientId),
+    primaryClientId: String(primaryClientId),
+  })
+  return ownerFetch(`/availability/joint?${params}`)
+}
+
+export function fetchOwnerJointAvailabilityMonth({
+  year,
+  month,
+  treatmentId,
+  companionClientId,
+  primaryClientId,
+}) {
+  const params = new URLSearchParams({
+    year: String(year),
+    month: String(month),
+    treatmentId,
+    companionClientId: String(companionClientId),
+    primaryClientId: String(primaryClientId),
+  })
+  return ownerFetch(`/availability/joint/month?${params}`)
 }
 
 export function inviteClient(clientId) {

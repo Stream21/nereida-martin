@@ -51,15 +51,22 @@ export function formatStudioTime(value) {
   }).format(new Date(value))
 }
 
+export function isGoogleBookingSource(source) {
+  return typeof source === 'string' && source.startsWith('google')
+}
+
 export function bookingStatusLabel(status) {
   if (status === 'confirmed') return 'Confirmada'
   if (status === 'pending_review') return 'En revisión'
+  if (status === 'pending_companion') return 'Pendiente acompañante'
+  if (status === 'google_overlap') return 'Google (solape)'
+  if (status === 'google_block') return 'Bloqueo'
   if (status === 'cancelled') return 'Cancelada'
   return status || '—'
 }
 
 export function bookingSourceLabel(source) {
-  if (source === 'google') return 'Google Calendar'
+  if (isGoogleBookingSource(source)) return 'Google Calendar'
   if (source === 'owner') return 'Agenda estudio'
   return 'Reserva web'
 }

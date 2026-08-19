@@ -2,6 +2,7 @@ const { query } = require('../db/pool');
 const { TIMEZONE } = require('../utils/studioTimezone');
 const { formatIntakeForOwner } = require('../config/intakeQuestions');
 const { IMPORTED_CLIENT_EMAIL } = require('./studioSettings');
+const { listGoogleCalendarItemsInRange } = require('./ghostBlockRanges');
 
 const CONFIRMED_FILTER = `b.status = 'confirmed'`;
 const TZ = TIMEZONE.replace(/'/g, "''");
@@ -714,9 +715,11 @@ async function updateClient(clientId, { name, phone, email, notes }) {
 async function listCalendarEvents({ from, to }) {
   const result = await query(
     `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
+            b.google_event_id, b.joint_group_id, b.joint_role,
             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
             t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min,
             b.intake_id, i.flagged AS intake_flagged,
+            jp.name AS joint_partner_name,
             EXISTS (
               SELECT 1 FROM henna_assessments ha
               WHERE ha.booking_id = b.id
@@ -730,19 +733,22 @@ async function listCalendarEvents({ from, to }) {
      JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
      LEFT JOIN booking_intakes i ON i.id = b.intake_id
-     WHERE b.status IN ('confirmed', 'pending_review')
+     LEFT JOIN bookings jb ON jb.joint_group_id = b.joint_group_id AND jb.id <> b.id
+     LEFT JOIN clients jp ON jp.id = jb.client_id
+     WHERE b.status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
        AND b.start_time < $2
        AND b.end_time > $1
      ORDER BY b.start_time ASC`,
     [from, to]
   );
 
-  return result.rows.map((row) => ({
+  const mapped = result.rows.map((row) => ({
     id: row.id,
     startTime: row.start_time,
     endTime: row.end_time,
     status: row.status,
     source: row.source,
+    googleEventId: row.google_event_id,
     treatmentId: row.treatment_id,
     treatmentName: row.treatment_name || 'Cita',
     treatmentTag: row.treatment_tag || '',
@@ -753,7 +759,71 @@ async function listCalendarEvents({ from, to }) {
     hasIntake: Boolean(row.intake_id),
     intakeFlagged: Boolean(row.intake_flagged),
     hasPhoto: Boolean(row.has_photo),
+    jointGroupId: row.joint_group_id,
+    jointRole: row.joint_role,
+    jointPartnerName: row.joint_partner_name || null,
+    isJoint: Boolean(row.joint_group_id),
   }));
+
+  let googleItems = [];
+  try {
+    googleItems = await listGoogleCalendarItemsInRange(from, to);
+  } catch (err) {
+    console.warn('Live Google calendar overlay skipped:', err.message);
+    return mapped;
+  }
+
+  const knownGoogleIds = new Set(
+    mapped.map((ev) => ev.googleEventId).filter(Boolean)
+  );
+  const knownBookingIds = new Set(mapped.map((ev) => String(ev.id)));
+  const summaryByGoogleId = new Map(
+    googleItems.map((item) => [item.googleEventId, item.summary])
+  );
+
+  for (const ev of mapped) {
+    if (!ev.googleEventId) continue;
+    const summary = summaryByGoogleId.get(ev.googleEventId);
+    if (!summary) continue;
+    const imported =
+      ev.treatmentId === 'imported' ||
+      (typeof ev.source === 'string' && ev.source.startsWith('google'));
+    if (imported) ev.clientName = summary;
+  }
+
+  const live = [];
+  for (const item of googleItems) {
+    if (knownGoogleIds.has(item.googleEventId)) continue;
+    if (item.webBookingId && knownBookingIds.has(String(item.webBookingId))) continue;
+
+    const suffix = item.dateKey ? `:${item.dateKey}` : '';
+    live.push({
+      id: `gcal:${item.googleEventId}${suffix}`,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      status: item.isGhost ? 'google_block' : 'confirmed',
+      source: 'google',
+      treatmentId: 'imported',
+      treatmentName: item.isGhost ? 'Bloqueo' : 'Cita Google',
+      treatmentTag: '',
+      durationMin: Math.round((item.endTime - item.startTime) / 60000),
+      clientId: null,
+      clientName: item.summary,
+      clientPhone: null,
+      hasIntake: false,
+      intakeFlagged: false,
+      hasPhoto: false,
+      jointGroupId: null,
+      jointRole: null,
+      jointPartnerName: null,
+      isJoint: false,
+      liveGoogle: true,
+    });
+  }
+
+  return [...mapped, ...live].sort(
+    (a, b) => new Date(a.startTime) - new Date(b.startTime)
+  );
 }
 
 function toUploadUrl(photoPath) {
@@ -820,15 +890,21 @@ async function getBookingDetail(bookingId) {
   const result = await query(
     `SELECT
        b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id, b.visit_context,
-       b.intake_id,
+       b.intake_id, b.joint_group_id, b.joint_role,
        c.id AS client_id, c.name AS client_name, c.email AS client_email, c.phone AS client_phone,
        t.name AS treatment_name, t.tag AS treatment_tag, t.price, t.category AS treatment_category,
        i.id AS intake_pk, i.intake_type, i.answers, i.flagged, i.flag_reason,
-       i.signer_name, i.signed_at, i.signature_data, i.created_at AS intake_created_at
+       i.signer_name, i.signed_at, i.signature_data, i.created_at AS intake_created_at,
+       jb.id AS joint_partner_booking_id,
+       jc.name AS joint_partner_name,
+       jt.name AS joint_partner_treatment_name
      FROM bookings b
      JOIN clients c ON c.id = b.client_id
      LEFT JOIN treatments t ON t.id = b.treatment_id
      LEFT JOIN booking_intakes i ON i.id = b.intake_id
+     LEFT JOIN bookings jb ON jb.joint_group_id = b.joint_group_id AND jb.id <> b.id
+     LEFT JOIN clients jc ON jc.id = jb.client_id
+     LEFT JOIN treatments jt ON jt.id = jb.treatment_id
      WHERE b.id = $1`,
     [bookingId]
   );
@@ -869,6 +945,16 @@ async function getBookingDetail(bookingId) {
     intake,
     hasPhoto: photos.length > 0,
     photos,
+    jointGroupId: row.joint_group_id,
+    jointRole: row.joint_role,
+    isJoint: Boolean(row.joint_group_id),
+    jointPartner: row.joint_partner_booking_id
+      ? {
+          bookingId: row.joint_partner_booking_id,
+          name: row.joint_partner_name,
+          treatmentName: row.joint_partner_treatment_name,
+        }
+      : null,
   };
 }
 

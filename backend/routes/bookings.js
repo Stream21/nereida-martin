@@ -30,14 +30,25 @@ const {
   REVIEW_TYPE_PHOTO,
 } = require('../utils/photoAssessment');
 const { STUDIO_BRAND } = require('../utils/studioBrand');
-const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+const { findPerfiladoWeekConflict, isPerfiladoTreatment } = require('../utils/perfiladoSpacing');
+const {
+  lookupCompanionByPhone,
+  createWebJointBooking,
+  getJointGroupByToken,
+  confirmJointBooking,
+  cancelJointGroupBookings,
+  syncGoogleCalendarForBooking,
+  isJointTreatment,
+  resolvePrimaryTreatment,
+} = require('../services/jointBookingService');
 
 const router = Router();
 
 async function fetchBookingByToken(token) {
   const result = await query(
     `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.cancel_token,
-            b.google_event_id, t.name AS treatment_name, t.tag AS treatment_tag,
+            b.google_event_id, b.joint_group_id, b.joint_role,
+            t.name AS treatment_name, t.tag AS treatment_tag,
             c.name AS client_name, c.email AS client_email
      FROM bookings b
      JOIN clients c ON b.client_id = c.id
@@ -136,6 +147,35 @@ router.post('/cancel/:token', async (req, res) => {
     }
 
     await client.query('BEGIN');
+
+    if (row.joint_group_id) {
+      await cancelJointGroupBookings(row.joint_group_id, { notify: false });
+      await client.query('COMMIT');
+
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendCancellationConfirmation({
+          to: row.client_email,
+          clientName: row.client_name,
+          treatment: { name: row.treatment_name || 'Cita', tag: row.treatment_tag || '' },
+          startTime,
+          endTime: new Date(row.end_time),
+        });
+      } catch (err) {
+        console.error('Joint cancellation email failed:', err.message);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Tu cita conjunta ha sido cancelada correctamente',
+        booking: {
+          id: row.id,
+          status: 'cancelled',
+          startTime: startTime.toISOString(),
+          joint: true,
+        },
+      });
+    }
 
     await client.query(
       `UPDATE bookings SET status = 'cancelled', last_sync_source = 'web', updated_at = NOW()
@@ -310,6 +350,100 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+router.get('/confirm-companion/:token', async (req, res) => {
+  try {
+    const group = await getJointGroupByToken(req.params.token);
+    if (!group) {
+      return res.status(404).json({ error: 'Enlace no válido', code: 'INVALID_TOKEN' });
+    }
+
+    if (group.status === 'expired' || group.status === 'cancelled') {
+      return res.status(410).json({ error: 'Esta reserva ha expirado o fue cancelada', code: 'EXPIRED' });
+    }
+
+    if (new Date(group.expires_at) < new Date() && group.status === 'pending_companion') {
+      return res.status(410).json({ error: 'El plazo de confirmación ha expirado', code: 'EXPIRED' });
+    }
+
+    res.json({
+      status: group.status,
+      expiresAt: group.expires_at,
+      primary: {
+        name: group.primary_name,
+        treatmentName: group.primary_treatment_name,
+        startTime: group.primary_start,
+        endTime: group.primary_end,
+      },
+      companion: {
+        name: group.companion_name,
+        treatmentName: group.companion_treatment_name,
+        startTime: group.companion_start,
+        endTime: group.companion_end,
+      },
+    });
+  } catch (err) {
+    console.error('Confirm companion GET error:', err);
+    res.status(500).json({ error: 'Error al obtener la cita' });
+  }
+});
+
+router.post('/confirm-companion/:token', async (req, res) => {
+  try {
+    const result = await confirmJointBooking(req.params.token);
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        code: result.code,
+      });
+    }
+
+    const group = result.group;
+    const frontendUrl = process.env.FRONTEND_URL || '';
+    const emailService = require('../services/emailService');
+    const { formatDeadlineSpanish } = require('../utils/cancellationPolicy');
+
+    await syncGoogleCalendarForBooking(group.primary_booking_id);
+    await syncGoogleCalendarForBooking(group.companion_booking_id);
+
+    if (group.companion_email) {
+      await emailService.sendConfirmation({
+        to: group.companion_email,
+        clientName: group.companion_name,
+        treatment: {
+          name: group.companion_treatment_name || 'Perfilado',
+          tag: group.companion_treatment_tag || '',
+        },
+        startTime: new Date(group.companion_start),
+        endTime: new Date(group.companion_end),
+        bookingId: group.companion_booking_id,
+        cancelUrl: `${frontendUrl}/cancelar/${group.companion_cancel_token}`,
+        cancellationDeadline: formatDeadlineSpanish(new Date(group.companion_start)),
+      });
+      await query('UPDATE bookings SET confirmation_sent = true WHERE id = $1', [
+        group.companion_booking_id,
+      ]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Cita confirmada correctamente',
+      companion: {
+        name: group.companion_name,
+        startTime: group.companion_start,
+        endTime: group.companion_end,
+      },
+      primary: {
+        name: group.primary_name,
+        startTime: group.primary_start,
+        endTime: group.primary_end,
+      },
+    });
+  } catch (err) {
+    console.error('Confirm companion POST error:', err);
+    res.status(500).json({ error: 'Error al confirmar la cita' });
+  }
+});
+
 router.post('/', requireClientAuth, validateBooking, async (req, res) => {
   const client = await getClient();
 
@@ -369,6 +503,153 @@ router.post('/', requireClientAuth, validateBooking, async (req, res) => {
 
     const treatment = treatmentResult.rows[0];
     const hadTreatmentBefore = await hasTreatmentBefore(authClientId, treatmentId);
+
+    if (isJointTreatment(treatmentId)) {
+
+      const companionPhone = (req.body.companionPhone || '').toString().trim();
+      if (!companionPhone) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Teléfono de acompañante obligatorio', code: 'COMPANION_PHONE_REQUIRED' });
+      }
+
+      const companionLookup = await lookupCompanionByPhone(companionPhone, authClientId);
+      if (companionLookup.error) {
+        await client.query('ROLLBACK');
+        return res.status(companionLookup.status || 400).json({
+          error: companionLookup.error,
+          code: companionLookup.code,
+        });
+      }
+
+      const missingConsents = requiredConsents.filter((c) => !consentList.includes(c));
+      if (missingConsents.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Debes aceptar la política de privacidad y las condiciones de reserva',
+          code: 'CONSENTS_REQUIRED',
+        });
+      }
+
+      const normalizedEmail = clientEmail.trim().toLowerCase();
+      if (authClient.email && normalizedEmail !== String(authClient.email).toLowerCase()) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'El email debe coincidir con tu cuenta', code: 'EMAIL_MISMATCH' });
+      }
+
+      const phoneNorm = normalizePhone(clientPhone);
+      await client.query(
+        `UPDATE clients SET name = $1, phone = $2, phone_normalized = $3, declared_profile = COALESCE($4, declared_profile)
+         WHERE id = $5`,
+        [clientName.trim(), clientPhone.trim(), phoneNorm, declaredProfile || null, authClientId]
+      );
+
+      for (const consentType of consentList) {
+        await client.query(
+          `INSERT INTO client_consents (client_id, consent_type) VALUES ($1, $2)
+           ON CONFLICT (client_id, consent_type) DO UPDATE SET accepted_at = NOW()`,
+          [authClientId, consentType]
+        );
+      }
+
+      const firstStudio = await isFirstStudioVisit(authClientId);
+      const resolvedPrimary = await resolvePrimaryTreatment(authClientId);
+      const realPrimaryId = resolvedPrimary.error ? treatmentId : resolvedPrimary.companionTreatmentId;
+      const hadRealTreatment = await hasTreatmentBefore(authClientId, realPrimaryId);
+      const visitContext = resolveVisitContext({
+        isFirstStudio: firstStudio,
+        isFirstTreatment: !hadRealTreatment,
+      });
+
+      const jointResult = await createWebJointBooking({
+        dbClient: client,
+        primaryClientId: authClientId,
+        companionClientId: companionLookup.clientId,
+        primaryTreatmentId: treatmentId,
+        startTime,
+        visitContext,
+      });
+
+      if (jointResult.error) {
+        await client.query('ROLLBACK');
+        return res.status(jointResult.status || 400).json(jointResult);
+      }
+
+      await client.query('COMMIT');
+
+      const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      const confirmUrl = `${frontendUrl}/confirmar-cita/${jointResult.confirmToken}`;
+
+      res.status(201).json({
+        jointBooking: true,
+        pendingCompanion: true,
+        booking: {
+          id: jointResult.primaryBooking.id,
+          treatmentName: jointResult.primaryTreatment.name,
+          treatmentTag: jointResult.primaryTreatment.tag,
+          treatmentId: jointResult.primaryTreatment.id,
+          startTime: jointResult.primaryStart.toISOString(),
+          endTime: jointResult.primaryEnd.toISOString(),
+          status: 'pending_companion',
+        },
+        companionBooking: {
+          id: jointResult.companionBooking.id,
+          clientName: companionLookup.name,
+          treatmentName: jointResult.companionTreatment.name,
+          treatmentTag: jointResult.companionTreatment.tag,
+          startTime: jointResult.companionStart.toISOString(),
+          endTime: jointResult.companionEnd.toISOString(),
+          status: 'pending_companion',
+        },
+        expiresAt: jointResult.expiresAt.toISOString(),
+        client: { name: clientName, email: clientEmail },
+        emailSent: false,
+      });
+
+      setImmediate(async () => {
+        try {
+          const emailService = require('../services/emailService');
+          const companionEmailRes = await query(
+            'SELECT email FROM clients WHERE id = $1',
+            [companionLookup.clientId]
+          );
+          const companionEmail = companionEmailRes.rows[0]?.email;
+
+          if (companionEmail) {
+            await emailService.sendJointCompanionConfirmRequest({
+              to: companionEmail,
+              companionName: companionLookup.name,
+              primaryName: clientName,
+              primaryTreatment: jointResult.primaryTreatment,
+              companionTreatment: jointResult.companionTreatment,
+              primaryStartTime: jointResult.primaryStart,
+              primaryEndTime: jointResult.primaryEnd,
+              companionStartTime: jointResult.companionStart,
+              companionEndTime: jointResult.companionEnd,
+              confirmUrl,
+              expiresAt: jointResult.expiresAt,
+            });
+          }
+
+          if (clientEmail) {
+            await emailService.sendJointPrimaryPending({
+              to: clientEmail,
+              clientName,
+              companionName: companionLookup.name,
+              primaryTreatment: jointResult.primaryTreatment,
+              primaryStartTime: jointResult.primaryStart,
+              primaryEndTime: jointResult.primaryEnd,
+              companionStartTime: jointResult.companionStart,
+              companionEndTime: jointResult.companionEnd,
+            });
+          }
+        } catch (err) {
+          console.error('Joint booking emails failed:', err.message);
+        }
+      });
+
+      return;
+    }
+
     const needsPhoto = requiresPhotoAssessment(treatmentId, {
       treatmentIds: hadTreatmentBefore ? [treatmentId] : [],
     });

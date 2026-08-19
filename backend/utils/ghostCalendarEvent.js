@@ -8,8 +8,8 @@ const GHOST_SUMMARY_PREFIX = process.env.GOOGLE_GHOST_EVENT_PREFIX || '[Bloqueo]
  *   → Blocks web availability, NOT imported to bookings DB.
  *
  * Case 2 — Citas solapadas (favores entre medias):
- *   Normal title without [Bloqueo]; import skips them when they overlap
- *   an already-occupied slot (first appointment wins).
+ *   Normal title without [Bloqueo]; they still block web availability via
+ *   Google busy ranges, and are stored as google_overlap if the slot is taken.
  *
  * Only the prefix at the start of the title matters; the label after is for her.
  */

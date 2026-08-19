@@ -74,7 +74,7 @@ function sortEventsForImport(events) {
 async function loadOccupiedRanges(timeMin, timeMax) {
   const result = await query(
     `SELECT start_time, end_time FROM bookings
-     WHERE status = 'confirmed'
+     WHERE status IN ('confirmed', 'pending_review', 'pending_companion')
        AND start_time < $2
        AND end_time > $1`,
     [timeMin, timeMax]
@@ -147,8 +147,9 @@ async function upsertFromGoogleEvent(
     const timesChanged =
       new Date(existing.start_time).getTime() !== startTime.getTime() ||
       new Date(existing.end_time).getTime() !== endTime.getTime();
+    const activeStatuses = ['confirmed', 'pending_review', 'pending_companion', 'google_overlap'];
     const statusChanged =
-      (cancelled && existing.status === 'confirmed') ||
+      (cancelled && activeStatuses.includes(existing.status)) ||
       (!cancelled && existing.status === 'cancelled');
 
     if (!timesChanged && !statusChanged && existing.google_etag === event.etag) {
@@ -186,6 +187,32 @@ async function upsertFromGoogleEvent(
         ]
       );
     } catch (err) {
+      if (err.code === '23P01' && !cancelled) {
+        await query(
+          `UPDATE bookings SET
+             start_time = $1,
+             end_time = $2,
+             status = 'google_overlap',
+             google_etag = $3,
+             google_updated_at = $4,
+             last_sync_source = 'google',
+             updated_at = NOW()
+           WHERE id = $5`,
+          [
+            startTime.toISOString(),
+            endTime.toISOString(),
+            event.etag || null,
+            googleUpdatedAt?.toISOString() || null,
+            existing.id,
+          ]
+        );
+        return {
+          action: 'updated',
+          reason: 'overlap',
+          eventId: event.id,
+          bookingId: existing.id,
+        };
+      }
       if (err.code === '23P01') {
         return {
           action: 'skipped',
@@ -219,22 +246,18 @@ async function upsertFromGoogleEvent(
     return { action: 'skipped', reason: 'cancelled_new', eventId: event.id };
   }
 
-  if (
-    occupiedRanges &&
-    hasOverlapWithRanges(startTime, endTime, occupiedRanges)
-  ) {
+  const overlapping =
+    occupiedRanges && hasOverlapWithRanges(startTime, endTime, occupiedRanges);
+  const insertStatus = overlapping ? 'google_overlap' : 'confirmed';
+
+  if (dryRun) {
     return {
-      action: 'skipped',
-      reason: 'overlap',
+      action: overlapping ? 'would_insert_overlap' : 'would_insert',
       eventId: event.id,
       summary: event.summary || null,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
     };
-  }
-
-  if (dryRun) {
-    return { action: 'would_insert', eventId: event.id };
   }
 
   const clientId = await studioSettings.getImportedClientId();
@@ -244,7 +267,7 @@ async function upsertFromGoogleEvent(
       `INSERT INTO bookings (
          client_id, treatment_id, start_time, end_time, status, source,
          google_event_id, google_etag, google_updated_at, last_sync_source
-       ) VALUES ($1, 'imported', $2, $3, 'confirmed', $4, $5, $6, $7, 'google')
+       ) VALUES ($1, 'imported', $2, $3, $8, $4, $5, $6, $7, 'google')
        RETURNING id`,
       [
         clientId,
@@ -254,20 +277,52 @@ async function upsertFromGoogleEvent(
         event.id,
         event.etag || null,
         googleUpdatedAt?.toISOString() || null,
+        insertStatus,
       ]
     );
 
-    return { action: 'inserted', eventId: event.id, bookingId: inserted.rows[0].id };
+    return {
+      action: overlapping ? 'inserted_overlap' : 'inserted',
+      eventId: event.id,
+      bookingId: inserted.rows[0].id,
+    };
   } catch (err) {
     if (err.code === '23P01') {
-      return {
-        action: 'skipped',
-        reason: 'overlap',
-        eventId: event.id,
-        summary: event.summary || null,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-      };
+      try {
+        const inserted = await query(
+          `INSERT INTO bookings (
+             client_id, treatment_id, start_time, end_time, status, source,
+             google_event_id, google_etag, google_updated_at, last_sync_source
+           ) VALUES ($1, 'imported', $2, $3, 'google_overlap', $4, $5, $6, $7, 'google')
+           RETURNING id`,
+          [
+            clientId,
+            startTime.toISOString(),
+            endTime.toISOString(),
+            forceSource,
+            event.id,
+            event.etag || null,
+            googleUpdatedAt?.toISOString() || null,
+          ]
+        );
+        return {
+          action: 'inserted_overlap',
+          eventId: event.id,
+          bookingId: inserted.rows[0].id,
+        };
+      } catch (retryErr) {
+        if (retryErr.code === '23P01') {
+          return {
+            action: 'skipped',
+            reason: 'overlap',
+            eventId: event.id,
+            summary: event.summary || null,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+          };
+        }
+        throw retryErr;
+      }
     }
     throw err;
   }
@@ -283,7 +338,9 @@ function trackOccupiedRange(occupiedRanges, startTime, endTime) {
 
 function tallyImportResult(stats, result) {
   if (result.action === 'inserted' || result.action === 'would_insert') stats.inserted++;
-  else if (result.action === 'updated' || result.action === 'would_update') stats.updated++;
+  else if (result.action === 'inserted_overlap' || result.action === 'would_insert_overlap') {
+    stats.insertedOverlap++;
+  } else if (result.action === 'updated' || result.action === 'would_update') stats.updated++;
   else if (result.action === 'cancelled' || result.action === 'would_cancel') stats.cancelled++;
   else if (result.action === 'unchanged') stats.unchanged++;
   else if (result.reason === 'overlap') stats.fantasmaSkipped++;
@@ -329,7 +386,7 @@ async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin, ti
   let sql = `
     SELECT id, google_event_id, source FROM bookings
     WHERE google_event_id IS NOT NULL
-      AND status = 'confirmed'
+      AND status IN ('confirmed', 'google_overlap')
       AND google_event_id != ALL($1::varchar[])`;
 
   if (timeMin) {
@@ -386,6 +443,7 @@ async function importEventsFromGoogle({ timeMin, timeMax, dryRun = false } = {})
     unchanged: 0,
     fantasmaSkipped: 0,
     ghostSkipped: 0,
+    insertedOverlap: 0,
   };
   const knownEventIds = [];
   const occupiedRanges = await loadOccupiedRanges(min, max);
@@ -445,6 +503,7 @@ async function syncIncremental({ dryRun = false } = {}) {
       unchanged: 0,
       fantasmaSkipped: 0,
       ghostSkipped: 0,
+      insertedOverlap: 0,
     };
     const occupiedRanges = await loadOccupiedRanges(
       new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString(),
@@ -510,7 +569,7 @@ async function reconcilePendingGoogleDeletes() {
 async function cancelBookingFromGoogle(bookingId, { notify = true } = {}) {
   await query(
     `UPDATE bookings SET status = 'cancelled', last_sync_source = 'google', updated_at = NOW()
-     WHERE id = $1 AND status = 'confirmed'`,
+     WHERE id = $1 AND status IN ('confirmed', 'google_overlap')`,
     [bookingId]
   );
 
@@ -526,7 +585,7 @@ async function cancelBookingFromGoogle(bookingId, { notify = true } = {}) {
 async function reconcileStaleGoogleBookings() {
   const result = await query(
     `SELECT id, google_event_id, source FROM bookings
-     WHERE status = 'confirmed'
+     WHERE status IN ('confirmed', 'google_overlap')
        AND google_event_id IS NOT NULL
        AND start_time >= NOW() - INTERVAL '1 day'`
   );
@@ -603,6 +662,12 @@ async function reconcileMissingGoogleEvents() {
   }
 }
 
+async function reconcileUpcomingGoogleEvents() {
+  const timeMin = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+  return importEventsFromGoogle({ timeMin, timeMax });
+}
+
 async function ensureWatchChannel() {
   const webhookUrl =
     process.env.GOOGLE_WEBHOOK_URL ||
@@ -644,6 +709,7 @@ module.exports = {
   reconcilePendingGoogleDeletes,
   reconcileStaleGoogleBookings,
   reconcileMissingGoogleEvents,
+  reconcileUpcomingGoogleEvents,
   ensureWatchChannel,
   parseEventTimes,
 };
