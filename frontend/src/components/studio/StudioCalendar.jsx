@@ -1280,33 +1280,48 @@ export default function StudioCalendar({ initialBookingId = null }) {
         </p>
       )}
 
-      {/* Week day strip — mobile only; replaces duplicate grid header */}
+      {/* Week day strip — mobile: 5 columnas iguales, sin huecos (L–V) */}
       {!loading && view === 'week' && isMobile && (
-        <div className="shrink-0 px-1.5 pb-0.5">
-          <div className="flex gap-1 overflow-x-auto no-scrollbar">
+        <div className="shrink-0 border-y border-outline-variant/20 bg-surface-container-lowest">
+          <div className="grid grid-cols-5 divide-x divide-outline-variant/15">
             {weekDays.map((day) => {
               const selected = isSameDay(day, anchor)
+              const today = isToday(day)
               const count = events.filter((ev) => isSameDay(new Date(ev.startTime), day)).length
               return (
                 <button
                   key={day.toISOString()}
                   type="button"
                   onClick={() => setAnchor(snapToWorkday(day))}
-                  className={`cursor-pointer shrink-0 min-h-9 min-w-[2.65rem] rounded-xl px-1.5 py-1 text-center border transition-colors touch-manipulation ${
+                  className={`cursor-pointer flex flex-col items-center justify-center py-2 min-h-11 touch-manipulation transition-colors ${
                     selected
-                      ? 'bg-primary text-on-primary border-primary'
-                      : 'bg-surface-container-lowest border-outline-variant/25 text-on-surface'
+                      ? 'bg-primary text-on-primary'
+                      : today
+                        ? 'bg-primary/5 text-on-surface'
+                        : 'text-on-surface hover:bg-surface-container-low active:bg-surface-container'
                   }`}
                 >
-                  <span className="block text-[9px] font-label uppercase opacity-80 leading-none">
+                  <span
+                    className={`text-[10px] font-label uppercase leading-none ${
+                      selected ? 'opacity-90' : 'text-on-surface-variant'
+                    }`}
+                  >
                     {WEEKDAY_SHORT[weekdayIndex(day)]}
                   </span>
-                  <span className="block text-sm font-medium tabular-nums leading-tight">
+                  <span
+                    className={`mt-0.5 inline-flex items-center justify-center text-sm font-medium tabular-nums leading-none w-7 h-7 rounded-full ${
+                      selected
+                        ? 'bg-on-primary/15'
+                        : today
+                          ? 'ring-1 ring-primary/40'
+                          : ''
+                    }`}
+                  >
                     {format(day, 'd')}
                   </span>
                   {count > 0 && (
                     <span
-                      className={`mt-0.5 mx-auto block w-1 h-1 rounded-full ${
+                      className={`mt-1 block w-1 h-1 rounded-full ${
                         selected ? 'bg-on-primary' : 'bg-primary'
                       }`}
                     />
