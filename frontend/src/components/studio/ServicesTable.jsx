@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import GoldButton from '../ui/GoldButton'
 import Icon from '../ui/Icon'
+import MobileFilterSheet from './MobileFilterSheet'
 import {
   exportServices,
   fetchOwnerTreatments,
@@ -80,6 +81,7 @@ export default function ServicesTable() {
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   const periodBounds = useMemo(() => monthDateBounds(year, month), [year, month])
   const datesCustom =
@@ -92,6 +94,8 @@ export default function ServicesTable() {
     priceMax !== '',
     !!source,
   ].filter(Boolean).length
+
+  const mobileFilterCount = extendedActiveCount + (clientDebounced ? 1 : 0)
 
   const filterParams = useMemo(
     () => ({
@@ -188,9 +192,176 @@ export default function ServicesTable() {
     setSource('')
   }
 
+  const extendedFiltersFields = (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Año</span>
+          <input
+            type="number"
+            min="2020"
+            max="2100"
+            value={year}
+            onChange={(e) => {
+              const y = e.target.value
+              setYear(y)
+              const yNum = Number(y)
+              if (y.length === 4 && !Number.isNaN(yNum) && month) {
+                applyPeriod(yNum, month)
+              }
+            }}
+            className={fieldClass}
+            aria-label="Año"
+          />
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Mes</span>
+          <select
+            value={month}
+            onChange={(e) => applyPeriod(year, e.target.value)}
+            className={fieldClass}
+            aria-label="Mes"
+          >
+            {MONTH_NAMES.map((name, index) => (
+              <option key={name} value={index + 1}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Desde</span>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={fieldClass} />
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Hasta</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={fieldClass} />
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Tratamiento</span>
+          <select value={treatmentId} onChange={(e) => setTreatmentId(e.target.value)} className={fieldClass}>
+            <option value="">Todos</option>
+            {treatments.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.tag ? ` · ${t.tag}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Origen</span>
+          <select value={source} onChange={(e) => setSource(e.target.value)} className={fieldClass}>
+            {SOURCE_OPTIONS.map((opt) => (
+              <option key={opt.value || 'all'} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Importe mín.</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={priceMin}
+            onChange={(e) => setPriceMin(e.target.value)}
+            placeholder="€"
+            className={fieldClass}
+          />
+        </label>
+        <label className="min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Importe máx.</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={priceMax}
+            onChange={(e) => setPriceMax(e.target.value)}
+            placeholder="€"
+            className={fieldClass}
+          />
+        </label>
+      </div>
+    </>
+  )
+
   return (
-    <div className="space-y-4">
-      <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 shadow-[0_4px_20px_rgba(28,25,23,0.05)] overflow-hidden">
+    <div className="space-y-3 sm:space-y-4">
+      <div>
+        {/* Mobile toolbar */}
+        <div className="sm:hidden sticky top-11 z-20 -mx-3 px-3 py-2 bg-background/95 backdrop-blur-md border-b border-outline-variant/20 space-y-2">
+          <div className="flex gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setFilterSheetOpen(true)}
+              className={`cursor-pointer shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border touch-manipulation ${
+                mobileFilterCount > 0 || datesCustom
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+              }`}
+            >
+              {monthLabel(Number(month))} {year}
+              <Icon name="expand_more" className="text-sm align-middle ml-0.5" />
+            </button>
+            <label className="relative flex-1 min-w-0">
+              <span className="sr-only">Cliente</span>
+              <Icon
+                name="search"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none"
+              />
+              <input
+                type="search"
+                value={client}
+                onChange={(e) => setClient(e.target.value)}
+                placeholder="Buscar cliente…"
+                className={`${fieldClass} pl-10 py-2 min-h-10 text-sm`}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setFilterSheetOpen(true)}
+              className={`cursor-pointer relative shrink-0 min-h-10 min-w-10 rounded-xl border flex items-center justify-center ${
+                mobileFilterCount > 0
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-outline-variant/40 text-on-surface-variant'
+              }`}
+              aria-label="Más filtros"
+            >
+              <Icon name="tune" className="text-xl" />
+              {mobileFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full bg-primary text-on-primary text-[9px] font-bold flex items-center justify-center px-0.5">
+                  {mobileFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {SOURCE_OPTIONS.map((opt) => {
+              const active = source === opt.value
+              return (
+                <button
+                  key={opt.value || 'all'}
+                  type="button"
+                  onClick={() => setSource(opt.value)}
+                  className={`cursor-pointer shrink-0 rounded-full px-3 py-1.5 text-xs font-medium touch-manipulation ${
+                    active
+                      ? 'bg-primary text-on-primary'
+                      : 'bg-surface-container-low text-on-surface-variant border border-outline-variant/30'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Desktop filters */}
+        <div className="hidden sm:block bg-surface-container-lowest rounded-3xl border border-outline-variant/30 shadow-[0_4px_20px_rgba(28,25,23,0.05)] overflow-hidden">
         {/* Filtros base */}
         <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
           <div className="flex gap-2 flex-1 min-w-0">
@@ -276,7 +447,6 @@ export default function ServicesTable() {
           </div>
         </div>
 
-        {/* Panel filtros extendidos */}
         <AnimatePresence initial={false}>
           {moreOpen && (
             <motion.div
@@ -391,13 +561,63 @@ export default function ServicesTable() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
+
+      <MobileFilterSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        title="Filtrar servicios"
+        activeCount={mobileFilterCount + (datesCustom ? 1 : 0)}
+        onClear={mobileFilterCount > 0 || datesCustom ? clearAll : undefined}
+      >
+        {extendedFiltersFields}
+        <GoldButton
+          type="button"
+          onClick={() => {
+            handleExport()
+            setFilterSheetOpen(false)
+          }}
+          disabled={exporting || loading}
+          className="w-full rounded-2xl px-4 py-3 disabled:opacity-60 min-h-11 text-sm"
+        >
+          {exporting ? 'Exportando…' : 'Exportar Excel'}
+        </GoldButton>
+      </MobileFilterSheet>
 
       {error && <p className="text-sm text-error bg-error-container rounded-xl px-3 py-2">{error}</p>}
 
-      <div className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] border border-outline-variant/30 min-h-[28rem]">
+      <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] border border-outline-variant/20 sm:border sm:min-h-[28rem]">
+        {/* Mobile cards */}
         <div
-          className={`overflow-x-auto transition-opacity duration-200 ${
+          className={`sm:hidden divide-y divide-outline-variant/25 transition-opacity duration-200 ${
+            loading ? 'opacity-55' : 'opacity-100'
+          }`}
+        >
+          {data.services.map((service) => (
+            <div key={service.id} className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-on-surface truncate">{service.clientName}</p>
+                  <p className="text-sm text-on-surface-variant mt-0.5 truncate">{service.treatmentName}</p>
+                </div>
+                <span className="shrink-0 text-sm font-medium text-primary">{formatEuro(service.price)}</span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-on-surface-variant">
+                <span>{formatDateTime(service.startTime)}</span>
+                <span className="rounded-full bg-surface-container-low px-2 py-0.5">
+                  {sourceLabel(service.source)}
+                </span>
+              </div>
+            </div>
+          ))}
+          {!loading && data.services.length === 0 && (
+            <p className="px-3 py-6 text-sm text-on-surface-variant">No hay servicios con estos filtros.</p>
+          )}
+        </div>
+
+        <div
+          className={`hidden sm:block overflow-x-auto transition-opacity duration-200 ${
             loading ? 'opacity-55' : 'opacity-100'
           }`}
         >
@@ -427,7 +647,7 @@ export default function ServicesTable() {
           </table>
         </div>
         {!loading && data.services.length === 0 && (
-          <p className="px-4 py-6 text-sm text-on-surface-variant">
+          <p className="hidden sm:block px-4 py-6 text-sm text-on-surface-variant">
             No hay servicios con estos filtros.
           </p>
         )}

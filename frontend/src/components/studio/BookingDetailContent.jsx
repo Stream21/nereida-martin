@@ -267,8 +267,8 @@ export default function BookingDetailContent({
               Cita conjunta: solo se puede cambiar fecha y hora (ambas clientas).
             </p>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block min-w-0">
               <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
                 Fecha
               </span>
@@ -276,10 +276,10 @@ export default function BookingDetailContent({
                 type="date"
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11"
+                className="mt-1 w-full max-w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11 box-border"
               />
             </label>
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
                 Hora
               </span>
@@ -288,7 +288,7 @@ export default function BookingDetailContent({
                 step={900}
                 value={editTime}
                 onChange={(e) => setEditTime(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11"
+                className="mt-1 w-full max-w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11 box-border"
                 list="owner-edit-slots"
               />
               <datalist id="owner-edit-slots">

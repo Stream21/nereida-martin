@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import ClientHistoryModal from './ClientHistoryModal'
+import MobileFilterSheet from './MobileFilterSheet'
 import {
   createClient,
   disableClient,
@@ -276,6 +277,7 @@ export default function ClientsTable() {
   const [maxBookings, setMaxBookings] = useState('')
   const [treatments, setTreatments] = useState([])
   const [moreOpen, setMoreOpen] = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ clients: [], total: 0, page: 1, limit: PAGE_SIZE })
   const [loading, setLoading] = useState(true)
@@ -311,6 +313,8 @@ export default function ClientsTable() {
     minBookings !== '',
     maxBookings !== '',
   ].filter(Boolean).length
+
+  const mobileFilterCount = extendedActiveCount + (status ? 1 : 0)
 
   const totalPages = Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))
 
@@ -455,12 +459,189 @@ export default function ClientsTable() {
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div
-        ref={tableTopRef}
-        className="bg-surface-container-lowest rounded-3xl border border-outline-variant/30 shadow-[0_4px_20px_rgba(28,25,23,0.05)] overflow-hidden"
+  const extendedFiltersFields = (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <label className="min-w-0">
+        <span className="text-xs text-on-surface-variant block mb-1">Última cita desde</span>
+        <input
+          type="date"
+          value={lastFrom}
+          onChange={(e) => setLastFrom(e.target.value)}
+          className={fieldClass}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className="text-xs text-on-surface-variant block mb-1">Última cita hasta</span>
+        <input
+          type="date"
+          value={lastTo}
+          onChange={(e) => setLastTo(e.target.value)}
+          className={fieldClass}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className="text-xs text-on-surface-variant block mb-1">Tratamiento</span>
+        <select value={treatmentId} onChange={(e) => setTreatmentId(e.target.value)} className={fieldClass}>
+          <option value="">Todos</option>
+          {treatments.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+              {t.tag ? ` · ${t.tag}` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="min-w-0">
+        <span className="text-xs text-on-surface-variant block mb-1">Citas mín.</span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={minBookings}
+          onChange={(e) => setMinBookings(e.target.value)}
+          placeholder="0"
+          className={fieldClass}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className="text-xs text-on-surface-variant block mb-1">Citas máx.</span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={maxBookings}
+          onChange={(e) => setMaxBookings(e.target.value)}
+          placeholder="∞"
+          className={fieldClass}
+        />
+      </label>
+    </div>
+  )
+
+  const renderClientActions = (client) => (
+    <div className="flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => setFichaId(client.id)}
+        title="Editar ficha"
+        aria-label="Editar ficha"
+        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
       >
+        <Icon name="edit" className="text-lg" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setHistoryId(client.id)}
+        title="Ver historial de citas"
+        aria-label="Ver historial de citas"
+        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
+      >
+        <Icon name="history" className="text-lg" />
+      </button>
+      {client.accountStatus !== 'active' && client.accountStatus !== 'disabled' && (
+        <button
+          type="button"
+          disabled={busyId === client.id}
+          onClick={() => handleCopyInvite(client)}
+          title="Copiar enlace de invitación"
+          aria-label="Copiar enlace de invitación"
+          className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+        >
+          <Icon name="link" className="text-lg" />
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={busyId === client.id}
+        onClick={() => handleToggleAccess(client)}
+        title={client.accountStatus === 'disabled' ? 'Reactivar acceso' : 'Desactivar acceso'}
+        aria-label={client.accountStatus === 'disabled' ? 'Reactivar acceso' : 'Desactivar acceso'}
+        className="cursor-pointer p-2 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
+      >
+        <Icon
+          name={client.accountStatus === 'disabled' ? 'person_add' : 'person_off'}
+          className="text-lg"
+        />
+      </button>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleImport}
+      />
+      <div ref={tableTopRef}>
+        {/* Mobile: sticky search + chips (minimal chrome) */}
+        <div className="sm:hidden sticky top-11 z-20 -mx-3 px-3 py-2 bg-background/95 backdrop-blur-md border-b border-outline-variant/20 space-y-2">
+          <div className="flex gap-2">
+            <label className="relative flex-1 min-w-0">
+              <span className="sr-only">Buscar</span>
+              <Icon
+                name="search"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none"
+              />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar cliente…"
+                className={`${fieldClass} pl-10 py-2 min-h-10 text-sm`}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setFilterSheetOpen(true)}
+              className={`cursor-pointer relative shrink-0 min-h-10 min-w-10 rounded-xl border flex items-center justify-center ${
+                mobileFilterCount > 0
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-outline-variant/40 text-on-surface-variant'
+              }`}
+              aria-label="Filtros"
+            >
+              <Icon name="tune" className="text-xl" />
+              {mobileFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full bg-primary text-on-primary text-[9px] font-bold flex items-center justify-center px-0.5">
+                  {mobileFilterCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAdd((v) => !v)}
+              className="cursor-pointer shrink-0 min-h-10 min-w-10 rounded-xl bg-primary text-on-primary flex items-center justify-center"
+              aria-label="Añadir contacto"
+            >
+              <Icon name="person_add" className="text-xl" />
+            </button>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {STATUS_OPTIONS.map((opt) => {
+              const active = status === opt.value
+              return (
+                <button
+                  key={opt.value || 'all'}
+                  type="button"
+                  onClick={() => setStatus(opt.value)}
+                  className={`cursor-pointer shrink-0 rounded-full px-3 py-1.5 text-xs font-medium touch-manipulation ${
+                    active
+                      ? 'bg-primary text-on-primary'
+                      : 'bg-surface-container-low text-on-surface-variant border border-outline-variant/30'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Desktop filters */}
+        <div className="hidden sm:block bg-surface-container-lowest rounded-3xl border border-outline-variant/30 shadow-[0_4px_20px_rgba(28,25,23,0.05)] overflow-hidden">
         <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
           <label className="flex-1 min-w-0 sm:min-w-[12rem]">
             <span className="sr-only">Buscar</span>
@@ -530,13 +711,6 @@ export default function ClientsTable() {
               <Icon name="upload_file" className="text-base" />
               {importing ? 'Importando…' : 'Importar'}
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleImport}
-            />
           </div>
         </div>
 
@@ -551,66 +725,7 @@ export default function ClientsTable() {
               className="overflow-hidden border-t border-outline-variant/25"
             >
               <div className="p-4 bg-surface-container-low/60 space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <label className="min-w-0">
-                    <span className="text-xs text-on-surface-variant block mb-1">Última cita desde</span>
-                    <input
-                      type="date"
-                      value={lastFrom}
-                      onChange={(e) => setLastFrom(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </label>
-                  <label className="min-w-0">
-                    <span className="text-xs text-on-surface-variant block mb-1">Última cita hasta</span>
-                    <input
-                      type="date"
-                      value={lastTo}
-                      onChange={(e) => setLastTo(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </label>
-                  <label className="min-w-0 col-span-2 sm:col-span-1">
-                    <span className="text-xs text-on-surface-variant block mb-1">Tratamiento</span>
-                    <select
-                      value={treatmentId}
-                      onChange={(e) => setTreatmentId(e.target.value)}
-                      className={fieldClass}
-                    >
-                      <option value="">Todos</option>
-                      {treatments.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                          {t.tag ? ` · ${t.tag}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="min-w-0">
-                    <span className="text-xs text-on-surface-variant block mb-1">Citas mín.</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={minBookings}
-                      onChange={(e) => setMinBookings(e.target.value)}
-                      placeholder="0"
-                      className={fieldClass}
-                    />
-                  </label>
-                  <label className="min-w-0">
-                    <span className="text-xs text-on-surface-variant block mb-1">Citas máx.</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={maxBookings}
-                      onChange={(e) => setMaxBookings(e.target.value)}
-                      placeholder="∞"
-                      className={fieldClass}
-                    />
-                  </label>
-                </div>
+                {extendedFiltersFields}
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {extendedActiveCount > 0 && (
                     <button
@@ -633,7 +748,43 @@ export default function ClientsTable() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
+
+      <MobileFilterSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        title="Filtrar clientes"
+        activeCount={mobileFilterCount}
+        onClear={mobileFilterCount > 0 ? clearAll : undefined}
+      >
+        <label className="block min-w-0">
+          <span className="text-xs text-on-surface-variant block mb-1">Estado</span>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className={fieldClass}
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value || 'all'} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {extendedFiltersFields}
+        <div className="flex flex-col gap-2 pt-1">
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => fileRef.current?.click()}
+            className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-2xl border border-outline-variant px-4 py-3 min-h-11 text-sm text-on-surface disabled:opacity-60"
+          >
+            <Icon name="upload_file" className="text-base" />
+            {importing ? 'Importando…' : 'Importar Excel'}
+          </button>
+        </div>
+      </MobileFilterSheet>
 
       {showAdd && (
         <form
@@ -709,9 +860,54 @@ export default function ClientsTable() {
       )}
       {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] min-h-[28rem]">
+      <div className="bg-surface-container-lowest rounded-2xl sm:rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(28,25,23,0.06)] sm:min-h-[28rem] border border-outline-variant/20 sm:border-0">
+        {/* Mobile card list */}
         <div
-          className={`overflow-x-auto transition-opacity duration-200 ${
+          className={`sm:hidden divide-y divide-outline-variant/25 transition-opacity duration-200 ${
+            loading ? 'opacity-55' : 'opacity-100'
+          }`}
+        >
+          {data.clients.map((client) => {
+            const s = statusMeta(client)
+            return (
+              <div key={client.id} className="p-3">
+                <button
+                  type="button"
+                  onClick={() => setFichaId(client.id)}
+                  className="cursor-pointer w-full text-left"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-on-surface truncate">{client.name}</p>
+                      <div className="text-sm mt-0.5">
+                        <ContactCell client={client} />
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 inline-flex items-center gap-1 text-[10px] rounded-full pl-1.5 pr-2 py-0.5 ${s.className}`}
+                    >
+                      <Icon name={s.icon} className="text-sm" />
+                      {s.label}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-on-surface-variant">
+                    <span>{client.bookingCount} citas</span>
+                    <span className="text-primary font-medium">{formatEuro(client.totalSpent)}</span>
+                    <span>Última: {formatDate(client.lastBookingAt)}</span>
+                  </div>
+                </button>
+                <div className="mt-1 -ml-1">{renderClientActions(client)}</div>
+              </div>
+            )
+          })}
+          {!loading && data.clients.length === 0 && (
+            <p className="px-3 py-6 text-sm text-on-surface-variant">No hay clientes que coincidan.</p>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div
+          className={`hidden sm:block overflow-x-auto transition-opacity duration-200 ${
             loading ? 'opacity-55' : 'opacity-100'
           }`}
         >
@@ -754,59 +950,7 @@ export default function ClientsTable() {
                     {formatDate(client.lastBookingAt)}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setFichaId(client.id)}
-                        title="Editar ficha"
-                        aria-label="Editar ficha"
-                        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
-                      >
-                        <Icon name="edit" className="text-lg" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setHistoryId(client.id)}
-                        title="Ver historial de citas"
-                        aria-label="Ver historial de citas"
-                        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
-                      >
-                        <Icon name="history" className="text-lg" />
-                      </button>
-                      {client.accountStatus !== 'active' && client.accountStatus !== 'disabled' && (
-                        <button
-                          type="button"
-                          disabled={busyId === client.id}
-                          onClick={() => handleCopyInvite(client)}
-                          title="Copiar enlace de invitación"
-                          aria-label="Copiar enlace de invitación"
-                          className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-                        >
-                          <Icon name="link" className="text-lg" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={busyId === client.id}
-                        onClick={() => handleToggleAccess(client)}
-                        title={
-                          client.accountStatus === 'disabled'
-                            ? 'Reactivar acceso'
-                            : 'Desactivar acceso'
-                        }
-                        aria-label={
-                          client.accountStatus === 'disabled'
-                            ? 'Reactivar acceso'
-                            : 'Desactivar acceso'
-                        }
-                        className="cursor-pointer p-2 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
-                      >
-                        <Icon
-                          name={client.accountStatus === 'disabled' ? 'person_add' : 'person_off'}
-                          className="text-lg"
-                        />
-                      </button>
-                    </div>
+                    {renderClientActions(client)}
                   </td>
                 </tr>
               ))}
@@ -814,7 +958,7 @@ export default function ClientsTable() {
           </table>
         </div>
         {!loading && data.clients.length === 0 && (
-          <p className="px-4 py-6 text-sm text-on-surface-variant">No hay clientes que coincidan.</p>
+          <p className="hidden sm:block px-4 py-6 text-sm text-on-surface-variant">No hay clientes que coincidan.</p>
         )}
       </div>
 

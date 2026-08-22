@@ -12,10 +12,10 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
   const agendaFlush = activeTab === 'agenda'
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40">
-        {/* Desktop: logo + tabs + salir en una sola fila */}
-        <div className="hidden sm:flex max-w-7xl mx-auto px-4 h-14 items-center gap-4">
+    <div className="min-h-svh flex flex-col bg-background">
+      {/* ——— Desktop header ——— */}
+      <header className="hidden sm:block sticky top-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40 shrink-0">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
           <StudioLogo variant="header" />
 
           <nav className="flex-1 flex justify-center gap-1">
@@ -45,47 +45,57 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
             Salir
           </button>
         </div>
+      </header>
 
-        {/* Mobile: logo + salir, tabs debajo */}
-        <div className="sm:hidden px-3 pt-2 pb-1 flex items-center justify-between">
-          <StudioLogo variant="header" />
-          <button
-            type="button"
-            onClick={onLogout}
-            className="cursor-pointer min-h-11 min-w-11 flex items-center justify-center text-on-surface-variant"
-            aria-label="Salir"
-          >
-            <Icon name="logout" className="text-xl" />
-          </button>
-        </div>
-        <nav className="sm:hidden px-1.5 pb-2 flex gap-1 overflow-x-auto no-scrollbar">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onTabChange(tab.id)}
-              className={`cursor-pointer shrink-0 rounded-2xl px-3 py-2.5 min-h-11 text-xs flex items-center gap-1 transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-primary text-on-primary'
-                  : 'bg-surface-container-low text-on-surface-variant'
-              }`}
-            >
-              <Icon name={tab.icon} className="text-base" filled={activeTab === tab.id} />
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      {/* ——— Mobile: compact top bar (nav lives at bottom) ——— */}
+      <header className="sm:hidden sticky top-0 z-30 shrink-0 h-11 px-3 flex items-center justify-between bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/30">
+        <StudioLogo variant="header" />
+        <button
+          type="button"
+          onClick={onLogout}
+          className="cursor-pointer min-h-10 min-w-10 flex items-center justify-center text-on-surface-variant rounded-full active:bg-surface-container"
+          aria-label="Salir"
+        >
+          <Icon name="logout" className="text-xl" />
+        </button>
       </header>
 
       <main
         className={
           agendaFlush
-            ? 'max-w-7xl mx-auto w-full px-0 pt-2 pb-3 sm:px-4 sm:py-5'
-            : 'max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-5'
+            ? 'flex-1 min-h-0 flex flex-col overflow-hidden max-w-7xl mx-auto w-full px-0 pt-0 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] sm:px-4 sm:py-5 sm:pb-5'
+            : 'flex-1 min-h-0 overflow-y-auto max-w-7xl mx-auto w-full px-3 py-3 pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:px-4 sm:py-5 sm:pb-5'
         }
       >
         {children}
       </main>
+
+      {/* ——— Mobile bottom tab bar ——— */}
+      <nav
+        className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-t border-outline-variant/40 pb-[env(safe-area-inset-bottom,0px)]"
+        aria-label="Secciones del estudio"
+      >
+        <div className="grid grid-cols-4 h-[3.75rem]">
+          {TABS.map((tab) => {
+            const active = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                className={`cursor-pointer flex flex-col items-center justify-center gap-0.5 min-h-[3rem] touch-manipulation ${
+                  active ? 'text-primary' : 'text-on-surface-variant'
+                }`}
+              >
+                <Icon name={tab.icon} className="text-[1.35rem]" filled={active} />
+                <span className={`text-[10px] leading-none ${active ? 'font-semibold' : 'font-medium'}`}>
+                  {tab.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
     </div>
   )
 }

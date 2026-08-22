@@ -579,8 +579,8 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           </div>
         )}
 
-        {/* Fecha + hora juntos */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Fecha + hora: apilados en móvil (evita solapamiento de inputs nativos) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block min-w-0">
             <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
               Fecha
@@ -590,15 +590,15 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11"
+              className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
             />
           </label>
-          <div className="min-w-0">
+          <label className="block min-w-0">
             <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
               Hora
             </span>
             {hasGap ? (
-              <p className="mt-1.5 flex items-center min-h-11 rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3 text-sm font-medium tabular-nums text-on-surface">
+              <p className="mt-1.5 flex items-center min-h-11 rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3 text-sm font-medium tabular-nums text-on-surface box-border">
                 {lockedTime}
               </p>
             ) : loadingSlots ? (
@@ -613,7 +613,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
               <select
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11"
+                className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
               >
                 <option value="">Elige…</option>
                 {slots.map((s) => (
@@ -624,7 +624,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                 ))}
               </select>
             )}
-          </div>
+          </label>
         </div>
 
         <div>
@@ -736,7 +736,17 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
 /**
  * Timed grid shared by Day (1 col) and Week (5 cols) — Apple/Google Calendar layout.
  */
-function TimedGrid({ days, events, onSlotClick, onEventClick, compact, pxPerHour = PX_PER_HOUR, showNowLine = false }) {
+function TimedGrid({
+  days,
+  events,
+  onSlotClick,
+  onEventClick,
+  compact,
+  pxPerHour = PX_PER_HOUR,
+  showNowLine = false,
+  fillHeight = false,
+  hideDayHeader = false,
+}) {
   const hours = hoursList()
   const gridHeight = (HOUR_END - HOUR_START) * pxPerHour
   const gridStartMins = HOUR_START * 60
@@ -758,9 +768,14 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact, pxPerHour
   }, [showNow, nowTop, days[0]])
 
   return (
-    <div className="flex flex-col bg-surface-container-lowest border border-outline-variant/20 rounded-none sm:rounded-2xl overflow-hidden">
-      {/* Day headers — sticky */}
-      <div className="flex border-b border-outline-variant/20 bg-surface-container-lowest sticky top-0 z-20">
+    <div
+      className={`flex flex-col bg-surface-container-lowest border border-outline-variant/20 rounded-none sm:rounded-2xl overflow-hidden ${
+        fillHeight ? 'flex-1 min-h-0' : ''
+      }`}
+    >
+      {/* Day headers — sticky (hidden on mobile single-day; chips/title replace it) */}
+      {!hideDayHeader && (
+      <div className="flex border-b border-outline-variant/20 bg-surface-container-lowest sticky top-0 z-20 shrink-0">
         <div className="w-12 sm:w-14 shrink-0 border-r border-outline-variant/15" aria-hidden />
         <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
           {days.map((day) => {
@@ -790,9 +805,18 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact, pxPerHour
           })}
         </div>
       </div>
+      )}
 
       {/* Scrollable time body */}
-      <div className="overflow-y-auto overscroll-contain max-h-[min(calc(100dvh-12rem),720px)] sm:max-h-[min(72dvh,720px)] touch-pan-y" data-now-scroll="" ref={scrollRef}>
+      <div
+        className={
+          fillHeight
+            ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y'
+            : 'overflow-y-auto overscroll-contain max-h-[min(72dvh,720px)] touch-pan-y'
+        }
+        data-now-scroll=""
+        ref={scrollRef}
+      >
         <div className="flex relative" style={{ height: gridHeight }}>
           {/* Hour labels — top of each hour row (not centered on the line) */}
           <div className="w-12 sm:w-14 shrink-0 relative border-r border-outline-variant/15 bg-surface-container-lowest z-10">
@@ -859,7 +883,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact, pxPerHour
                       aria-hidden
                       className="absolute left-0 right-0 pointer-events-none z-0"
                       style={{
-                        top: (h - HOUR_START) * PX_PER_HOUR,
+                        top: (h - HOUR_START) * pxPerHour,
                         height: pxPerHour,
                         background:
                           'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(67,61,60,0.04) 4px, rgba(67,61,60,0.04) 8px)',
@@ -1182,51 +1206,48 @@ export default function StudioCalendar({ initialBookingId = null }) {
   }
 
   return (
-    <div className="space-y-3 sm:space-y-4">
-      {/* Toolbar — compact on iPhone */}
-      <div className="flex items-center gap-1 sm:gap-2 px-3 sm:px-0">
-        <div className="flex items-center min-w-0 flex-1 gap-0.5">
+    <div className="flex flex-col flex-1 min-h-0 h-full sm:space-y-4">
+      {/* Toolbar — compact; grid fills remaining viewport on mobile */}
+      <div className="shrink-0 px-2 sm:px-0 pt-1 space-y-1.5">
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={goPrev}
-            className="cursor-pointer p-2 min-h-11 min-w-11 rounded-full hover:bg-surface-container shrink-0"
+            className="cursor-pointer p-1.5 min-h-10 min-w-10 rounded-full hover:bg-surface-container shrink-0"
             aria-label="Anterior"
           >
             <Icon name="chevron_left" />
           </button>
-          <h2 className="font-headline text-base sm:text-xl text-on-surface capitalize truncate text-center flex-1">
+          <h2 className="font-headline text-[15px] sm:text-xl text-on-surface capitalize truncate text-center flex-1 leading-tight">
             {title}
           </h2>
           <button
             type="button"
             onClick={goNext}
-            className="cursor-pointer p-2 min-h-11 min-w-11 rounded-full hover:bg-surface-container shrink-0"
+            className="cursor-pointer p-1.5 min-h-10 min-w-10 rounded-full hover:bg-surface-container shrink-0"
             aria-label="Siguiente"
           >
             <Icon name="chevron_right" />
           </button>
-        </div>
-
           <button
             type="button"
             onClick={() => setAnchor(snapToWorkday(new Date()))}
-            className="cursor-pointer text-xs font-semibold text-primary px-2.5 py-2 min-h-11 rounded-xl hover:bg-primary/10 shrink-0"
+            className="cursor-pointer text-[11px] font-semibold text-primary px-2 py-1.5 min-h-10 rounded-lg hover:bg-primary/10 shrink-0"
           >
             Hoy
           </button>
-        <button
-          type="button"
-          onClick={() => setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })}
-          className="cursor-pointer inline-flex items-center justify-center gap-0.5 rounded-xl bg-primary text-on-primary p-2.5 sm:px-3.5 sm:py-2 min-h-11 min-w-11 sm:min-w-0 text-xs font-medium shrink-0"
-          aria-label="Nueva cita"
-        >
-          <Icon name="add" className="text-lg" />
-          <span className="hidden sm:inline">Cita</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })}
+            className="cursor-pointer hidden sm:inline-flex items-center justify-center gap-0.5 rounded-xl bg-primary text-on-primary px-3.5 py-2 min-h-11 text-xs font-medium shrink-0"
+            aria-label="Nueva cita"
+          >
+            <Icon name="add" className="text-lg" />
+            Cita
+          </button>
+        </div>
 
-      <div className="flex items-center justify-between gap-2 px-3 sm:px-0">
-        <div className="inline-flex rounded-xl bg-surface-container-low p-0.5 w-full sm:w-auto">
+        <div className="inline-flex rounded-lg bg-surface-container-low p-0.5 w-full sm:w-auto">
           {[
             { id: 'day', label: 'Día' },
             { id: 'week', label: 'Semana' },
@@ -1236,7 +1257,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
               key={v.id}
               type="button"
               onClick={() => setView(v.id)}
-              className={`cursor-pointer flex-1 sm:flex-none px-3 py-2 min-h-10 rounded-[10px] text-xs font-medium transition-colors ${
+              className={`cursor-pointer flex-1 sm:flex-none px-2.5 py-1.5 min-h-9 rounded-md text-[11px] sm:text-xs font-medium transition-colors ${
                 view === v.id
                   ? 'bg-surface-container-lowest text-on-surface shadow-sm'
                   : 'text-on-surface-variant'
@@ -1248,24 +1269,21 @@ export default function StudioCalendar({ initialBookingId = null }) {
         </div>
       </div>
 
-      <p className="hidden sm:flex text-xs text-on-surface-variant items-center gap-1.5">
+      <p className="hidden sm:flex shrink-0 text-xs text-on-surface-variant items-center gap-1.5 px-0">
         <Icon name="lock" className="text-sm" />
         Google: solo lectura. Toca un hueco libre (línea discontinua) para crear. 14–15 cerrado.
       </p>
 
       {error && (
-        <p className="text-sm text-error bg-error-container/40 rounded-xl px-3 py-2 mx-3 sm:mx-0">
+        <p className="shrink-0 text-sm text-error bg-error-container/40 rounded-xl px-3 py-1.5 mx-2 sm:mx-0">
           {error}
         </p>
       )}
-      {loading && (
-        <p className="text-sm text-on-surface-variant text-center py-8">Cargando agenda…</p>
-      )}
 
-      {/* Full-bleed grid on mobile (edge-to-edge like Apple Calendar) */}
+      {/* Week day strip — mobile only; replaces duplicate grid header */}
       {!loading && view === 'week' && isMobile && (
-        <div className="px-3 sm:px-0">
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-2 sticky top-0 z-10 bg-background">
+        <div className="shrink-0 px-1.5 pb-0.5">
+          <div className="flex gap-1 overflow-x-auto no-scrollbar">
             {weekDays.map((day) => {
               const selected = isSameDay(day, anchor)
               const count = events.filter((ev) => isSameDay(new Date(ev.startTime), day)).length
@@ -1274,13 +1292,13 @@ export default function StudioCalendar({ initialBookingId = null }) {
                   key={day.toISOString()}
                   type="button"
                   onClick={() => setAnchor(snapToWorkday(day))}
-                  className={`cursor-pointer shrink-0 min-h-11 min-w-[3.25rem] rounded-2xl px-2.5 py-1.5 text-center border transition-colors ${
+                  className={`cursor-pointer shrink-0 min-h-9 min-w-[2.65rem] rounded-xl px-1.5 py-1 text-center border transition-colors touch-manipulation ${
                     selected
                       ? 'bg-primary text-on-primary border-primary'
                       : 'bg-surface-container-lowest border-outline-variant/25 text-on-surface'
                   }`}
                 >
-                  <span className="block text-[10px] font-label uppercase opacity-80">
+                  <span className="block text-[9px] font-label uppercase opacity-80 leading-none">
                     {WEEKDAY_SHORT[weekdayIndex(day)]}
                   </span>
                   <span className="block text-sm font-medium tabular-nums leading-tight">
@@ -1288,7 +1306,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
                   </span>
                   {count > 0 && (
                     <span
-                      className={`mt-0.5 mx-auto block w-1.5 h-1.5 rounded-full ${
+                      className={`mt-0.5 mx-auto block w-1 h-1 rounded-full ${
                         selected ? 'bg-on-primary' : 'bg-primary'
                       }`}
                     />
@@ -1300,26 +1318,36 @@ export default function StudioCalendar({ initialBookingId = null }) {
         </div>
       )}
 
-      {!loading && (view === 'day' || view === 'week') && (
-        <TimedGrid
-          days={view === 'day' || isMobile ? [anchor] : weekDays}
-          events={events}
-          onSlotClick={onSlotClick}
-          onEventClick={onEventClick}
-          compact={view === 'week' && !isMobile}
-          pxPerHour={isMobile ? PX_PER_HOUR_MOBILE : PX_PER_HOUR}
-          showNowLine
-        />
-      )}
+      <div className="relative flex flex-col flex-1 min-h-0">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 sm:rounded-2xl">
+            <div className="w-7 h-7 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        )}
 
-      {!loading && view === 'month' && (
-        <MonthGrid
-          monthDays={monthDays}
-          anchor={anchor}
-          countsByDay={countsByDay}
-          onOpenDay={openDay}
-        />
-      )}
+        {!loading && (view === 'day' || view === 'week') && (
+          <TimedGrid
+            days={view === 'day' || isMobile ? [anchor] : weekDays}
+            events={events}
+            onSlotClick={onSlotClick}
+            onEventClick={onEventClick}
+            compact={view === 'week' && !isMobile}
+            pxPerHour={isMobile ? PX_PER_HOUR_MOBILE : PX_PER_HOUR}
+            showNowLine
+            fillHeight={isMobile}
+            hideDayHeader={isMobile}
+          />
+        )}
+
+        {!loading && view === 'month' && (
+          <MonthGrid
+            monthDays={monthDays}
+            anchor={anchor}
+            countsByDay={countsByDay}
+            onOpenDay={openDay}
+          />
+        )}
+      </div>
 
       {createModal && (
         <CreateBookingModal
@@ -1339,7 +1367,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
           onClick={() =>
             setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })
           }
-          className="cursor-pointer fixed z-40 right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(255,138,138,0.45)] flex items-center justify-center active:scale-95 transition-transform"
+          className="cursor-pointer fixed z-40 right-4 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(183,139,125,0.45)] flex items-center justify-center active:scale-95 transition-transform"
         >
           <Icon name="add" className="text-2xl" />
         </button>

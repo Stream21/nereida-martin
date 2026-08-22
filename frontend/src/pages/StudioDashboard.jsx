@@ -148,7 +148,14 @@ export default function StudioDashboard() {
         )}
 
         {activeTab === 'agenda' && (
-          <motion.div key="agenda" variants={tabVariants} initial="initial" animate="animate" exit="exit">
+          <motion.div
+            key="agenda"
+            className="flex flex-col flex-1 min-h-0 h-full"
+            variants={tabVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
             <StudioCalendar initialBookingId={citaFromUrl} />
           </motion.div>
         )}
