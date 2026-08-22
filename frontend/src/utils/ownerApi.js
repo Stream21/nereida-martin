@@ -123,10 +123,10 @@ export function updateClient(clientId, payload) {
   })
 }
 
-export function createClient({ name, phone, email }) {
+export function createClient({ name, phone, email, hasPerfiladoHistory }) {
   return ownerFetch('/clients', {
     method: 'POST',
-    body: JSON.stringify({ name, phone, email }),
+    body: JSON.stringify({ name, phone, email, hasPerfiladoHistory }),
   })
 }
 
@@ -158,11 +158,22 @@ export function ownerUploadUrl(photoUrlOrPath) {
   return `${API_URL}${path}`
 }
 
-export function createOwnerBooking({ clientId, treatmentId, startTime, date, time }) {
+export function createOwnerBooking({ clientId, treatmentId, startTime, date, time, durationMinutes }) {
   return ownerFetch('/bookings', {
     method: 'POST',
-    body: JSON.stringify({ clientId, treatmentId, startTime, date, time }),
+    body: JSON.stringify({ clientId, treatmentId, startTime, date, time, durationMinutes }),
   })
+}
+
+export function updateOwnerBooking(bookingId, { date, time, startTime, treatmentId, durationMinutes }) {
+  return ownerFetch(`/bookings/${bookingId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ date, time, startTime, treatmentId, durationMinutes }),
+  })
+}
+
+export function cancelOwnerBooking(bookingId) {
+  return ownerFetch(`/bookings/${bookingId}/cancel`, { method: 'POST' })
 }
 
 export function createOwnerJointBooking({
@@ -186,8 +197,9 @@ export function createOwnerJointBooking({
   })
 }
 
-export function fetchOwnerAvailability({ date, treatmentId }) {
+export function fetchOwnerAvailability({ date, treatmentId, durationMinutes }) {
   const params = new URLSearchParams({ date, treatmentId })
+  if (durationMinutes != null) params.set('durationMinutes', String(durationMinutes))
   return ownerFetch(`/availability?${params}`)
 }
 

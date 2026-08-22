@@ -97,7 +97,7 @@ function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '', hasPerfiladoHistory: false })
   const [history, setHistory] = useState([])
 
   useEffect(() => {
@@ -112,6 +112,7 @@ function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
           email: c.email || '',
           phone: c.phone || '',
           notes: c.notes || '',
+          hasPerfiladoHistory: Boolean(c.hasPerfiladoHistory),
         })
         setHistory(c.history || [])
       })
@@ -282,7 +283,7 @@ export default function ClientsTable() {
   const [toast, setToast] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '' })
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', hasPerfiladoHistory: false })
   const [addError, setAddError] = useState('')
   const [importing, setImporting] = useState(false)
   const [fichaId, setFichaId] = useState(null)
@@ -425,7 +426,7 @@ export default function ClientsTable() {
     try {
       await createClient(addForm)
       setShowAdd(false)
-      setAddForm({ name: '', phone: '', email: '' })
+      setAddForm({ name: '', phone: '', email: '', hasPerfiladoHistory: false })
       showToast('Contacto añadido')
       setPage(1)
       loadClients(1)
@@ -662,6 +663,40 @@ export default function ClientsTable() {
               className="rounded-xl border border-outline-variant px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
+          
+          <fieldset className="rounded-2xl border border-outline-variant/40 px-4 py-3">
+            <legend className="text-[10px] font-label font-bold tracking-widest uppercase text-primary px-1">
+              ¿Ya es clienta del estudio?
+            </legend>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAddForm((f) => ({ ...f, hasPerfiladoHistory: true }))}
+                className={`cursor-pointer min-h-11 rounded-xl text-sm ${
+                  addForm.hasPerfiladoHistory
+                    ? 'bg-primary text-on-primary'
+                    : 'bg-surface-container-low text-on-surface-variant'
+                }`}
+              >
+                Sí · mantenimiento
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddForm((f) => ({ ...f, hasPerfiladoHistory: false }))}
+                className={`cursor-pointer min-h-11 rounded-xl text-sm ${
+                  !addForm.hasPerfiladoHistory
+                    ? 'bg-primary text-on-primary'
+                    : 'bg-surface-container-low text-on-surface-variant'
+                }`}
+              >
+                No · primera vez
+              </button>
+            </div>
+            <p className="text-[11px] text-on-surface-variant mt-2">
+              Define si en la app verá Perfilado mantenimiento o Perfilado primera vez.
+            </p>
+          </fieldset>
+
           {addError && <p className="text-sm text-error">{addError}</p>}
           <button type="submit" className="rounded-xl bg-primary text-on-primary px-4 py-2 text-sm">
             Guardar

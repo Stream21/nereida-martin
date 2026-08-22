@@ -66,7 +66,13 @@ async function getBusyRangesForDate(dateStr, excludeBookingId = null) {
 // Client-facing start times: consecutive appointments packed by treatment
 // duration (10:00, 10:45, 11:30... for 45 min). The internal 15-min grid is
 // only used to re-anchor after a conflict, so clients never see raw grid slots.
-function getSlotsForDate(dateStr, blockDurationMinutes, busyRanges, now = Date.now()) {
+function getSlotsForDate(
+  dateStr,
+  blockDurationMinutes,
+  busyRanges,
+  now = Date.now(),
+  { skipLeadTime = false } = {}
+) {
   if (isWeekendDay(dateStr)) return [];
 
   const windows = getWorkWindowsForDate(dateStr);
@@ -79,7 +85,7 @@ function getSlotsForDate(dateStr, blockDurationMinutes, busyRanges, now = Date.n
 
     while (cursor + blockMs <= end.getTime()) {
       const slotEnd = cursor + blockMs;
-      const tooSoon = isBeforeMinLead(cursor, now);
+      const tooSoon = !skipLeadTime && isBeforeMinLead(cursor, now);
       const hasConflict = hasOverlapWithRanges(
         new Date(cursor),
         new Date(slotEnd),
@@ -101,7 +107,18 @@ function getSlotsForDate(dateStr, blockDurationMinutes, busyRanges, now = Date.n
   return slots;
 }
 
-async function getAvailabilityForDate(dateStr, treatmentId, { allowInactiveIds = [] } = {}) {
+function snapDurationToGrid(minutes, fallbackMinutes) {
+  const { SLOT_MINUTES: step } = require('../utils/slotGrid');
+  const raw = Number(minutes);
+  const base = Number.isFinite(raw) && raw > 0 ? raw : fallbackMinutes;
+  return Math.max(step, Math.ceil(base / step) * step);
+}
+
+async function getAvailabilityForDate(
+  dateStr,
+  treatmentId,
+  { allowInactiveIds = [], durationMinutes = null, skipLeadTime = false } = {}
+) {
   const allowInactive = allowInactiveIds.includes(treatmentId);
   const treatmentResult = await query(
     allowInactive
@@ -115,9 +132,11 @@ async function getAvailabilityForDate(dateStr, treatmentId, { allowInactiveIds =
   }
 
   const treatment = treatmentResult.rows[0];
-  const blockMinutes = blockDurationMinutes(
+  const defaultBlock = blockDurationMinutes(
     treatment.duration_max || treatment.duration_min
   );
+  const blockMinutes =
+    durationMinutes != null ? snapDurationToGrid(durationMinutes, defaultBlock) : defaultBlock;
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
   if (dateStr < bookingStartDate || isWeekendDay(dateStr)) {
@@ -132,7 +151,9 @@ async function getAvailabilityForDate(dateStr, treatmentId, { allowInactiveIds =
   }
 
   const busyRanges = await getBusyRangesForDate(dateStr);
-  const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges);
+  const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges, Date.now(), {
+    skipLeadTime,
+  });
 
   return {
     slots,
@@ -144,7 +165,13 @@ async function getAvailabilityForDate(dateStr, treatmentId, { allowInactiveIds =
   };
 }
 
-async function hasSlotAvailable(dateStr, timeStr, blockMinutes, excludeBookingId = null) {
+async function hasSlotAvailable(
+  dateStr,
+  timeStr,
+  blockMinutes,
+  excludeBookingId = null,
+  { skipLeadTime = false } = {}
+) {
   if (isWeekendDay(dateStr)) return false;
 
   const [hour, minute] = timeStr.split(':').map(Number);
@@ -156,7 +183,7 @@ async function hasSlotAvailable(dateStr, timeStr, blockMinutes, excludeBookingId
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
   if (dateStr < bookingStartDate) return false;
-  if (isBeforeMinLead(start.getTime())) return false;
+  if (!skipLeadTime && isBeforeMinLead(start.getTime())) return false;
 
   const busyRanges = await getBusyRangesForDate(dateStr, excludeBookingId);
   return !hasOverlapWithRanges(start, end, busyRanges);

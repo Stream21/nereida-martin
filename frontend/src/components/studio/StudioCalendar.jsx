@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   addDays,
   addMonths,
@@ -38,6 +38,22 @@ const WEEKDAY_MED = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
 const HOUR_START = 10
 const HOUR_END = 18
 const PX_PER_HOUR = 56
+const PX_PER_HOUR_MOBILE = 72
+
+function useIsMobileCalendar() {
+  const [mobile, setMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const onChange = () => setMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return mobile
+}
+
 
 /** Studio work windows in minutes from midnight (matches backend studioHours). */
 function workWindowsForDay(day) {
@@ -164,7 +180,7 @@ function hoursList() {
   return h
 }
 
-function eventLayout(ev) {
+function eventLayout(ev, pxPerHour = PX_PER_HOUR) {
   const start = new Date(ev.startTime)
   const end = new Date(ev.endTime)
   const startMin = getHours(start) * 60 + getMinutes(start)
@@ -174,16 +190,16 @@ function eventLayout(ev) {
   const clampedStart = Math.max(startMin, gridStart)
   const clampedEnd = Math.min(endMin, gridEnd)
   if (clampedEnd <= clampedStart) return null
-  const top = ((clampedStart - gridStart) / 60) * PX_PER_HOUR
-  const height = Math.max(22, ((clampedEnd - clampedStart) / 60) * PX_PER_HOUR - 2)
+  const top = ((clampedStart - gridStart) / 60) * pxPerHour
+  const height = Math.max(28, ((clampedEnd - clampedStart) / 60) * pxPerHour - 2)
   return { top, height }
 }
 
 /** Assign side-by-side columns for overlapping events (Google/Apple style). */
-function layoutOverlaps(dayEvents) {
+function layoutOverlaps(dayEvents, pxPerHour = PX_PER_HOUR) {
   const items = dayEvents
     .map((ev) => {
-      const layout = eventLayout(ev)
+      const layout = eventLayout(ev, pxPerHour)
       if (!layout) return null
       return { ev, ...layout, start: new Date(ev.startTime).getTime(), end: new Date(ev.endTime).getTime() }
     })
@@ -251,6 +267,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const [companionClients, setCompanionClients] = useState([])
   const [companionClientId, setCompanionClientId] = useState(null)
   const [companionTreatmentName, setCompanionTreatmentName] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState(null)
 
   const gapMinutes = gapStart != null && gapEnd != null ? gapEnd - gapStart : null
   const hasGap = gapMinutes != null && gapMinutes > 0
@@ -262,15 +279,18 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const treatmentsWithFit = useMemo(() => {
     return treatments
       .map((t) => {
-        const duration = treatmentDurationMin(t)
-        const fits = !hasGap || duration <= gapMinutes
-        return { ...t, duration, fits }
+        const catalogDuration = treatmentDurationMin(t)
+        const duration =
+          t.id === treatmentId && durationMinutes != null ? durationMinutes : catalogDuration
+        // With custom duration, a treatment can fit if Nereida shortens it enough
+        const fits = !hasGap || catalogDuration <= gapMinutes || gapMinutes >= 15
+        return { ...t, duration: catalogDuration, fits }
       })
       .sort((a, b) => {
         if (a.fits !== b.fits) return a.fits ? -1 : 1
         return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
       })
-  }, [treatments, hasGap, gapMinutes])
+  }, [treatments, hasGap, gapMinutes, treatmentId, durationMinutes])
 
   useEffect(() => {
     fetchOwnerTreatments()
@@ -321,6 +341,20 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
     }
   }, [jointEligible])
 
+  // Reset duration when treatment changes
+  useEffect(() => {
+    if (!treatmentId || isJoint) {
+      setDurationMinutes(null)
+      return
+    }
+    const t = treatments.find((x) => x.id === treatmentId)
+    if (!t) return
+    const def = treatmentDurationMin(t)
+    const maxAllowed = hasGap ? gapMinutes : null
+    const next = maxAllowed != null ? Math.min(def, maxAllowed) : def
+    setDurationMinutes(Math.max(15, Math.floor(next / 15) * 15))
+  }, [treatmentId, treatments, isJoint, hasGap, gapMinutes])
+
   useEffect(() => {
     if (hasGap && lockedTime) {
       setTime(lockedTime)
@@ -345,7 +379,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           companionClientId,
           primaryClientId: clientId,
         })
-      : fetchOwnerAvailability({ date, treatmentId })
+      : fetchOwnerAvailability({ date, treatmentId, durationMinutes })
 
     fetchSlots
       .then((res) => {
@@ -373,7 +407,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap/joint change
-  }, [date, treatmentId, initialTime, hasGap, lockedTime, isJoint, companionClientId, clientId])
+  }, [date, treatmentId, initialTime, hasGap, lockedTime, isJoint, companionClientId, clientId, durationMinutes])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -398,7 +432,13 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           time: bookingTime,
         })
       } else {
-        await createOwnerBooking({ clientId, treatmentId, date, time: bookingTime })
+        await createOwnerBooking({
+          clientId,
+          treatmentId,
+          date,
+          time: bookingTime,
+          durationMinutes: durationMinutes || undefined,
+        })
       }
       onCreated?.()
       onClose()
@@ -411,11 +451,14 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
 
   const selectedFits =
     !hasGap ||
-    treatmentsWithFit.find((t) => t.id === treatmentId)?.fits !== false
+    (durationMinutes != null
+      ? durationMinutes <= gapMinutes
+      : treatmentsWithFit.find((t) => t.id === treatmentId)?.fits !== false)
   const canSubmit =
     selectedFits &&
     (hasGap ? !!lockedTime : !!time) &&
-    (!isJoint || !!companionClientId)
+    (!isJoint || !!companionClientId) &&
+    (isJoint || durationMinutes != null)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
@@ -627,6 +670,54 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           </div>
         </div>
 
+        
+        {!isJoint && treatmentId && durationMinutes != null && (
+          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+              Duración
+            </p>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setDurationMinutes((d) => Math.max(15, (d || 15) - 15))
+                }
+                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium"
+                aria-label="Reducir 15 minutos"
+              >
+                −
+              </button>
+              <p className="text-sm font-medium text-on-surface tabular-nums">
+                {formatDurationLabel(durationMinutes)}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setDurationMinutes((d) => {
+                    const next = (d || 15) + 15
+                    if (hasGap && next > gapMinutes) return d
+                    return next
+                  })
+                }
+                disabled={hasGap && durationMinutes + 15 > gapMinutes}
+                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium disabled:opacity-40"
+                aria-label="Aumentar 15 minutos"
+              >
+                +
+              </button>
+            </div>
+            <p className="text-[11px] text-on-surface-variant mt-2">
+              Por defecto la del tratamiento. Puedes ajustarla en pasos de 15 min.
+            </p>
+          </div>
+        )}
+
+        {isJoint && (
+          <p className="text-xs text-on-surface-variant rounded-2xl bg-primary/5 border border-primary/15 px-4 py-3">
+            Se confirman las dos citas al momento; no hace falta que la acompañante acepte un enlace.
+          </p>
+        )}
+
         {error && <p className="text-sm text-error">{error}</p>}
 
         <button
@@ -645,10 +736,26 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
 /**
  * Timed grid shared by Day (1 col) and Week (5 cols) — Apple/Google Calendar layout.
  */
-function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
+function TimedGrid({ days, events, onSlotClick, onEventClick, compact, pxPerHour = PX_PER_HOUR, showNowLine = false }) {
   const hours = hoursList()
-  const gridHeight = (HOUR_END - HOUR_START) * PX_PER_HOUR
+  const gridHeight = (HOUR_END - HOUR_START) * pxPerHour
   const gridStartMins = HOUR_START * 60
+  const now = new Date()
+  const nowMins = getHours(now) * 60 + getMinutes(now)
+  const showNow =
+    showNowLine &&
+    days.length === 1 &&
+    isSameDay(days[0], now) &&
+    nowMins >= HOUR_START * 60 &&
+    nowMins < HOUR_END * 60
+  const nowTop = ((nowMins - gridStartMins) / 60) * pxPerHour
+  const scrollRef = useRef(null)
+
+  useEffect(() => {
+    if (!showNow || !scrollRef.current) return
+    const target = Math.max(0, nowTop - 80)
+    scrollRef.current.scrollTop = target
+  }, [showNow, nowTop, days[0]])
 
   return (
     <div className="flex flex-col bg-surface-container-lowest border border-outline-variant/20 rounded-none sm:rounded-2xl overflow-hidden">
@@ -685,7 +792,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
       </div>
 
       {/* Scrollable time body */}
-      <div className="overflow-y-auto overscroll-contain max-h-[min(68dvh,640px)] sm:max-h-[min(72dvh,720px)]">
+      <div className="overflow-y-auto overscroll-contain max-h-[min(calc(100dvh-12rem),720px)] sm:max-h-[min(72dvh,720px)] touch-pan-y" data-now-scroll="" ref={scrollRef}>
         <div className="flex relative" style={{ height: gridHeight }}>
           {/* Hour labels — top of each hour row (not centered on the line) */}
           <div className="w-12 sm:w-14 shrink-0 relative border-r border-outline-variant/15 bg-surface-container-lowest z-10">
@@ -693,7 +800,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
               <div
                 key={h}
                 className="absolute right-1 sm:right-2 text-[10px] sm:text-[11px] tabular-nums leading-none text-on-surface-variant pointer-events-none"
-                style={{ top: (h - HOUR_START) * PX_PER_HOUR + 4 }}
+                style={{ top: (h - HOUR_START) * pxPerHour + 4 }}
               >
                 {String(h).padStart(2, '0')}:00
               </div>
@@ -710,7 +817,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
               <div
                 key={`line-${h}`}
                 className="absolute left-0 right-0 border-t border-outline-variant/15 pointer-events-none"
-                style={{ top: (h - HOUR_START) * PX_PER_HOUR }}
+                style={{ top: (h - HOUR_START) * pxPerHour }}
               />
             ))}
             {/* Half-hour guides (subtle) */}
@@ -718,13 +825,13 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
               <div
                 key={`half-${h}`}
                 className="absolute left-0 right-0 border-t border-outline-variant/8 pointer-events-none"
-                style={{ top: (h - HOUR_START) * PX_PER_HOUR + PX_PER_HOUR / 2 }}
+                style={{ top: (h - HOUR_START) * pxPerHour + pxPerHour / 2 }}
               />
             ))}
 
             {days.map((day) => {
               const dayEvents = events.filter((e) => isSameDay(new Date(e.startTime), day))
-              const laidOut = layoutOverlaps(dayEvents)
+              const laidOut = layoutOverlaps(dayEvents, pxPerHour)
               const gaps = freeGapsForDay(day, dayEvents)
 
               return (
@@ -734,6 +841,17 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                     isToday(day) ? 'bg-primary/[0.03]' : ''
                   }`}
                 >
+                  {showNow && (
+                    <div
+                      data-testid="now-line"
+                      className="absolute left-0 right-0 z-[4] pointer-events-none flex items-center"
+                      style={{ top: nowTop }}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full bg-primary -ml-1 shrink-0" />
+                      <span className="flex-1 h-[2px] bg-primary" />
+                    </div>
+                  )}
+
                   {/* Closed hours (comida / viernes desde 17:00) — not clickable */}
                   {hours.filter((h) => isClosedHour(h, day)).map((h) => (
                     <div
@@ -742,7 +860,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                       className="absolute left-0 right-0 pointer-events-none z-0"
                       style={{
                         top: (h - HOUR_START) * PX_PER_HOUR,
-                        height: PX_PER_HOUR,
+                        height: pxPerHour,
                         background:
                           'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(67,61,60,0.04) 4px, rgba(67,61,60,0.04) 8px)',
                       }}
@@ -751,8 +869,8 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
 
                   {/* Free gaps — only clickable create zones */}
                   {gaps.map((gap) => {
-                    const top = ((gap.start - gridStartMins) / 60) * PX_PER_HOUR
-                    const height = Math.max(18, ((gap.end - gap.start) / 60) * PX_PER_HOUR - 2)
+                    const top = ((gap.start - gridStartMins) / 60) * pxPerHour
+                    const height = Math.max(18, ((gap.end - gap.start) / 60) * pxPerHour - 2)
                     const label = `${minsToLabel(gap.start)} – ${minsToLabel(gap.end)}`
                     const showLabel = height >= 28
                     return (
@@ -775,10 +893,7 @@ function TimedGrid({ days, events, onSlotClick, onEventClick, compact }) {
                               days.length > 1 ? 'text-[8px] sm:text-[9px]' : 'text-[10px] sm:text-[11px]'
                             }`}
                           >
-                            {label}
-                            {height >= 40 && days.length === 1 ? (
-                              <span className="font-normal opacity-80"> Disponible</span>
-                            ) : null}
+                            {days.length === 1 && height >= 36 ? label : ''}
                           </span>
                         )}
                       </button>
@@ -941,7 +1056,12 @@ function MonthGrid({ monthDays, anchor, countsByDay, onOpenDay }) {
 }
 
 export default function StudioCalendar({ initialBookingId = null }) {
-  const [view, setView] = useState('week')
+  const isMobile = useIsMobileCalendar()
+  const [view, setView] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+      ? 'day'
+      : 'week'
+  )
   const [anchor, setAnchor] = useState(() => snapToWorkday(new Date()))
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1143,13 +1263,52 @@ export default function StudioCalendar({ initialBookingId = null }) {
       )}
 
       {/* Full-bleed grid on mobile (edge-to-edge like Apple Calendar) */}
+      {!loading && view === 'week' && isMobile && (
+        <div className="px-3 sm:px-0">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-2 sticky top-0 z-10 bg-background">
+            {weekDays.map((day) => {
+              const selected = isSameDay(day, anchor)
+              const count = events.filter((ev) => isSameDay(new Date(ev.startTime), day)).length
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => setAnchor(snapToWorkday(day))}
+                  className={`cursor-pointer shrink-0 min-h-11 min-w-[3.25rem] rounded-2xl px-2.5 py-1.5 text-center border transition-colors ${
+                    selected
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'bg-surface-container-lowest border-outline-variant/25 text-on-surface'
+                  }`}
+                >
+                  <span className="block text-[10px] font-label uppercase opacity-80">
+                    {WEEKDAY_SHORT[weekdayIndex(day)]}
+                  </span>
+                  <span className="block text-sm font-medium tabular-nums leading-tight">
+                    {format(day, 'd')}
+                  </span>
+                  {count > 0 && (
+                    <span
+                      className={`mt-0.5 mx-auto block w-1.5 h-1.5 rounded-full ${
+                        selected ? 'bg-on-primary' : 'bg-primary'
+                      }`}
+                    />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {!loading && (view === 'day' || view === 'week') && (
         <TimedGrid
-          days={view === 'day' ? [anchor] : weekDays}
+          days={view === 'day' || isMobile ? [anchor] : weekDays}
           events={events}
           onSlotClick={onSlotClick}
           onEventClick={onEventClick}
-          compact={view === 'week'}
+          compact={view === 'week' && !isMobile}
+          pxPerHour={isMobile ? PX_PER_HOUR_MOBILE : PX_PER_HOUR}
+          showNowLine
         />
       )}
 
@@ -1171,6 +1330,19 @@ export default function StudioCalendar({ initialBookingId = null }) {
           onClose={() => setCreateModal(null)}
           onCreated={load}
         />
+      )}
+
+      {isMobile && (
+        <button
+          type="button"
+          aria-label="Nueva cita flotante"
+          onClick={() =>
+            setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })
+          }
+          className="cursor-pointer fixed z-40 right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(255,138,138,0.45)] flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <Icon name="add" className="text-2xl" />
+        </button>
       )}
 
       {detailEvent && (

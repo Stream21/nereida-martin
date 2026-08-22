@@ -3,7 +3,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import IntakeAnswers from './IntakeAnswers'
 import AssessmentPhotos from './AssessmentPhotos'
-import { fetchOwnerBooking, confirmOwnerBookingReview, rejectOwnerBookingReview } from '../../utils/ownerApi'
+import {
+  fetchOwnerBooking,
+  confirmOwnerBookingReview,
+  rejectOwnerBookingReview,
+  cancelOwnerBooking,
+  updateOwnerBooking,
+  fetchOwnerTreatments,
+  fetchOwnerAvailability,
+} from '../../utils/ownerApi'
 import {
   bookingSourceLabel,
   bookingStatusLabel,
@@ -77,6 +85,15 @@ export default function BookingDetailContent({
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState('')
   const [confirmReject, setConfirmReject] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [treatments, setTreatments] = useState([])
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editTreatmentId, setEditTreatmentId] = useState('')
+  const [editDuration, setEditDuration] = useState(45)
+  const [editSlots, setEditSlots] = useState([])
+  const [editLoading, setEditLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -140,6 +157,263 @@ export default function BookingDetailContent({
       setActionLoading('')
     }
   }
+
+
+  const canManage =
+    !google &&
+    booking?.status !== 'cancelled' &&
+    (!booking?.source || booking.source === 'web' || booking.source === 'owner') &&
+    Number.isFinite(numericId) &&
+    !String(bookingId || '').startsWith('gcal:')
+
+  const openEdit = () => {
+    if (!booking?.startTime) return
+    const startDt = new Date(booking.startTime)
+    const endDt = booking.endTime ? new Date(booking.endTime) : null
+    const dateStr = startDt.toLocaleDateString('en-CA', { timeZone: 'Atlantic/Canary' })
+    const timeStr = startDt.toLocaleTimeString('en-GB', {
+      timeZone: 'Atlantic/Canary',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    const mins =
+      endDt && startDt ? Math.max(15, Math.round((endDt - startDt) / 60000)) : 45
+    setEditDate(dateStr)
+    setEditTime(timeStr)
+    setEditTreatmentId(booking.treatmentId || '')
+    setEditDuration(Math.max(15, Math.round(mins / 15) * 15))
+    setEditing(true)
+    setConfirmCancel(false)
+    setActionError('')
+    fetchOwnerTreatments()
+      .then((res) => setTreatments(res.treatments || []))
+      .catch(() => setTreatments([]))
+  }
+
+  useEffect(() => {
+    if (!editing || !editDate || !editTreatmentId || booking?.isJoint) {
+      setEditSlots([])
+      return undefined
+    }
+    let cancelled = false
+    setEditLoading(true)
+    fetchOwnerAvailability({
+      date: editDate,
+      treatmentId: editTreatmentId,
+      durationMinutes: editDuration,
+    })
+      .then((res) => {
+        if (cancelled) return
+        setEditSlots((res.slots || []).filter((slot) => slot.available))
+      })
+      .catch((err) => {
+        if (!cancelled) setActionError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setEditLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [editing, editDate, editTreatmentId, editDuration, booking?.isJoint])
+
+  const handleOwnerCancel = async () => {
+    if (!Number.isFinite(numericId) || actionLoading) return
+    setActionError('')
+    setActionLoading('cancel')
+    try {
+      await cancelOwnerBooking(numericId)
+      onUpdated?.({ ...booking, status: 'cancelled' })
+    } catch (err) {
+      setActionError(err.message || 'No se pudo cancelar la cita')
+      setActionLoading('')
+    }
+  }
+
+  const handleOwnerSaveEdit = async () => {
+    if (!Number.isFinite(numericId) || actionLoading) return
+    if (!editDate || !editTime) {
+      setActionError('Indica fecha y hora')
+      return
+    }
+    setActionError('')
+    setActionLoading('save')
+    try {
+      const payload = { date: editDate, time: editTime }
+      if (!booking?.isJoint) {
+        payload.treatmentId = editTreatmentId
+        payload.durationMinutes = editDuration
+      }
+      const res = await updateOwnerBooking(numericId, payload)
+      if (res.booking) setFetched(res.booking)
+      onUpdated?.(res.booking || { ...booking })
+      setEditing(false)
+    } catch (err) {
+      setActionError(err.message || 'No se pudo modificar la cita')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const manageActions = canManage && !pendingReview && (
+    <div className="space-y-3">
+      {actionError && !pendingReview && <p className="text-sm text-error">{actionError}</p>}
+      {editing ? (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-4 space-y-3">
+          <p className="text-sm font-medium text-on-surface">Modificar cita</p>
+          {booking?.isJoint && (
+            <p className="text-xs text-on-surface-variant">
+              Cita conjunta: solo se puede cambiar fecha y hora (ambas clientas).
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                Fecha
+              </span>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                Hora
+              </span>
+              <input
+                type="time"
+                step={900}
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11"
+                list="owner-edit-slots"
+              />
+              <datalist id="owner-edit-slots">
+                {editSlots.map((slot) => (
+                  <option key={slot.time} value={slot.time} />
+                ))}
+              </datalist>
+              {editLoading && (
+                <p className="text-[11px] text-on-surface-variant mt-1">Actualizando huecos…</p>
+              )}
+            </label>
+          </div>
+          {!booking?.isJoint && (
+            <>
+              <label className="block">
+                <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                  Tratamiento
+                </span>
+                <select
+                  value={editTreatmentId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setEditTreatmentId(id)
+                    const t = treatments.find((x) => x.id === id)
+                    if (t) {
+                      const d = t.durationMax || t.durationMin || 45
+                      setEditDuration(Math.max(15, Math.ceil(d / 15) * 15))
+                    }
+                  }}
+                  className="mt-1 w-full rounded-xl border border-outline-variant/40 bg-background px-3 py-2.5 text-sm min-h-11"
+                >
+                  {treatments.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                  Duración
+                </p>
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditDuration((d) => Math.max(15, d - 15))}
+                    className="cursor-pointer min-h-11 min-w-11 rounded-xl border border-outline-variant/40 bg-surface-container-lowest"
+                  >
+                    −
+                  </button>
+                  <span className="text-sm font-medium tabular-nums">{editDuration} min</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditDuration((d) => d + 15)}
+                    className="cursor-pointer min-h-11 min-w-11 rounded-xl border border-outline-variant/40 bg-surface-container-lowest"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium bg-surface-container-lowest border border-outline-variant/30"
+            >
+              Volver
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(actionLoading)}
+              onClick={handleOwnerSaveEdit}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium coral-gradient text-white disabled:opacity-60"
+            >
+              {actionLoading === 'save' ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : confirmCancel ? (
+        <div className="rounded-2xl border border-error/30 bg-error-container/30 px-4 py-4 space-y-3">
+          <p className="text-sm text-on-surface">
+            ¿Cancelar esta cita
+            {booking?.isJoint ? ' conjunta (ambas clientas)' : ''}? Se avisará por email si hay correo.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmCancel(false)}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium bg-surface-container-lowest border border-outline-variant/30"
+            >
+              Volver
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(actionLoading)}
+              onClick={handleOwnerCancel}
+              className="cursor-pointer min-h-12 rounded-2xl px-3 text-sm font-medium bg-error-container text-error disabled:opacity-60"
+            >
+              {actionLoading === 'cancel' ? 'Cancelando…' : 'Sí, cancelar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.97 }}
+            onClick={openEdit}
+            className="cursor-pointer w-full min-h-12 rounded-2xl px-4 text-sm font-medium bg-primary text-on-primary"
+          >
+            Modificar cita
+          </motion.button>
+          <button
+            type="button"
+            onClick={() => setConfirmCancel(true)}
+            className="cursor-pointer w-full min-h-12 rounded-2xl px-4 text-sm font-medium bg-surface-container-lowest border border-outline-variant/30 text-on-surface-variant"
+          >
+            Cancelar cita
+          </button>
+        </div>
+      )}
+    </div>
+  )
 
   const reviewActions = pendingReview && !google && (
     <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-4 space-y-3">
@@ -402,6 +676,8 @@ export default function BookingDetailContent({
                 <Icon name="chevron_right" className="text-lg" />
               </motion.button>
             )}
+
+            {manageActions}
 
             {reviewActions}
 

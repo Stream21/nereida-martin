@@ -137,7 +137,7 @@ async function parseXlsxFile(filePath) {
   return rows;
 }
 
-async function createManualClient({ name, phone, email }) {
+async function createManualClient({ name, phone, email, hasPerfiladoHistory = false }) {
   const nameTrim = String(name || '').trim();
   if (nameTrim.length < 2) {
     return { error: 'Nombre obligatorio', code: 'INVALID_NAME', status: 400 };
@@ -165,11 +165,12 @@ async function createManualClient({ name, phone, email }) {
     }
   }
 
+  const perfiladoFlag = Boolean(hasPerfiladoHistory);
   const result = await query(
-    `INSERT INTO clients (name, email, phone, phone_normalized, account_status)
-     VALUES ($1, $2, $3, $4, 'invited')
-     RETURNING id, name, email, phone, phone_normalized, account_status, created_at, registered_at`,
-    [nameTrim, emailValid, phoneRaw || null, phoneNorm]
+    `INSERT INTO clients (name, email, phone, phone_normalized, account_status, has_perfilado_history)
+     VALUES ($1, $2, $3, $4, 'invited', $5)
+     RETURNING id, name, email, phone, phone_normalized, account_status, has_perfilado_history, created_at, registered_at`,
+    [nameTrim, emailValid, phoneRaw || null, phoneNorm, perfiladoFlag]
   );
 
   return { client: mapClientRow(result.rows[0]) };
@@ -230,6 +231,7 @@ function mapClientRow(row) {
     totalSpent: row.total_spent != null ? Number(row.total_spent) : undefined,
     hasInvite: row.has_invite != null ? Boolean(row.has_invite) : undefined,
     inviteExpiresAt: row.invite_expires_at,
+    hasPerfiladoHistory: Boolean(row.has_perfilado_history),
   };
 }
 

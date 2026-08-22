@@ -656,7 +656,8 @@ async function listClients({
 async function getClientDetail(clientId) {
   const clientRes = await query(
     `SELECT id, name, email, phone, phone_normalized, notes, account_status,
-            created_at, registered_at, first_booking_at, last_booking_at, declared_profile
+            created_at, registered_at, first_booking_at, last_booking_at, declared_profile,
+            COALESCE(has_perfilado_history, false) AS has_perfilado_history
      FROM clients WHERE id = $1`,
     [clientId]
   );
@@ -691,6 +692,7 @@ async function getClientDetail(clientId) {
     phone: row.phone,
     phoneNormalized: row.phone_normalized,
     notes: row.notes || '',
+    hasPerfiladoHistory: Boolean(row.has_perfilado_history),
     accountStatus: row.account_status,
     createdAt: row.created_at,
     registeredAt: row.registered_at,
@@ -715,7 +717,7 @@ async function getClientDetail(clientId) {
   };
 }
 
-async function updateClient(clientId, { name, phone, email, notes }) {
+async function updateClient(clientId, { name, phone, email, notes, hasPerfiladoHistory }) {
   const { normalizePhone } = require('../utils/phone');
   const existing = await query('SELECT id FROM clients WHERE id = $1', [clientId]);
   if (existing.rows.length === 0) {
@@ -739,6 +741,8 @@ async function updateClient(clientId, { name, phone, email, notes }) {
   }
 
   const notesVal = notes != null ? String(notes) : null;
+  const perfiladoFlag =
+    hasPerfiladoHistory === undefined ? null : Boolean(hasPerfiladoHistory);
 
   try {
     const result = await query(
@@ -747,10 +751,11 @@ async function updateClient(clientId, { name, phone, email, notes }) {
            email = $2,
            phone = $3,
            phone_normalized = $4,
-           notes = $5
-       WHERE id = $6
-       RETURNING id, name, email, phone, notes, account_status`,
-      [nameTrim, emailTrim, phoneTrim || null, phoneNorm, notesVal, clientId]
+           notes = $5,
+           has_perfilado_history = COALESCE($6, has_perfilado_history)
+       WHERE id = $7
+       RETURNING id, name, email, phone, notes, account_status, has_perfilado_history`,
+      [nameTrim, emailTrim, phoneTrim || null, phoneNorm, notesVal, perfiladoFlag, clientId]
     );
     const row = result.rows[0];
     return {
@@ -760,6 +765,7 @@ async function updateClient(clientId, { name, phone, email, notes }) {
         email: row.email,
         phone: row.phone,
         notes: row.notes || '',
+        hasPerfiladoHistory: Boolean(row.has_perfilado_history),
         accountStatus: row.account_status,
       },
     };

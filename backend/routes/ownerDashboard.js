@@ -63,8 +63,13 @@ router.get('/clients', async (req, res) => {
 
 router.post('/clients', async (req, res) => {
   try {
-    const { name, phone, email } = req.body || {};
-    const result = await clientImport.createManualClient({ name, phone, email });
+    const { name, phone, email, hasPerfiladoHistory } = req.body || {};
+    const result = await clientImport.createManualClient({
+      name,
+      phone,
+      email,
+      hasPerfiladoHistory,
+    });
     if (result.error) {
       return res.status(result.status || 400).json({ error: result.error, code: result.code });
     }
@@ -287,7 +292,7 @@ router.get('/availability/joint/month', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { clientId, treatmentId, startTime, date, time } = req.body || {};
+    const { clientId, treatmentId, startTime, date, time, durationMinutes } = req.body || {};
     if (!clientId || !treatmentId || (!startTime && !(date && time))) {
       return res.status(400).json({
         error: 'clientId, treatmentId y startTime (o date+time) son obligatorios',
@@ -300,6 +305,7 @@ router.post('/bookings', async (req, res) => {
       startTime,
       date,
       time,
+      durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
     });
     if (result.error) {
       return res.status(result.status || 400).json({
@@ -315,15 +321,68 @@ router.post('/bookings', async (req, res) => {
   }
 });
 
+router.patch('/bookings/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const { date, time, startTime, treatmentId, durationMinutes } = req.body || {};
+    const ownerBooking = require('../services/ownerBookingService');
+    const result = await ownerBooking.updateOwnerBooking(id, {
+      date,
+      time,
+      startTime,
+      treatmentId,
+      durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
+    });
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        message: result.message,
+        code: result.code,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner update booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/bookings/:id/cancel', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const ownerBooking = require('../services/ownerBookingService');
+    const result = await ownerBooking.cancelOwnerBooking(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        message: result.message,
+        code: result.code,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner cancel booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/availability', async (req, res) => {
   try {
-    const { date, treatmentId } = req.query;
+    const { date, treatmentId, durationMinutes } = req.query;
     if (!date || !treatmentId) {
       return res.status(400).json({ error: 'date y treatmentId son obligatorios' });
     }
     const availabilityService = require('../services/availabilityService');
     const data = await availabilityService.getAvailabilityForDate(date, treatmentId, {
       allowInactiveIds: ['micropigmentacion-soft-pixel'],
+      durationMinutes: durationMinutes != null ? Number(durationMinutes) : null,
+      skipLeadTime: true,
     });
     if (data.error === 'not_found') {
       return res.status(404).json({ error: 'Tratamiento no encontrado' });
