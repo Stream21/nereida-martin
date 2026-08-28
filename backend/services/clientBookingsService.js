@@ -33,9 +33,10 @@ function mapBookingRow(row, frontendUrl) {
   const startTime = new Date(row.start_time);
   const endTime = new Date(row.end_time);
   const canCancelBooking = row.status === 'confirmed' && canCancel(startTime);
+  const cancelToken = row.cancel_token || null;
   const cancelUrl =
-    row.cancel_token && canCancelBooking
-      ? `${frontendUrl}/cancelar/${row.cancel_token}`
+    cancelToken && canCancelBooking
+      ? `${frontendUrl}/cancelar/${cancelToken}`
       : null;
 
   return {
@@ -49,6 +50,7 @@ function mapBookingRow(row, frontendUrl) {
     status: row.status,
     statusLabel: mapStatusLabel(row.status),
     canCancel: canCancelBooking,
+    cancelToken,
     cancelUrl,
   };
 }

@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Icon from '../ui/Icon'
-import GoldButton from '../ui/GoldButton'
 import { useClientAuth } from '../../hooks/useClientAuth'
 
 const NAV_LINKS = [
@@ -40,7 +39,6 @@ function firstName(name) {
   return String(name || '').trim().split(/\s+/).filter(Boolean)[0] || ''
 }
 
-/** Soft account control — Soft UI Evolution + brand Skin & Glow */
 function AccountControl({
   isAuthenticated,
   user,
@@ -207,9 +205,8 @@ function AccountControl({
   )
 }
 
-function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
+function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin, onNavigate }) {
   const prefersReducedMotion = useReducedMotion()
-  const navigate = useNavigate()
 
   if (isAuthenticated) {
     return (
@@ -230,20 +227,27 @@ function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-3">
+        <div className="grid grid-cols-3 gap-2 mt-3">
           <button
             type="button"
-            onClick={() => navigate('/cuenta')}
+            onClick={() => onNavigate('/cuenta')}
             className="cursor-pointer min-h-10 rounded-xl bg-background/80 text-xs text-on-surface-variant hover:text-primary"
           >
             Mi cuenta
           </button>
           <button
             type="button"
-            onClick={() => navigate('/mis-citas')}
+            onClick={() => onNavigate('/mis-citas')}
             className="cursor-pointer min-h-10 rounded-xl bg-background/80 text-xs text-on-surface-variant hover:text-primary"
           >
             Mis citas
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('/reservar')}
+            className="cursor-pointer min-h-10 rounded-xl bg-background/80 text-xs text-on-surface-variant hover:text-primary"
+          >
+            Reservar
           </button>
         </div>
         <motion.button
@@ -288,6 +292,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const prefersReducedMotion = useReducedMotion()
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated, user, logout } = useClientAuth()
 
   useEffect(() => {
@@ -301,12 +306,18 @@ export default function Navbar() {
     return () => { document.body.style.overflow = '' }
   }, [menuOpen])
 
-  const scrollTo = (href) => {
+  const scrollToSection = (href) => {
     setMenuOpen(false)
     const id = href.replace('#', '')
+
+    if (location.pathname !== '/') {
+      navigate({ pathname: '/', hash: id })
+      return
+    }
+
     const el = document.getElementById(id)
     if (el) {
-      setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 200)
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }
 
@@ -318,6 +329,12 @@ export default function Navbar() {
   const handleLogout = () => {
     logout()
     setMenuOpen(false)
+    navigate('/', { replace: true })
+  }
+
+  const handleAppNavigate = (path) => {
+    setMenuOpen(false)
+    navigate(path)
   }
 
   return (
@@ -345,8 +362,8 @@ export default function Navbar() {
 
           <button
             type="button"
-            onClick={() => scrollTo('#hero')}
-            className={`cursor-pointer flex items-center transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={() => scrollToSection('#hero')}
+            className={`cursor-pointer flex items-center transition-opacity duration-300 ${scrolled || location.pathname !== '/' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <img
               src="/logo2.png"
@@ -355,39 +372,13 @@ export default function Navbar() {
             />
           </button>
 
-          <div className="flex items-center gap-1">
-            <AccountControl
-              compact
-              className="sm:hidden"
-              isAuthenticated={isAuthenticated}
-              user={user}
-              onLogout={handleLogout}
-              onLogin={handleLogin}
-            />
-            <div className="hidden sm:block">
-              <AccountControl
-                isAuthenticated={isAuthenticated}
-                user={user}
-                onLogout={handleLogout}
-                onLogin={handleLogin}
-              />
-            </div>
-            <GoldButton
-              onClick={() => navigate('/reservar')}
-              className="px-5 py-2 rounded-full text-xs hidden sm:inline-flex"
-            >
-              Reservar Cita
-            </GoldButton>
-
-            <button
-              type="button"
-              onClick={() => navigate('/reservar')}
-              className="cursor-pointer sm:hidden inline-flex items-center justify-center min-w-11 min-h-11 text-primary hover:opacity-70 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              aria-label="Reservar cita"
-            >
-              <Icon name="calendar_today" />
-            </button>
-          </div>
+          <AccountControl
+            compact
+            isAuthenticated={isAuthenticated}
+            user={user}
+            onLogout={handleLogout}
+            onLogin={handleLogin}
+          />
         </nav>
 
         {/* Desktop navbar (lg+) */}
@@ -397,7 +388,7 @@ export default function Navbar() {
               <button
                 type="button"
                 key={link.href}
-                onClick={() => scrollTo(link.href)}
+                onClick={() => scrollToSection(link.href)}
                 className="cursor-pointer font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 {link.label}
@@ -407,8 +398,8 @@ export default function Navbar() {
 
           <button
             type="button"
-            onClick={() => scrollTo('#hero')}
-            className={`cursor-pointer absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={() => scrollToSection('#hero')}
+            className={`cursor-pointer absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity duration-300 ${scrolled || location.pathname !== '/' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >
             <img
               src="/logo2.png"
@@ -422,7 +413,7 @@ export default function Navbar() {
               <button
                 type="button"
                 key={link.href}
-                onClick={() => scrollTo(link.href)}
+                onClick={() => scrollToSection(link.href)}
                 className="cursor-pointer font-label text-xs tracking-widest uppercase text-on-surface-variant hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 {link.label}
@@ -434,12 +425,6 @@ export default function Navbar() {
               onLogout={handleLogout}
               onLogin={handleLogin}
             />
-            <GoldButton
-              onClick={() => navigate('/reservar')}
-              className="px-6 py-2 rounded-full text-xs"
-            >
-              Reservar Cita
-            </GoldButton>
           </div>
         </nav>
       </motion.header>
@@ -456,7 +441,7 @@ export default function Navbar() {
             className="fixed inset-0 z-60 bg-background flex flex-col lg:hidden"
           >
             <div className="relative flex items-center justify-center px-6 py-4">
-              <button type="button" onClick={() => scrollTo('#hero')} className="cursor-pointer flex items-center">
+              <button type="button" onClick={() => scrollToSection('#hero')} className="cursor-pointer flex items-center">
                 <img
                   src="/logo2.png"
                   alt="Nereida Martín — Brow Artist"
@@ -490,6 +475,7 @@ export default function Navbar() {
                   user={user}
                   onLogout={handleLogout}
                   onLogin={handleLogin}
+                  onNavigate={handleAppNavigate}
                 />
               </motion.div>
 
@@ -499,7 +485,7 @@ export default function Navbar() {
                     type="button"
                     key={link.href}
                     variants={prefersReducedMotion ? {} : menuItemVariants}
-                    onClick={() => scrollTo(link.href)}
+                    onClick={() => scrollToSection(link.href)}
                     className="cursor-pointer flex flex-col items-center justify-center gap-3 p-6 rounded-2xl bg-surface-container-low hover:bg-surface-container active:scale-[0.97] transition-all text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   >
                     <div className="w-12 h-12 rounded-full bg-primary-container/15 flex items-center justify-center">
@@ -511,18 +497,6 @@ export default function Navbar() {
                   </motion.button>
                 ))}
               </div>
-
-              <motion.div
-                variants={prefersReducedMotion ? {} : menuItemVariants}
-                className="mt-8"
-              >
-                <GoldButton
-                  onClick={() => { setMenuOpen(false); navigate('/reservar') }}
-                  className="w-full py-5 rounded-2xl text-xs"
-                >
-                  Reservar Cita
-                </GoldButton>
-              </motion.div>
 
               <motion.div
                 variants={prefersReducedMotion ? {} : menuItemVariants}

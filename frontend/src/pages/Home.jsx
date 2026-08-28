@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import Navbar from '../components/layout/Navbar'
 import Footer from '../components/layout/Footer'
 import HeroSection from '../components/landing/HeroSection'
@@ -11,6 +13,17 @@ import ContactSection from '../components/landing/ContactSection'
 import SectionDivider from '../components/ui/SectionDivider'
 
 export default function Home() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const id = location.hash?.replace('#', '')
+    if (!id) return undefined
+    const timer = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    }, 80)
+    return () => clearTimeout(timer)
+  }, [location.hash, location.pathname])
+
   return (
     <>
       <Navbar />

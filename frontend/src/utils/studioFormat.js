@@ -13,6 +13,19 @@ export function studioTodayDate() {
   return new Date(y, m - 1, d)
 }
 
+/** Minutes since midnight in studio timezone (Atlantic/Canary). */
+export function studioNowMinutes() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: STUDIO_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const hour = Number(parts.find((p) => p.type === 'hour').value)
+  const minute = Number(parts.find((p) => p.type === 'minute').value)
+  return hour * 60 + minute
+}
+
 export function formatEuro(value) {
   if (value == null) return null
   return new Intl.NumberFormat('es-ES', {

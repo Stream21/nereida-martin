@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -26,6 +26,11 @@ function ErrorOutlineIcon({ className = 'w-10 h-10' }) {
 
 export default function CancelBooking() {
   const { token } = useParams()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const rebookTreatmentId = searchParams.get('rebook') || ''
+  const isModifyFlow = Boolean(rebookTreatmentId)
+
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -61,6 +66,14 @@ export default function CancelBooking() {
         if (json.cancellation) {
           setData((prev) => ({ ...prev, cancellation: json.cancellation }))
         }
+        return
+      }
+
+      if (isModifyFlow) {
+        navigate(
+          `/reservar?treatment=${encodeURIComponent(rebookTreatmentId)}`,
+          { replace: true }
+        )
         return
       }
 
@@ -109,12 +122,17 @@ export default function CancelBooking() {
             <p className="text-sm text-on-surface-variant mb-6">
               Hemos cancelado tu reserva y te hemos enviado un email de confirmación.
             </p>
-            <Link
-              to="/reservar"
-              className="inline-block coral-gradient text-white py-3 px-8 rounded-2xl font-label text-sm tracking-widest uppercase font-bold"
-            >
-              Reservar de nuevo
-            </Link>
+            <div className="flex flex-col gap-3">
+              <Link
+                to="/reservar"
+                className="inline-block coral-gradient text-white py-3 px-8 rounded-2xl font-label text-sm tracking-widest uppercase font-bold"
+              >
+                Reservar de nuevo
+              </Link>
+              <Link to="/mis-citas" className="text-sm text-primary hover:underline">
+                Ver mis citas
+              </Link>
+            </div>
           </motion.div>
         ) : errorCode === 'INVALID_TOKEN' || (!booking && error) ? (
           <div className="text-center bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/10">
@@ -130,13 +148,22 @@ export default function CancelBooking() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/10"
           >
-            <h1 className="font-headline text-2xl text-on-surface text-center mb-6">
+            <h1 className="font-headline text-2xl text-on-surface text-center mb-2">
               {errorCode === 'ALREADY_CANCELLED'
                 ? 'Cita ya cancelada'
                 : deadlinePassed
                   ? 'No se puede cancelar online'
-                  : 'Cancelar cita'}
+                  : isModifyFlow
+                    ? 'Modificar cita'
+                    : 'Cancelar cita'}
             </h1>
+            {isModifyFlow && !deadlinePassed && errorCode !== 'ALREADY_CANCELLED' ? (
+              <p className="text-sm text-on-surface-variant text-center mb-6">
+                Primero cancelamos esta cita y luego eliges la nueva fecha y hora.
+              </p>
+            ) : (
+              <div className="mb-6" />
+            )}
 
             {booking && startDate && (
               <div className="space-y-4 mb-6">
@@ -204,19 +231,27 @@ export default function CancelBooking() {
                 whileTap={cancelling ? {} : { scale: 0.98 }}
                 onClick={handleCancel}
                 disabled={cancelling}
-                className={`w-full py-4 rounded-2xl font-label text-sm tracking-widest uppercase font-bold border-2 border-red-300 text-red-700 hover:bg-red-50 transition-colors ${
-                  cancelling ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
+                className={`w-full py-4 rounded-2xl font-label text-sm tracking-widest uppercase font-bold transition-colors ${
+                  isModifyFlow
+                    ? 'coral-gradient text-white'
+                    : 'border-2 border-red-300 text-red-700 hover:bg-red-50'
+                } ${cancelling ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                {cancelling ? 'Cancelando...' : 'Confirmar cancelación'}
+                {cancelling
+                  ? isModifyFlow
+                    ? 'Continuando…'
+                    : 'Cancelando...'
+                  : isModifyFlow
+                    ? 'Cancelar y elegir nueva fecha'
+                    : 'Confirmar cancelación'}
               </motion.button>
             )}
 
             <Link
-              to="/"
+              to="/mis-citas"
               className="block text-center mt-4 text-sm text-on-surface-variant hover:text-primary transition-colors"
             >
-              Volver al inicio
+              Volver a mis citas
             </Link>
           </motion.div>
         )}

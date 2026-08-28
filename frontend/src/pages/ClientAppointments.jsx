@@ -20,6 +20,7 @@ function formatBookingDate(iso) {
 
 function BookingCard({ booking, tab, onRebook }) {
   const cancelled = tab === 'cancelled'
+  const canManage = tab === 'upcoming' && booking.canCancel && booking.cancelToken
 
   return (
     <div
@@ -44,25 +45,34 @@ function BookingCard({ booking, tab, onRebook }) {
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-2 mt-3">
-        {tab === 'upcoming' && booking.canCancel && booking.cancelUrl && (
-          <a
-            href={booking.cancelUrl}
-            className="text-xs text-on-surface-variant hover:text-primary underline"
+      {canManage && (
+        <div className="flex flex-wrap gap-2 mt-4">
+          <Link
+            to={`/cancelar/${booking.cancelToken}?rebook=${encodeURIComponent(booking.treatmentId || '')}`}
+            className="cursor-pointer inline-flex items-center justify-center min-h-10 px-4 rounded-xl bg-primary/10 text-primary text-sm font-medium hover:bg-primary/15 transition-colors"
           >
-            Cancelar cita
-          </a>
-        )}
-        {tab === 'past' && booking.treatmentId && (
+            Modificar
+          </Link>
+          <Link
+            to={`/cancelar/${booking.cancelToken}`}
+            className="cursor-pointer inline-flex items-center justify-center min-h-10 px-4 rounded-xl border border-outline-variant/40 text-on-surface-variant text-sm font-medium hover:bg-surface-container-low transition-colors"
+          >
+            Cancelar
+          </Link>
+        </div>
+      )}
+
+      {tab === 'past' && booking.treatmentId && (
+        <div className="mt-3">
           <button
             type="button"
             onClick={() => onRebook(booking.treatmentId)}
-            className="cursor-pointer text-xs text-primary font-medium"
+            className="cursor-pointer text-sm text-primary font-medium"
           >
             Reservar de nuevo
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -117,9 +127,14 @@ export default function ClientAppointments() {
       <Navbar />
       <main className="max-w-lg mx-auto px-4 pt-24 pb-12">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="font-headline text-2xl text-on-surface mb-4">Mis citas</h1>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h1 className="font-headline text-2xl text-on-surface">Mis citas</h1>
+            <Link to="/cuenta" className="text-sm text-primary hover:underline shrink-0">
+              Mi cuenta
+            </Link>
+          </div>
 
-          {stats && (
+          {stats && stats.completedVisits > 0 && (
             <div className="mb-5">
               <ClientServicesChart
                 completedVisits={stats.completedVisits}

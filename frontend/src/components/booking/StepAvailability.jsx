@@ -345,6 +345,9 @@ export default function StepAvailability({
 
   const anchorMonth = anchorDay ? startOfMonth(anchorDay) : null
   const canGoPrevMonth = !anchorMonth || isBefore(anchorMonth, startOfMonth(currentMonth))
+  const nextMonthStart = startOfMonth(addMonths(currentMonth, 1))
+  const canGoNextMonth =
+    !bookingCloseDay || !isAfter(nextMonthStart, bookingCloseDay)
 
   if (loadingNextSlot && !jointMode) {
     return (
@@ -440,10 +443,10 @@ export default function StepAvailability({
             </button>
             <button
               type="button"
-              onClick={() => !calendarLocked && setCurrentMonth((m) => addMonths(m, 1))}
-              disabled={calendarLocked}
+              onClick={() => canGoNextMonth && !calendarLocked && setCurrentMonth((m) => addMonths(m, 1))}
+              disabled={!canGoNextMonth || calendarLocked}
               className={`p-2 rounded-full transition-colors ${
-                calendarLocked ? 'opacity-30 cursor-default' : 'hover:bg-surface-container'
+                canGoNextMonth && !calendarLocked ? 'hover:bg-surface-container' : 'opacity-30 cursor-default'
               }`}
             >
               <Icon name="chevron_right" className="text-primary" />

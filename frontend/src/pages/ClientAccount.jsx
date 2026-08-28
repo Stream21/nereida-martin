@@ -5,27 +5,21 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Icon from '../components/ui/Icon'
 import Navbar from '../components/layout/Navbar'
-import ClientServicesChart from '../components/client/ClientServicesChart'
-import { fetchMyBookings, fetchMyBookingStats } from '../utils/clientAuth'
+import { fetchMyBookings } from '../utils/clientAuth'
 
 function formatBookingDate(iso) {
   return format(new Date(iso), "EEEE d 'de' MMMM · HH:mm", { locale: es })
 }
 
 export default function ClientAccount() {
-  const [stats, setStats] = useState(null)
   const [nextBooking, setNextBooking] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([
-      fetchMyBookingStats(),
-      fetchMyBookings({ tab: 'upcoming', limit: 1 }),
-    ])
-      .then(([statsRes, bookingsRes]) => {
+    fetchMyBookings({ tab: 'upcoming', limit: 1 })
+      .then((bookingsRes) => {
         if (cancelled) return
-        setStats(statsRes)
         setNextBooking(bookingsRes.bookings?.[0] || null)
       })
       .catch(() => {})
@@ -45,7 +39,7 @@ export default function ClientAccount() {
           <h1 className="font-headline text-2xl text-on-surface mb-1">Mi cuenta</h1>
           <p className="text-sm text-on-surface-variant mb-6">Gestiona tus citas en el estudio</p>
 
-          {nextBooking && (
+          {!loading && nextBooking && (
             <div className="rounded-3xl bg-primary/10 border border-primary/20 p-5 mb-5">
               <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary mb-1">
                 Tu próxima cita
@@ -60,7 +54,7 @@ export default function ClientAccount() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-1 gap-3">
             <Link
               to="/reservar"
               className="rounded-3xl bg-surface-container-lowest border border-outline-variant/25 p-5 shadow-[0_4px_20px_rgba(67,61,60,0.05)] hover:border-primary/30 transition-colors"
@@ -78,17 +72,6 @@ export default function ClientAccount() {
               <p className="text-xs text-on-surface-variant mt-1">Historial y citas activas</p>
             </Link>
           </div>
-
-          {!loading && stats && (
-            <Link to="/mis-citas" className="block">
-              <ClientServicesChart
-                compact
-                completedVisits={stats.completedVisits}
-                byTreatment={stats.byTreatment}
-              />
-              <p className="text-xs text-primary text-center mt-2">Ver detalle →</p>
-            </Link>
-          )}
         </motion.div>
       </main>
     </div>

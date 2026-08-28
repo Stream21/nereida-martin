@@ -32,7 +32,7 @@ import {
   fetchOwnerBooking,
 } from '../../utils/ownerApi'
 import { isPerfiladoTreatment } from '../../utils/browDesign'
-import { isGoogleBookingSource, studioTodayDate } from '../../utils/studioFormat'
+import { isGoogleBookingSource, studioTodayDate, studioNowMinutes } from '../../utils/studioFormat'
 
 const WEEKDAY_SHORT = ['L', 'M', 'X', 'J', 'V']
 const WEEKDAY_MED = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
@@ -129,6 +129,34 @@ function freeGapsForDay(day, dayEvents) {
     ...gapsInWindows(workWindowsForDay(day), busy, false),
     ...gapsInWindows(outsideWindowsForDay(day), busy, true),
   ].filter((g) => g.end - g.start >= 15)
+}
+
+/** Mark gaps past (disabled) vs still bookable. Today: fully past → disabled; partial → bookable from now. */
+function annotateGapsForDay(day, gaps) {
+  const today = studioTodayDate()
+  const dayStart = startOfDay(day)
+  const nowMins = studioNowMinutes()
+
+  if (dayStart < today) {
+    return gaps.map((g) => ({ ...g, past: true, bookStart: g.start }))
+  }
+
+  if (!isSameDay(dayStart, today)) {
+    return gaps.map((g) => ({ ...g, past: false, bookStart: g.start }))
+  }
+
+  const minStart = Math.ceil(nowMins / 15) * 15
+
+  return gaps.map((g) => {
+    if (g.end <= nowMins || g.end - minStart < 15) {
+      return { ...g, past: true, bookStart: g.start }
+    }
+    return {
+      ...g,
+      past: false,
+      bookStart: Math.max(g.start, minStart),
+    }
+  })
 }
 
 /** Hours outside bookable studio windows (still visible 08–20 for Google / overview). */
@@ -904,12 +932,12 @@ function TimedGrid({
   const hours = hoursList()
   const gridHeight = (HOUR_END - HOUR_START) * pxPerHour
   const gridStartMins = HOUR_START * 60
-  const now = new Date()
-  const nowMins = getHours(now) * 60 + getMinutes(now)
+  const todayStudio = studioTodayDate()
+  const nowMins = studioNowMinutes()
   const showNow =
     showNowLine &&
     days.length === 1 &&
-    isSameDay(days[0], now) &&
+    isSameDay(days[0], todayStudio) &&
     nowMins >= HOUR_START * 60 &&
     nowMins < HOUR_END * 60
   const nowTop = ((nowMins - gridStartMins) / 60) * pxPerHour
@@ -1010,7 +1038,7 @@ function TimedGrid({
             {days.map((day) => {
               const dayEvents = events.filter((e) => isSameDay(new Date(e.startTime), day))
               const laidOut = layoutOverlaps(dayEvents, pxPerHour)
-              const gaps = freeGapsForDay(day, dayEvents)
+              const gaps = annotateGapsForDay(day, freeGapsForDay(day, dayEvents))
 
               return (
                 <div
@@ -1045,43 +1073,55 @@ function TimedGrid({
                     />
                   ))}
 
-                  {/* Free gaps — only clickable create zones */}
+                  {/* Free gaps — clickable if still in the future; past gaps visible but disabled */}
                   {gaps.map((gap) => {
                     const top = ((gap.start - gridStartMins) / 60) * pxPerHour
                     const height = Math.max(18, ((gap.end - gap.start) / 60) * pxPerHour - 2)
                     const label = `${minsToLabel(gap.start)} – ${minsToLabel(gap.end)}`
                     const showLabel = height >= 28
+                    const past = Boolean(gap.past)
                     return (
                       <button
-                        key={`gap-${gap.start}-${gap.end}`}
+                        key={`gap-${gap.start}-${gap.end}-${past ? 'past' : 'open'}`}
                         type="button"
-                        aria-label={`Hueco libre ${label}`}
-                        onClick={() =>
-                          onSlotClick(day, minsToLabel(gap.start), {
-                            gapStart: gap.start,
+                        aria-label={past ? `Hueco pasado ${label}` : `Hueco libre ${label}`}
+                        disabled={past}
+                        onClick={() => {
+                          if (past) return
+                          const bookStart = gap.bookStart ?? gap.start
+                          onSlotClick(day, minsToLabel(bookStart), {
+                            gapStart: bookStart,
                             gapEnd: gap.end,
                             complimentary: Boolean(gap.outsideHours),
                           })
-                        }
-                        className={`cursor-pointer absolute left-0.5 right-0.5 z-0 rounded-md border border-dashed transition-colors text-left px-1 overflow-hidden ${
-                          gap.outsideHours
-                            ? 'border-tertiary/35 bg-tertiary/[0.06] hover:bg-tertiary/[0.12] active:bg-tertiary/15'
-                            : 'border-primary/25 bg-primary/[0.04] hover:bg-primary/[0.09] active:bg-primary/12'
+                        }}
+                        className={`absolute left-0.5 right-0.5 z-0 rounded-md border border-dashed text-left px-1 overflow-hidden ${
+                          past
+                            ? 'pointer-events-none cursor-default border-outline-variant/25 bg-surface-container/40 opacity-50'
+                            : gap.outsideHours
+                              ? 'cursor-pointer border-tertiary/35 bg-tertiary/[0.06] hover:bg-tertiary/[0.12] active:bg-tertiary/15 transition-colors'
+                              : 'cursor-pointer border-primary/25 bg-primary/[0.04] hover:bg-primary/[0.09] active:bg-primary/12 transition-colors'
                         }`}
                         style={{ top, height }}
                       >
                         {showLabel && (
                           <span
                             className={`block font-medium leading-tight truncate ${
-                              gap.outsideHours ? 'text-tertiary' : 'text-primary/80'
+                              past
+                                ? 'text-on-surface-variant/70'
+                                : gap.outsideHours
+                                  ? 'text-tertiary'
+                                  : 'text-primary/80'
                             } ${
                               days.length > 1 ? 'text-[8px] sm:text-[9px]' : 'text-[10px] sm:text-[11px]'
                             }`}
                           >
                             {days.length === 1 && height >= 36
-                              ? gap.outsideHours
-                                ? `Cortesía · ${label}`
-                                : label
+                              ? past
+                                ? `Pasado · ${label}`
+                                : gap.outsideHours
+                                  ? `Cortesía · ${label}`
+                                  : label
                               : ''}
                           </span>
                         )}
