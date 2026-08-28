@@ -13,11 +13,11 @@ export default function ClientLogin() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const nextPath = searchParams.get('next') || '/reservar'
+  const nextPath = searchParams.get('next') || '/cuenta'
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      navigate(nextPath.startsWith('/') ? nextPath : '/reservar', { replace: true })
+      navigate(nextPath.startsWith('/') ? nextPath : '/cuenta', { replace: true })
     }
   }, [loading, isAuthenticated, navigate, nextPath])
 
@@ -27,7 +27,7 @@ export default function ClientLogin() {
     setSubmitting(true)
     try {
       await login(identifier, password)
-      navigate(nextPath.startsWith('/') ? nextPath : '/reservar', { replace: true })
+      navigate(nextPath.startsWith('/') ? nextPath : '/cuenta', { replace: true })
     } catch (err) {
       setError(err.message === 'UNAUTHORIZED' ? 'Sesión no válida' : err.message)
     } finally {
@@ -87,6 +87,12 @@ export default function ClientLogin() {
               className="w-full rounded-2xl border border-outline-variant bg-surface-container-low px-4 py-3 text-on-surface outline-none focus:border-primary"
             />
           </label>
+
+          <p className="text-right">
+            <Link to="/recuperar" className="text-sm text-primary hover:underline">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </p>
 
           {error && (
             <p className="text-sm text-error bg-error-container rounded-xl px-3 py-2">{error}</p>

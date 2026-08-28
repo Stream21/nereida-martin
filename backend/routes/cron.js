@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { query } = require('../db/pool');
 const calendarSync = require('../services/calendarSync');
+const { describeGoogleAuthError } = require('../utils/googleAuthError');
 
 const router = Router();
 
@@ -99,9 +100,11 @@ router.get('/calendar-sync', async (req, res) => {
     });
   } catch (err) {
     console.error('Cron calendar-sync error:', err);
+    const authErr = describeGoogleAuthError(err);
     res.status(500).json({
       error: 'Error en sincronización de calendario',
-      detail: err.message,
+      detail: authErr.message,
+      code: authErr.code,
     });
   }
 });

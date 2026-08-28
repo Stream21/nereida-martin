@@ -20,7 +20,8 @@ asuntos demasiado "promocionales". La bandeja de entrada vs spam depende del pro
 | Variable | Descripción |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL (Render `nere-db`) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` | OAuth cuenta corporativa Nereida |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` | OAuth de la cuenta del calendario. El backend también guarda el refresh token en `studio_settings` y lo actualiza si Google lo rota (los redeploys de Render ya no lo pierden). Sigue siendo necesario que la app OAuth esté **En producción** y que el token se emita *después* de publicar. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | (Recomendado) JSON de cuenta de servicio. No caduca ni requiere reautorizar. Ver sección siguiente. |
 | `GOOGLE_CALENDAR_ID` | ID del calendario (ej. `nere.browroom@gmail.com`) |
 | `BACKEND_URL` / `FRONTEND_URL` | URL pública HTTPS del servicio |
 | `BOOKING_START_DATE` | Primer día que acepta reservas web (`YYYY-MM-DD`) |
@@ -29,6 +30,27 @@ asuntos demasiado "promocionales". La bandeja de entrada vs spam depende del pro
 | `OWNER_DASHBOARD_EMAIL` | Email de acceso al panel `/studio` |
 | `OWNER_DASHBOARD_PASSWORD_HASH` | Hash bcrypt de la contraseña del panel |
 | `JWT_SECRET` | Firma de sesión del panel (string aleatorio largo) |
+
+## Google Calendar — que el token no vuelva a caducar
+
+Publicar la app OAuth **no alarga** un refresh token ya emitido en modo Prueba. Si el cron vuelve a fallar ~7–10 días después, Google sigue emitiendo tokens de prueba o ha rotado el token y Render seguía con el valor viejo de Environment.
+
+El backend ahora:
+
+1. Guarda el refresh token en `studio_settings` (sobrevive a redeploys).
+2. Si Google rota el token, persiste el nuevo.
+3. Al autorizar (`npm run google:auth`) muestra la vida real del token. Si dice **7 días**, la pantalla de consentimiento sigue en **Prueba**.
+
+### Opción estable: cuenta de servicio (recomendado)
+
+No hay consentimiento, ni refresh token, ni caducidad a 7 días.
+
+1. Google Cloud → **IAM y administración** → **Cuentas de servicio** → crear (p. ej. `nere-calendar`).
+2. Crear clave JSON y copiar el contenido **en una sola línea** a `GOOGLE_SERVICE_ACCOUNT_JSON` en **nere-studio**.
+3. En Google Calendar de `nere.browroom@gmail.com` → Ajustes del calendario → **Compartir con determinadas personas** → añadir el email de la cuenta de servicio (`…@….iam.gserviceaccount.com`) con permiso **Hacer cambios en los eventos**.
+4. `GOOGLE_CALENDAR_ID=nere.browroom@gmail.com`
+
+Con esa variable presente, el OAuth de usuario se ignora.
 
 ## Panel privado `/studio`
 

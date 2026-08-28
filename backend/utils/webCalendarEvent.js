@@ -8,9 +8,11 @@ const PREFIX = {
   first_treatment: '[Nuevo tratamiento]',
   pending_photo: '[Pendiente valoración]',
   pending_henna: '[Pendiente Henna]',
+  complimentary: '[Cortesía]',
 };
 
-function getEventPrefix({ visitContext, reviewType, pendingReview }) {
+function getEventPrefix({ visitContext, reviewType, pendingReview, complimentary }) {
+  if (complimentary) return PREFIX.complimentary;
   if (pendingReview || isPhotoReviewType(reviewType)) return PREFIX.pending_photo;
   if (visitContext === 'first_studio_visit') return PREFIX.first_visit;
   if (visitContext === 'first_treatment') return PREFIX.first_treatment;
@@ -21,8 +23,15 @@ function buildWebBookingSummary(treatmentName, clientName) {
   return `${WEB_SUMMARY_PREFIX} ${treatmentName} – ${clientName}`;
 }
 
-function buildBookingSummary({ treatmentName, clientName, visitContext, reviewType, pendingReview }) {
-  const prefix = getEventPrefix({ visitContext, reviewType, pendingReview });
+function buildBookingSummary({
+  treatmentName,
+  clientName,
+  visitContext,
+  reviewType,
+  pendingReview,
+  complimentary,
+}) {
+  const prefix = getEventPrefix({ visitContext, reviewType, pendingReview, complimentary });
   return `${prefix} ${treatmentName} – ${clientName}`;
 }
 
@@ -59,12 +68,16 @@ function buildBookingDescription({
   flagged,
   flagReason,
   hennaPhotoUrl,
+  complimentary,
 }) {
   const lines = [
-    `🌐 Reserva online · ${STUDIO_BRAND}`,
+    complimentary
+      ? `🎁 Cita de cortesía · ${STUDIO_BRAND}`
+      : `🌐 Reserva online · ${STUDIO_BRAND}`,
     '────────────────────────────',
     `Tratamiento: ${treatmentName}`,
     treatmentTag ? `Detalle: ${treatmentTag}` : null,
+    complimentary ? 'Importe: sin cobro (amiga)' : null,
     `Cliente: ${clientName}`,
     `Email: ${clientEmail}`,
     `Tel: ${clientPhone || 'N/A'}`,
@@ -99,7 +112,8 @@ function getWebEventColorId() {
   return process.env.GOOGLE_WEB_EVENT_COLOR_ID || '7';
 }
 
-function getEventColorId({ visitContext, reviewType, pendingReview, flagged }) {
+function getEventColorId({ visitContext, reviewType, pendingReview, flagged, complimentary }) {
+  if (complimentary) return process.env.GOOGLE_COMPLIMENTARY_COLOR_ID || '2';
   if (pendingReview || isPhotoReviewType(reviewType)) {
     return process.env.GOOGLE_PENDING_COLOR_ID || '11';
   }

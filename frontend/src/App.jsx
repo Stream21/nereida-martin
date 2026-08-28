@@ -9,6 +9,10 @@ const ConfirmCompanionBooking = lazy(() => import('./pages/ConfirmCompanionBooki
 const MicroRequest = lazy(() => import('./pages/MicroRequest'))
 const ClientLogin = lazy(() => import('./pages/ClientLogin'))
 const ClientRegister = lazy(() => import('./pages/ClientRegister'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const ClientAccount = lazy(() => import('./pages/ClientAccount'))
+const ClientAppointments = lazy(() => import('./pages/ClientAppointments'))
 const StudioLogin = lazy(() => import('./pages/StudioLogin'))
 const StudioDashboard = lazy(() => import('./pages/StudioDashboard'))
 
@@ -24,7 +28,25 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/entrar" element={<ClientLogin />} />
+        <Route path="/recuperar" element={<ForgotPassword />} />
+        <Route path="/restablecer/:token" element={<ResetPassword />} />
         <Route path="/registro/:token" element={<ClientRegister />} />
+        <Route
+          path="/cuenta"
+          element={
+            <RequireClientAuth>
+              <ClientAccount />
+            </RequireClientAuth>
+          }
+        />
+        <Route
+          path="/mis-citas"
+          element={
+            <RequireClientAuth>
+              <ClientAppointments />
+            </RequireClientAuth>
+          }
+        />
         <Route
           path="/reservar"
           element={

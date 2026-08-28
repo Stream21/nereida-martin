@@ -5,6 +5,7 @@ const { query, getClient } = require('../db/pool');
 const { normalizePhone } = require('../utils/phone');
 
 const INVITE_DAYS = 30;
+const RESET_HOURS = 1;
 const BCRYPT_ROUNDS = 12;
 
 function signClientToken(clientId) {
@@ -31,6 +32,14 @@ function inviteUrl(token) {
     return `/registro/${token}`;
   }
   return `${base}/registro/${token}`;
+}
+
+function resetPasswordUrl(token) {
+  const base = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+  if (!base) {
+    return `/restablecer/${token}`;
+  }
+  return `${base}/restablecer/${token}`;
 }
 
 async function getInvitePreview(token) {
@@ -298,6 +307,179 @@ async function createInviteForClient(clientId) {
   };
 }
 
+async function invalidatePasswordResetTokens(clientId) {
+  await query(
+    `UPDATE password_reset_tokens SET used_at = NOW()
+     WHERE client_id = $1 AND used_at IS NULL`,
+    [clientId]
+  );
+}
+
+async function createPasswordResetToken(clientId) {
+  await invalidatePasswordResetTokens(clientId);
+  const token = uuidv4();
+  const expiresAt = new Date(Date.now() + RESET_HOURS * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO password_reset_tokens (client_id, token, expires_at)
+     VALUES ($1, $2, $3)`,
+    [clientId, token, expiresAt]
+  );
+  return { token, expiresAt, resetUrl: resetPasswordUrl(token) };
+}
+
+async function requestPasswordReset(email) {
+  const emailNorm = String(email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+    return { error: 'Email no válido', code: 'INVALID_EMAIL', status: 400 };
+  }
+
+  const result = await query(
+    `SELECT id, name, email, account_status, password_hash
+     FROM clients WHERE LOWER(email) = $1`,
+    [emailNorm]
+  );
+  const row = result.rows[0];
+
+  if (row && row.account_status === 'active' && row.password_hash && row.email) {
+    const { token, resetUrl } = await createPasswordResetToken(row.id);
+    try {
+      const emailService = require('./emailService');
+      await emailService.sendPasswordReset({
+        to: row.email,
+        name: row.name,
+        resetUrl,
+      });
+    } catch (err) {
+      console.error('Password reset email failed:', err.message);
+    }
+  }
+
+  return {
+    message: 'Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.',
+  };
+}
+
+async function getPasswordResetPreview(token) {
+  const result = await query(
+    `SELECT prt.token, prt.expires_at, prt.used_at,
+            c.name, c.email, c.account_status
+     FROM password_reset_tokens prt
+     JOIN clients c ON c.id = prt.client_id
+     WHERE prt.token = $1`,
+    [token]
+  );
+  const row = result.rows[0];
+  if (!row) return { error: 'Enlace no válido', code: 'INVALID_TOKEN', status: 404 };
+  if (row.used_at) return { error: 'Este enlace ya fue usado', code: 'TOKEN_USED', status: 410 };
+  if (new Date(row.expires_at) < new Date()) {
+    return { error: 'Este enlace ha caducado', code: 'TOKEN_EXPIRED', status: 410 };
+  }
+  if (row.account_status !== 'active') {
+    return { error: 'Cuenta no disponible', code: 'ACCOUNT_DISABLED', status: 403 };
+  }
+  return {
+    reset: {
+      name: row.name,
+      email: row.email,
+      expiresAt: row.expires_at,
+    },
+  };
+}
+
+async function resetPasswordWithToken(token, password) {
+  if (!password || String(password).length < 6) {
+    return { error: 'La contraseña debe tener al menos 6 caracteres', code: 'WEAK_PASSWORD', status: 400 };
+  }
+
+  const preview = await getPasswordResetPreview(token);
+  if (preview.error) return preview;
+
+  const passwordHash = await bcrypt.hash(String(password), BCRYPT_ROUNDS);
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const tokenRes = await client.query(
+      `SELECT prt.id, prt.client_id
+       FROM password_reset_tokens prt
+       JOIN clients c ON c.id = prt.client_id
+       WHERE prt.token = $1 AND prt.used_at IS NULL AND prt.expires_at > NOW()
+         AND c.account_status = 'active'
+       FOR UPDATE`,
+      [token]
+    );
+    const row = tokenRes.rows[0];
+    if (!row) {
+      await client.query('ROLLBACK');
+      return { error: 'Enlace no válido o caducado', code: 'INVALID_TOKEN', status: 410 };
+    }
+
+    await client.query(
+      `UPDATE clients SET password_hash = $1 WHERE id = $2`,
+      [passwordHash, row.client_id]
+    );
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`,
+      [row.id]
+    );
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at = NOW()
+       WHERE client_id = $1 AND used_at IS NULL`,
+      [row.client_id]
+    );
+    await client.query('COMMIT');
+
+    const userRes = await query(
+      `SELECT id, name, email, phone, account_status, registered_at, declared_profile
+       FROM clients WHERE id = $1`,
+      [row.client_id]
+    );
+    return { message: 'Contraseña actualizada correctamente', user: publicClient(userRes.rows[0]) };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function sendPasswordResetForClient(clientId) {
+  const result = await query(
+    `SELECT id, name, email, account_status, password_hash FROM clients WHERE id = $1`,
+    [clientId]
+  );
+  const row = result.rows[0];
+  if (!row) return { error: 'Cliente no encontrado', code: 'NOT_FOUND', status: 404 };
+  if (row.account_status !== 'active') {
+    return { error: 'La cuenta no está activa', code: 'NOT_ACTIVE', status: 400 };
+  }
+  if (!row.password_hash) {
+    return { error: 'Este cliente aún no tiene contraseña. Envía una invitación.', code: 'NO_PASSWORD', status: 400 };
+  }
+  if (!row.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+    return { error: 'El cliente no tiene un email válido', code: 'NO_EMAIL', status: 400 };
+  }
+
+  const { resetUrl, expiresAt } = await createPasswordResetToken(row.id);
+  try {
+    const emailService = require('./emailService');
+    await emailService.sendPasswordReset({
+      to: row.email,
+      name: row.name,
+      resetUrl,
+    });
+  } catch (err) {
+    console.error('Owner password reset email failed:', err.message);
+    return { error: 'No se pudo enviar el email', code: 'EMAIL_FAILED', status: 500 };
+  }
+
+  return {
+    message: 'Enlace de restablecimiento enviado',
+    resetUrl,
+    expiresAt,
+    client: { id: row.id, name: row.name, email: row.email },
+  };
+}
+
 module.exports = {
   getInvitePreview,
   registerWithInvite,
@@ -305,7 +487,13 @@ module.exports = {
   getClientById,
   updateDeclaredProfile,
   createInviteForClient,
+  requestPasswordReset,
+  getPasswordResetPreview,
+  resetPasswordWithToken,
+  sendPasswordResetForClient,
   inviteUrl,
+  resetPasswordUrl,
   publicClient,
   INVITE_DAYS,
+  RESET_HOURS,
 };

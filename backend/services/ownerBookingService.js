@@ -35,7 +35,15 @@ function hasRealClientEmail(email) {
  * Create a confirmed booking for an existing client from the owner panel.
  * Allows inactive micropigmentation treatment.
  */
-async function createOwnerBooking({ clientId, treatmentId, startTime, date, time, durationMinutes }) {
+async function createOwnerBooking({
+  clientId,
+  treatmentId,
+  startTime,
+  date,
+  time,
+  durationMinutes,
+  complimentary = false,
+}) {
   let start;
   if (date && time) {
     const [hour, minute] = String(time).split(':').map(Number);
@@ -81,12 +89,27 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
 
     const dateStr = formatStudioDate(start);
     const timeStr = formatStudioTime(start);
+    const { slotFitsInWorkWindows } = require('../utils/studioHours');
+    const inWorkHours = slotFitsInWorkWindows(dateStr, start.getTime(), end.getTime());
+    const isComplimentary = Boolean(complimentary) || !inWorkHours;
+
+    if (!inWorkHours && !isComplimentary) {
+      await client.query('ROLLBACK');
+      return {
+        error: 'Fuera de horario',
+        message:
+          'Fuera del horario público solo se pueden crear citas de cortesía (amiga · sin cobro).',
+        status: 400,
+        code: 'OUTSIDE_HOURS',
+      };
+    }
+
     const slotAvailable = await availabilityService.hasSlotAvailable(
       dateStr,
       timeStr,
       blockDuration,
       null,
-      { skipLeadTime: true }
+      { skipLeadTime: true, skipWorkHours: !inWorkHours }
     );
     if (!slotAvailable) {
       await client.query('ROLLBACK');
@@ -107,11 +130,19 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
     const cancelToken = uuidv4();
     const bookingResult = await client.query(
       `INSERT INTO bookings (
-         client_id, treatment_id, start_time, end_time, status, source, cancel_token, visit_context
+         client_id, treatment_id, start_time, end_time, status, source, cancel_token, visit_context, complimentary
        )
-       VALUES ($1, $2, $3, $4, 'confirmed', 'owner', $5, $6)
-       RETURNING id, start_time, end_time, status, cancel_token`,
-      [clientId, treatmentId, start.toISOString(), end.toISOString(), cancelToken, visitContext]
+       VALUES ($1, $2, $3, $4, 'confirmed', 'owner', $5, $6, $7)
+       RETURNING id, start_time, end_time, status, cancel_token, complimentary`,
+      [
+        clientId,
+        treatmentId,
+        start.toISOString(),
+        end.toISOString(),
+        cancelToken,
+        visitContext,
+        isComplimentary,
+      ]
     );
     const booking = bookingResult.rows[0];
 
@@ -143,6 +174,7 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
         treatmentName: treatment.name,
         clientName: clientRow.name,
         visitContext,
+        complimentary: isComplimentary,
       });
       const description = buildBookingDescription({
         treatmentName: treatment.name,
@@ -152,8 +184,9 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
         clientPhone: clientRow.phone,
         bookingId: booking.id,
         visitContext,
+        complimentary: isComplimentary,
       });
-      const colorId = getEventColorId({ visitContext });
+      const colorId = getEventColorId({ visitContext, complimentary: isComplimentary });
       const event = await googleCalendar.createEvent({
         summary,
         description,
@@ -212,6 +245,7 @@ async function createOwnerBooking({ clientId, treatmentId, startTime, date, time
         treatmentName: treatment.name,
         clientName: clientRow.name,
         clientId,
+        complimentary: Boolean(booking.complimentary),
       },
     };
   } catch (err) {

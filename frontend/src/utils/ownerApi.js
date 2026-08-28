@@ -158,10 +158,26 @@ export function ownerUploadUrl(photoUrlOrPath) {
   return `${API_URL}${path}`
 }
 
-export function createOwnerBooking({ clientId, treatmentId, startTime, date, time, durationMinutes }) {
+export function createOwnerBooking({
+  clientId,
+  treatmentId,
+  startTime,
+  date,
+  time,
+  durationMinutes,
+  complimentary,
+}) {
   return ownerFetch('/bookings', {
     method: 'POST',
-    body: JSON.stringify({ clientId, treatmentId, startTime, date, time, durationMinutes }),
+    body: JSON.stringify({
+      clientId,
+      treatmentId,
+      startTime,
+      date,
+      time,
+      durationMinutes,
+      complimentary: Boolean(complimentary),
+    }),
   })
 }
 
@@ -197,10 +213,30 @@ export function createOwnerJointBooking({
   })
 }
 
-export function fetchOwnerAvailability({ date, treatmentId, durationMinutes }) {
+export function fetchOwnerAvailability({ date, treatmentId, durationMinutes, allowOutsideHours }) {
   const params = new URLSearchParams({ date, treatmentId })
   if (durationMinutes != null) params.set('durationMinutes', String(durationMinutes))
+  if (allowOutsideHours) params.set('allowOutsideHours', '1')
   return ownerFetch(`/availability?${params}`)
+}
+
+export function fetchOwnerAvailabilityRange({
+  date,
+  treatmentId,
+  durationMinutes,
+  gapStart,
+  gapEnd,
+  allowOutsideHours,
+}) {
+  const params = new URLSearchParams({
+    date,
+    treatmentId,
+    gapStart: String(gapStart),
+    gapEnd: String(gapEnd),
+  })
+  if (durationMinutes != null) params.set('durationMinutes', String(durationMinutes))
+  if (allowOutsideHours) params.set('allowOutsideHours', '1')
+  return ownerFetch(`/availability/range?${params}`)
 }
 
 export function fetchOwnerJointAvailability({
@@ -237,6 +273,10 @@ export function fetchOwnerJointAvailabilityMonth({
 
 export function inviteClient(clientId) {
   return ownerFetch(`/clients/${clientId}/invite`, { method: 'POST' })
+}
+
+export function sendClientPasswordReset(clientId) {
+  return ownerFetch(`/clients/${clientId}/reset-password`, { method: 'POST' })
 }
 
 export function disableClient(clientId) {
@@ -331,4 +371,15 @@ export async function exportServices({
   link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+}
+
+export function fetchOwnerSettings() {
+  return ownerFetch('/settings')
+}
+
+export function updateOwnerSettings(payload) {
+  return ownerFetch('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
 }

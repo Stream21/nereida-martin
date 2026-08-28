@@ -1,5 +1,18 @@
 const STUDIO_TZ = 'Atlantic/Canary'
 
+export function studioTodayDate() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: STUDIO_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const y = Number(parts.find((p) => p.type === 'year').value)
+  const m = Number(parts.find((p) => p.type === 'month').value)
+  const d = Number(parts.find((p) => p.type === 'day').value)
+  return new Date(y, m - 1, d)
+}
+
 export function formatEuro(value) {
   if (value == null) return null
   return new Intl.NumberFormat('es-ES', {

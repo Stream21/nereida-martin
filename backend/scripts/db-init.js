@@ -75,6 +75,10 @@ async function main() {
     await runFile(pool, 'migration_assessment_photos.sql');
     await runFile(pool, 'migration_joint_bookings.sql');
     await runFile(pool, 'migration_perfilado_history.sql');
+    await runFile(pool, 'migration_complimentary_bookings.sql');
+    await runFile(pool, 'migration_booking_end_date.sql');
+    await runFile(pool, 'migration_password_reset_tokens.sql');
+    await runFile(pool, 'migration_google_refresh_token.sql');
     await runFile(pool, 'seed.sql');
 
     const counts = await pool.query(`

@@ -292,7 +292,8 @@ router.get('/availability/joint/month', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { clientId, treatmentId, startTime, date, time, durationMinutes } = req.body || {};
+    const { clientId, treatmentId, startTime, date, time, durationMinutes, complimentary } =
+      req.body || {};
     if (!clientId || !treatmentId || (!startTime && !(date && time))) {
       return res.status(400).json({
         error: 'clientId, treatmentId y startTime (o date+time) son obligatorios',
@@ -306,6 +307,7 @@ router.post('/bookings', async (req, res) => {
       date,
       time,
       durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
+      complimentary: Boolean(complimentary),
     });
     if (result.error) {
       return res.status(result.status || 400).json({
@@ -372,9 +374,41 @@ router.post('/bookings/:id/cancel', async (req, res) => {
   }
 });
 
+router.get('/availability/range', async (req, res) => {
+  try {
+    const { date, treatmentId, durationMinutes, gapStart, gapEnd, allowOutsideHours } = req.query;
+    if (!date || !treatmentId || gapStart == null || gapEnd == null) {
+      return res.status(400).json({
+        error: 'date, treatmentId, gapStart y gapEnd son obligatorios',
+      });
+    }
+    const availabilityService = require('../services/availabilityService');
+    const data = await availabilityService.getAvailabilityInRange(
+      date,
+      Number(gapStart),
+      Number(gapEnd),
+      treatmentId,
+      durationMinutes != null ? Number(durationMinutes) : null,
+      {
+        allowOutsideHours:
+          allowOutsideHours === '1' ||
+          allowOutsideHours === 'true' ||
+          allowOutsideHours === true,
+      }
+    );
+    if (data.error === 'not_found') {
+      return res.status(404).json({ error: 'Tratamiento no encontrado' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Owner availability range error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/availability', async (req, res) => {
   try {
-    const { date, treatmentId, durationMinutes } = req.query;
+    const { date, treatmentId, durationMinutes, allowOutsideHours } = req.query;
     if (!date || !treatmentId) {
       return res.status(400).json({ error: 'date y treatmentId son obligatorios' });
     }
@@ -383,6 +417,10 @@ router.get('/availability', async (req, res) => {
       allowInactiveIds: ['micropigmentacion-soft-pixel'],
       durationMinutes: durationMinutes != null ? Number(durationMinutes) : null,
       skipLeadTime: true,
+      allowOutsideHours:
+        allowOutsideHours === '1' ||
+        allowOutsideHours === 'true' ||
+        allowOutsideHours === true,
     });
     if (data.error === 'not_found') {
       return res.status(404).json({ error: 'Tratamiento no encontrado' });
@@ -422,6 +460,23 @@ router.post('/clients/:id/invite', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Owner invite client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients/:id/reset-password', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await clientAuth.sendPasswordResetForClient(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner reset password error:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
@@ -679,6 +734,35 @@ router.get('/export/services', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
+  }
+});
+
+router.get('/settings', async (_req, res) => {
+  try {
+    const studioSettings = require('../services/studioSettings');
+    const [bookingStartDate, bookingEndDate] = await Promise.all([
+      studioSettings.getBookingStartDate(),
+      studioSettings.getBookingEndDate(),
+    ]);
+    res.json({ bookingStartDate, bookingEndDate });
+  } catch (err) {
+    console.error('Owner settings get error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.patch('/settings', async (req, res) => {
+  try {
+    const studioSettings = require('../services/studioSettings');
+    const { bookingStartDate, bookingEndDate } = req.body || {};
+    const result = await studioSettings.updateBookingWindow({ bookingStartDate, bookingEndDate });
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error, code: result.code });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner settings patch error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 

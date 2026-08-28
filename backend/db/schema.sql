@@ -74,6 +74,7 @@ CREATE TABLE studio_settings (
   google_channel_id VARCHAR(200),
   google_resource_id VARCHAR(200),
   google_channel_expiration TIMESTAMPTZ,
+  google_refresh_token TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

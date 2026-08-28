@@ -62,8 +62,12 @@ async function validateBooking(req, res, next) {
 
     try {
       const bookingStartDate = await studioSettings.getBookingStartDate();
+      const bookingEndDate = await studioSettings.getBookingEndDate();
       if (dateStr < bookingStartDate) {
         errors.push(`Las reservas online están disponibles a partir del ${bookingStartDate}`);
+      }
+      if (dateStr > bookingEndDate) {
+        errors.push(`Las reservas online están disponibles hasta el ${bookingEndDate}`);
       }
     } catch {
       // continue if settings unavailable

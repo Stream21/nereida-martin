@@ -12,6 +12,7 @@ import {
   fetchOwnerTreatments,
   importClientsFile,
   inviteClient,
+  sendClientPasswordReset,
   updateClient,
 } from '../../utils/ownerApi'
 
@@ -405,6 +406,19 @@ export default function ClientsTable() {
     }
   }
 
+  const handleSendPasswordReset = async (client) => {
+    setBusyId(client.id)
+    setError('')
+    try {
+      await sendClientPasswordReset(client.id)
+      showToast('Enlace de restablecimiento enviado por email')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const handleToggleAccess = async (client) => {
     setBusyId(client.id)
     setError('')
@@ -548,6 +562,18 @@ export default function ClientsTable() {
           className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
         >
           <Icon name="link" className="text-lg" />
+        </button>
+      )}
+      {client.accountStatus === 'active' && (
+        <button
+          type="button"
+          disabled={busyId === client.id}
+          onClick={() => handleSendPasswordReset(client)}
+          title="Enviar enlace para restablecer contraseña"
+          aria-label="Enviar enlace para restablecer contraseña"
+          className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+        >
+          <Icon name="lock_reset" className="text-lg" />
         </button>
       )}
       <button
@@ -815,38 +841,17 @@ export default function ClientsTable() {
             />
           </div>
           
-          <fieldset className="rounded-2xl border border-outline-variant/40 px-4 py-3">
-            <legend className="text-[10px] font-label font-bold tracking-widest uppercase text-primary px-1">
-              ¿Ya es clienta del estudio?
-            </legend>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAddForm((f) => ({ ...f, hasPerfiladoHistory: true }))}
-                className={`cursor-pointer min-h-11 rounded-xl text-sm ${
-                  addForm.hasPerfiladoHistory
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-surface-container-low text-on-surface-variant'
-                }`}
-              >
-                Sí · mantenimiento
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddForm((f) => ({ ...f, hasPerfiladoHistory: false }))}
-                className={`cursor-pointer min-h-11 rounded-xl text-sm ${
-                  !addForm.hasPerfiladoHistory
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-surface-container-low text-on-surface-variant'
-                }`}
-              >
-                No · primera vez
-              </button>
-            </div>
-            <p className="text-[11px] text-on-surface-variant mt-2">
-              Define si en la app verá Perfilado mantenimiento o Perfilado primera vez.
-            </p>
-          </fieldset>
+          <label className="flex items-center gap-3 cursor-pointer select-none py-1">
+            <input
+              type="checkbox"
+              checked={addForm.hasPerfiladoHistory}
+              onChange={(e) =>
+                setAddForm((f) => ({ ...f, hasPerfiladoHistory: e.target.checked }))
+              }
+              className="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary/30"
+            />
+            <span className="text-sm text-on-surface">¿Ya es clienta del estudio?</span>
+          </label>
 
           {addError && <p className="text-sm text-error">{addError}</p>}
           <button type="submit" className="rounded-xl bg-primary text-on-primary px-4 py-2 text-sm">

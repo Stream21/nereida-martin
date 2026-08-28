@@ -12,6 +12,9 @@ const WORK_WINDOWS_FRIDAY = [
   { startHour: 15, startMin: 0, endHour: 17, endMin: 0 },
 ];
 
+/** Ventana visible / cortesía en agenda owner (clientes no reservan aquí). */
+const OWNER_DISPLAY_WINDOW = { startHour: 8, startMin: 0, endHour: 20, endMin: 0 };
+
 function isWeekendDay(dateStr) {
   const day = getStudioDayOfWeek(dateStr);
   return day === 0 || day === 6;
@@ -21,6 +24,11 @@ function getWorkWindowsForDate(dateStr) {
   if (isWeekendDay(dateStr)) return [];
   const day = getStudioDayOfWeek(dateStr);
   return day === 5 ? WORK_WINDOWS_FRIDAY : WORK_WINDOWS_MON_THU;
+}
+
+function getOwnerDisplayWindowsForDate(dateStr) {
+  if (isWeekendDay(dateStr)) return [];
+  return [OWNER_DISPLAY_WINDOW];
 }
 
 function getWindowBounds(dateStr, window) {
@@ -55,14 +63,20 @@ function isWithinWorkHours(date) {
   });
 }
 
-function slotFitsInWorkWindows(dateStr, slotStartMs, slotEndMs) {
-  const windows = getWorkWindowsForDate(dateStr);
-  if (windows.length === 0) return false;
-
+function slotFitsInWindows(dateStr, slotStartMs, slotEndMs, windows) {
+  if (!windows || windows.length === 0) return false;
   return windows.some((window) => {
     const { start, end } = getWindowBounds(dateStr, window);
     return slotStartMs >= start.getTime() && slotEndMs <= end.getTime();
   });
+}
+
+function slotFitsInWorkWindows(dateStr, slotStartMs, slotEndMs) {
+  return slotFitsInWindows(dateStr, slotStartMs, slotEndMs, getWorkWindowsForDate(dateStr));
+}
+
+function slotFitsInOwnerDisplayWindows(dateStr, slotStartMs, slotEndMs) {
+  return slotFitsInWindows(dateStr, slotStartMs, slotEndMs, getOwnerDisplayWindowsForDate(dateStr));
 }
 
 const STUDIO_HOURS_LABEL =
@@ -72,11 +86,14 @@ module.exports = {
   WORK_WINDOWS_MON_THU,
   WORK_WINDOWS_FRIDAY,
   WORK_WINDOWS_WEEKDAY: WORK_WINDOWS_MON_THU,
+  OWNER_DISPLAY_WINDOW,
   STUDIO_HOURS_LABEL,
   isWeekendDay,
   getWorkWindowsForDate,
+  getOwnerDisplayWindowsForDate,
   getWindowBounds,
   getAllDayBlockRange,
   isWithinWorkHours,
   slotFitsInWorkWindows,
+  slotFitsInOwnerDisplayWindows,
 };

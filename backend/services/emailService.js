@@ -615,6 +615,40 @@ async function sendClientHennaRejected({ to, clientName, treatment, startTime })
   });
 }
 
+async function sendPasswordReset({ to, name, resetUrl }) {
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: 'Restablecer contraseña | Nereida Martín Studio',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:${E.bg};font-family:'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
+    <div style="text-align:center;margin-bottom:32px;">
+      <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
+      <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Restablecer contraseña</p>
+    </div>
+    <div style="background:${E.white};border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 2px 12px ${E.shadow};">
+      <p style="color:${E.text};font-size:16px;margin:0 0 20px;">Hola <strong>${name}</strong>,</p>
+      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 24px;">
+        Hemos recibido una solicitud para restablecer la contraseña de tu cuenta. El enlace caduca en 1 hora.
+      </p>
+      ${emailButton({ href: resetUrl, label: 'Elegir nueva contraseña', variant: 'primary' })}
+      <p style="color:${E.muted};font-size:12px;line-height:1.5;margin:16px 0 0;">
+        Si no solicitaste este cambio, puedes ignorar este email. Tu contraseña seguirá siendo la misma.
+      </p>
+    </div>
+    <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
+      <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio</p>
+    </div>
+  </div>
+</body>
+</html>`,
+  });
+}
+
 module.exports = {
   sendConfirmation,
   sendCancellationConfirmation,
@@ -631,4 +665,5 @@ module.exports = {
   sendJointCompanionConfirmRequest,
   sendJointPrimaryPending,
   sendJointExpired,
+  sendPasswordReset,
 };

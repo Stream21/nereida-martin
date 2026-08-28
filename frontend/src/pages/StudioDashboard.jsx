@@ -12,6 +12,7 @@ import TopClientsCard from '../components/studio/TopClientsCard'
 import ClientsTable from '../components/studio/ClientsTable'
 import ServicesTable from '../components/studio/ServicesTable'
 import StudioCalendar from '../components/studio/StudioCalendar'
+import StudioSettingsPanel from '../components/studio/StudioSettingsPanel'
 import { useOwnerAuth } from '../hooks/useOwnerAuth'
 import {
   fetchByTreatment,
@@ -35,7 +36,10 @@ export default function StudioDashboard() {
   const tabFromUrl = searchParams.get('tab')
   const citaFromUrl = searchParams.get('cita')
   const [activeTab, setActiveTab] = useState(
-    tabFromUrl === 'agenda' || tabFromUrl === 'clients' || tabFromUrl === 'services'
+    tabFromUrl === 'agenda' ||
+      tabFromUrl === 'clients' ||
+      tabFromUrl === 'services' ||
+      tabFromUrl === 'settings'
       ? tabFromUrl
       : 'overview'
   )
@@ -169,6 +173,12 @@ export default function StudioDashboard() {
         {activeTab === 'services' && (
           <motion.div key="services" variants={tabVariants} initial="initial" animate="animate" exit="exit">
             <ServicesTable />
+          </motion.div>
+        )}
+
+        {activeTab === 'settings' && (
+          <motion.div key="settings" variants={tabVariants} initial="initial" animate="animate" exit="exit">
+            <StudioSettingsPanel />
           </motion.div>
         )}
       </AnimatePresence>

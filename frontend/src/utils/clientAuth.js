@@ -99,3 +99,44 @@ export function clientAuthFetch(path, options = {}) {
 export function clientApiUrl(path) {
   return `${API_URL}/api${path}`
 }
+
+export function requestPasswordReset(email) {
+  return fetch(`${API_URL}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'No se pudo enviar el enlace')
+    return data
+  })
+}
+
+export function fetchResetPreview(token) {
+  return fetch(`${API_URL}/api/auth/reset-password/${token}`).then(async (res) => {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Enlace no válido')
+    return data
+  })
+}
+
+export function resetPassword(token, password) {
+  return fetch(`${API_URL}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'No se pudo restablecer la contraseña')
+    return data
+  })
+}
+
+export function fetchMyBookings({ tab = 'upcoming', page = 1, limit = 20 } = {}) {
+  const params = new URLSearchParams({ tab, page: String(page), limit: String(limit) })
+  return authFetch(`/auth/bookings/mine?${params}`)
+}
+
+export function fetchMyBookingStats() {
+  return authFetch('/auth/bookings/mine/stats')
+}

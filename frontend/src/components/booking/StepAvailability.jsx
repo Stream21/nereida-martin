@@ -14,6 +14,7 @@ import {
   isBefore,
   startOfDay,
   isWeekend,
+  isAfter,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
@@ -55,6 +56,7 @@ export default function StepAvailability({
   const [slots, setSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [bookingStartDate, setBookingStartDate] = useState(null)
+  const [bookingEndDate, setBookingEndDate] = useState(null)
   const [nextSlot, setNextSlot] = useState(null)
   const [loadingNextSlot, setLoadingNextSlot] = useState(() => !!treatmentId)
   const [anchorDay, setAnchorDay] = useState(null)
@@ -73,6 +75,9 @@ export default function StepAvailability({
 
   const today = startOfDay(new Date())
   const goLiveDay = bookingStartDate ? startOfDay(new Date(`${bookingStartDate}T12:00:00`)) : today
+  const bookingCloseDay = bookingEndDate
+    ? startOfDay(new Date(`${bookingEndDate}T12:00:00`))
+    : null
   const applyPerfiladoSpacing = isPerfiladoTreatment(treatmentId)
   const blockedWeeks = applyPerfiladoSpacing ? perfiladoBlockedWeeks : []
   const hasBlockedWeeks = blockedWeeks.length > 0
@@ -90,6 +95,7 @@ export default function StepAvailability({
       .then((res) => res.json())
       .then((data) => {
         if (data.bookingStartDate) setBookingStartDate(data.bookingStartDate)
+        if (data.bookingEndDate) setBookingEndDate(data.bookingEndDate)
       })
       .catch(() => {})
   }, [])
@@ -462,6 +468,7 @@ export default function StepAvailability({
             const isSelected = selectedDate && isSameDay(day, selectedDate)
             const isPast = isBefore(day, today)
             const isBeforeGoLive = isBefore(day, goLiveDay)
+            const isAfterClose = bookingCloseDay ? isAfter(startOfDay(day), bookingCloseDay) : false
             const isBeforeAnchor = anchorDay && isBefore(startOfDay(day), anchorDay)
             const isWeekendDay = isWeekend(day)
             const dateStr = format(day, 'yyyy-MM-dd')
@@ -471,6 +478,7 @@ export default function StepAvailability({
               inMonth &&
               !isPast &&
               !isBeforeGoLive &&
+              !isAfterClose &&
               !isBeforeAnchor &&
               !isWeekendDay &&
               !hasOpenSlots
@@ -479,6 +487,7 @@ export default function StepAvailability({
               !inMonth ||
               isPast ||
               isBeforeGoLive ||
+              isAfterClose ||
               isBeforeAnchor ||
               isWeekendDay ||
               blockedByBusy ||

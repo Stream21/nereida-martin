@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import Icon from '../ui/Icon'
 import GoldButton from '../ui/GoldButton'
 import { useClientAuth } from '../../hooks/useClientAuth'
@@ -50,6 +50,7 @@ function AccountControl({
   className = '',
 }) {
   const prefersReducedMotion = useReducedMotion()
+  const navigate = useNavigate()
   const label = firstName(user?.name)
   const [menuOpen, setMenuOpen] = useState(false)
   const rootRef = useRef(null)
@@ -135,6 +136,42 @@ function AccountControl({
                 role="menuitem"
                 onClick={() => {
                   setMenuOpen(false)
+                  navigate('/cuenta')
+                }}
+                className="cursor-pointer w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors duration-200"
+              >
+                <Icon name="person" className="text-[20px]" />
+                <span className="font-label text-xs tracking-wide">Mi cuenta</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  navigate('/mis-citas')
+                }}
+                className="cursor-pointer w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors duration-200"
+              >
+                <Icon name="event_note" className="text-[20px]" />
+                <span className="font-label text-xs tracking-wide">Mis citas</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  navigate('/reservar')
+                }}
+                className="cursor-pointer w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors duration-200"
+              >
+                <Icon name="calendar_add_on" className="text-[20px]" />
+                <span className="font-label text-xs tracking-wide">Reservar</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
                   onLogout()
                 }}
                 className="cursor-pointer w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -172,6 +209,7 @@ function AccountControl({
 
 function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
   const prefersReducedMotion = useReducedMotion()
+  const navigate = useNavigate()
 
   if (isAuthenticated) {
     return (
@@ -191,6 +229,22 @@ function MobileAccountCard({ isAuthenticated, user, onLogout, onLogin }) {
               {user?.email || 'Sesión iniciada'}
             </p>
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button
+            type="button"
+            onClick={() => navigate('/cuenta')}
+            className="cursor-pointer min-h-10 rounded-xl bg-background/80 text-xs text-on-surface-variant hover:text-primary"
+          >
+            Mi cuenta
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/mis-citas')}
+            className="cursor-pointer min-h-10 rounded-xl bg-background/80 text-xs text-on-surface-variant hover:text-primary"
+          >
+            Mis citas
+          </button>
         </div>
         <motion.button
           type="button"

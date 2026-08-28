@@ -169,6 +169,7 @@ async function getOverview() {
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ), 0)::numeric AS month_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -182,6 +183,7 @@ async function getOverview() {
              AND ${COMPLETED_SQL}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ), 0)::numeric AS year_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -190,6 +192,7 @@ async function getOverview() {
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          )::int AS priced_month_bookings,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -197,6 +200,7 @@ async function getOverview() {
          COALESCE(SUM(t.price) FILTER (
            WHERE ${webFed}
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ), 0)::numeric AS contracted_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -206,6 +210,7 @@ async function getOverview() {
            WHERE ${webFed}
              AND ${studioMonthExpr('b.start_time')} = $1
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ), 0)::numeric AS year_contracted_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -217,6 +222,7 @@ async function getOverview() {
              AND ${studioMonthExpr('b.start_time')} = $1
              AND ${studioMonthNumExpr('b.start_time')} = $2
              AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ), 0)::numeric AS month_contracted_revenue,
          COUNT(*) FILTER (
            WHERE ${webFed}
@@ -365,7 +371,7 @@ async function getMonthlySeries(months = 12) {
        ${studioMonthExpr('b.start_time')} AS year,
        ${studioMonthNumExpr('b.start_time')} AS month,
        COUNT(*)::int AS booking_count,
-       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL), 0)::numeric AS revenue
+       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL AND NOT COALESCE(b.complimentary, false)), 0)::numeric AS revenue
      FROM bookings b
      JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
@@ -396,7 +402,7 @@ async function getTopClients(limit = 5) {
        c.name,
        c.email,
        COUNT(b.id)::int AS booking_count,
-       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL), 0)::numeric AS total_spent
+       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL AND NOT COALESCE(b.complimentary, false)), 0)::numeric AS total_spent
      FROM clients c
      JOIN bookings b ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
@@ -425,7 +431,7 @@ async function getByTreatment() {
        COALESCE(t.name, 'Sin tratamiento') AS treatment_name,
        COALESCE(t.category, 'general') AS category,
        COUNT(b.id)::int AS booking_count,
-       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL), 0)::numeric AS revenue
+       COALESCE(SUM(t.price) FILTER (WHERE t.price IS NOT NULL AND NOT COALESCE(b.complimentary, false)), 0)::numeric AS revenue
      FROM bookings b
      JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
@@ -601,7 +607,9 @@ async function listClients({
        )::int AS booking_count,
        COALESCE(
          SUM(t.price) FILTER (
-           WHERE b.status IN ('confirmed', 'pending_review') AND t.price IS NOT NULL
+           WHERE b.status IN ('confirmed', 'pending_review')
+             AND t.price IS NOT NULL
+             AND NOT COALESCE(b.complimentary, false)
          ),
          0
        )::numeric AS total_spent,
@@ -781,6 +789,7 @@ async function listCalendarEvents({ from, to }) {
   const result = await query(
     `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
             b.google_event_id, b.joint_group_id, b.joint_role,
+            COALESCE(b.complimentary, false) AS complimentary,
             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
             t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min,
             b.intake_id, i.flagged AS intake_flagged,
@@ -813,6 +822,7 @@ async function listCalendarEvents({ from, to }) {
     endTime: row.end_time,
     status: row.status,
     source: row.source,
+    complimentary: Boolean(row.complimentary),
     googleEventId: row.google_event_id,
     treatmentId: row.treatment_id,
     treatmentName: row.treatment_name || 'Cita',
@@ -956,6 +966,7 @@ async function getBookingDetail(bookingId) {
     `SELECT
        b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id, b.visit_context,
        b.intake_id, b.joint_group_id, b.joint_role,
+       COALESCE(b.complimentary, false) AS complimentary,
        c.id AS client_id, c.name AS client_name, c.email AS client_email, c.phone AS client_phone,
        t.name AS treatment_name, t.tag AS treatment_tag, t.price, t.category AS treatment_category,
        i.id AS intake_pk, i.intake_type, i.answers, i.flagged, i.flag_reason,
@@ -1000,7 +1011,13 @@ async function getBookingDetail(bookingId) {
     treatmentName: row.treatment_name || 'Cita',
     treatmentTag: row.treatment_tag || '',
     treatmentCategory: row.treatment_category || '',
-    price: row.price != null ? Number(row.price) : null,
+    complimentary: Boolean(row.complimentary),
+    price:
+      row.complimentary
+        ? 0
+        : row.price != null
+          ? Number(row.price)
+          : null,
     clientId: row.client_id,
     clientName: row.client_name,
     clientEmail: row.client_email,
@@ -1091,7 +1108,11 @@ async function listServices({
        c.phone AS client_phone,
        COALESCE(t.name, 'Sin tratamiento') AS treatment_name,
        COALESCE(t.category, 'general') AS treatment_category,
-       t.price
+       COALESCE(b.complimentary, false) AS complimentary,
+       CASE
+         WHEN COALESCE(b.complimentary, false) THEN 0
+         ELSE t.price
+       END AS price
      FROM bookings b
      JOIN clients c ON b.client_id = c.id
      LEFT JOIN treatments t ON b.treatment_id = t.id
@@ -1116,6 +1137,7 @@ async function listServices({
       clientPhone: row.client_phone,
       treatmentName: row.treatment_name,
       treatmentCategory: row.treatment_category,
+      complimentary: Boolean(row.complimentary),
       price: row.price != null ? Number(row.price) : null,
     })),
   };

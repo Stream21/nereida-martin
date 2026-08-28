@@ -5,8 +5,11 @@ const router = Router();
 
 router.get('/public', async (_req, res) => {
   try {
-    const bookingStartDate = await studioSettings.getBookingStartDate();
-    res.json({ bookingStartDate });
+    const [bookingStartDate, bookingEndDate] = await Promise.all([
+      studioSettings.getBookingStartDate(),
+      studioSettings.getBookingEndDate(),
+    ]);
+    res.json({ bookingStartDate, bookingEndDate });
   } catch (err) {
     console.error('Error fetching settings:', err);
     res.status(500).json({ error: 'Error al obtener configuración' });

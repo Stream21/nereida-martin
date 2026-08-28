@@ -12,8 +12,10 @@ const {
 const {
   isWeekendDay,
   getWorkWindowsForDate,
+  getOwnerDisplayWindowsForDate,
   getWindowBounds,
   slotFitsInWorkWindows,
+  slotFitsInOwnerDisplayWindows,
 } = require('../utils/studioHours');
 const {
   studioLocalToDate,
@@ -25,6 +27,23 @@ const studioSettings = require('./studioSettings');
 const { isBeforeMinLead } = require('../utils/bookingLeadTime');
 
 const MAX_NEXT_SLOT_DAYS = 90;
+
+function daysInclusiveBetween(startStr, endStr) {
+  if (startStr > endStr) return 0;
+  const start = new Date(`${startStr}T12:00:00Z`).getTime();
+  const end = new Date(`${endStr}T12:00:00Z`).getTime();
+  return Math.floor((end - start) / 86400000) + 1;
+}
+
+async function getMaxSearchDays(fromDateStr) {
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  const daysUntilEnd = daysInclusiveBetween(fromDateStr, bookingEndDate);
+  return Math.min(MAX_NEXT_SLOT_DAYS, Math.max(0, daysUntilEnd));
+}
+
+function isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) {
+  return dateStr >= bookingStartDate && dateStr <= bookingEndDate;
+}
 
 async function getBookedRangesForDate(dateStr, excludeBookingId = null) {
   const windows = getWorkWindowsForDate(dateStr);
@@ -71,11 +90,13 @@ function getSlotsForDate(
   blockDurationMinutes,
   busyRanges,
   now = Date.now(),
-  { skipLeadTime = false } = {}
+  { skipLeadTime = false, allowOutsideHours = false } = {}
 ) {
   if (isWeekendDay(dateStr)) return [];
 
-  const windows = getWorkWindowsForDate(dateStr);
+  const windows = allowOutsideHours
+    ? getOwnerDisplayWindowsForDate(dateStr)
+    : getWorkWindowsForDate(dateStr);
   const blockMs = blockDurationMinutes * 60000;
   const slots = [];
 
@@ -93,9 +114,11 @@ function getSlotsForDate(
       );
 
       if (!tooSoon && !hasConflict) {
+        const inWorkHours = slotFitsInWorkWindows(dateStr, cursor, slotEnd);
         slots.push({
           time: formatStudioTime(new Date(cursor)),
           available: true,
+          outsideHours: !inWorkHours,
         });
         cursor = slotEnd;
       } else {
@@ -105,6 +128,98 @@ function getSlotsForDate(
   }
 
   return slots;
+}
+
+function getSlotsInRange(
+  dateStr,
+  rangeStartMin,
+  rangeEndMin,
+  blockDurationMinutes,
+  busyRanges,
+  now = Date.now(),
+  { skipLeadTime = false, allowOutsideHours = false } = {}
+) {
+  const blockMs = blockDurationMinutes * 60000;
+  const stepMs = SLOT_MINUTES * 60000;
+  const startHour = Math.floor(rangeStartMin / 60);
+  const startMinute = rangeStartMin % 60;
+  const endHour = Math.floor(rangeEndMin / 60);
+  const endMinute = rangeEndMin % 60;
+
+  const rangeStart = studioLocalToDate(dateStr, startHour, startMinute).getTime();
+  const rangeEnd = studioLocalToDate(dateStr, endHour, endMinute).getTime();
+  const slots = [];
+
+  let cursor = rangeStart;
+  while (cursor + blockMs <= rangeEnd) {
+    const slotEnd = cursor + blockMs;
+    const tooSoon = !skipLeadTime && isBeforeMinLead(cursor, now);
+    const hasConflict = hasOverlapWithRanges(
+      new Date(cursor),
+      new Date(slotEnd),
+      busyRanges
+    );
+    const fitsWindow = allowOutsideHours
+      ? slotFitsInOwnerDisplayWindows(dateStr, cursor, slotEnd)
+      : slotFitsInWorkWindows(dateStr, cursor, slotEnd);
+
+    if (!tooSoon && !hasConflict && fitsWindow) {
+      const inWorkHours = slotFitsInWorkWindows(dateStr, cursor, slotEnd);
+      slots.push({
+        time: formatStudioTime(new Date(cursor)),
+        available: true,
+        outsideHours: !inWorkHours,
+      });
+    }
+    cursor += stepMs;
+  }
+
+  return slots;
+}
+
+async function getAvailabilityInRange(
+  dateStr,
+  rangeStartMin,
+  rangeEndMin,
+  treatmentId,
+  durationMinutes,
+  { allowOutsideHours = false } = {}
+) {
+  const treatmentResult = await query(
+    'SELECT duration_min, duration_max FROM treatments WHERE id = $1',
+    [treatmentId]
+  );
+
+  if (treatmentResult.rows.length === 0) {
+    return { error: 'not_found' };
+  }
+
+  const treatment = treatmentResult.rows[0];
+  const defaultBlock = blockDurationMinutes(
+    treatment.duration_max || treatment.duration_min
+  );
+  const blockMinutes =
+    durationMinutes != null ? snapDurationToGrid(durationMinutes, defaultBlock) : defaultBlock;
+
+  const busyRanges = await getBusyRangesForDate(dateStr);
+  const slots = getSlotsInRange(
+    dateStr,
+    rangeStartMin,
+    rangeEndMin,
+    blockMinutes,
+    busyRanges,
+    Date.now(),
+    { skipLeadTime: true, allowOutsideHours }
+  );
+
+  return {
+    slots,
+    date: dateStr,
+    treatmentId,
+    blockMinutes,
+    rangeStartMin,
+    rangeEndMin,
+  };
 }
 
 function snapDurationToGrid(minutes, fallbackMinutes) {
@@ -117,7 +232,12 @@ function snapDurationToGrid(minutes, fallbackMinutes) {
 async function getAvailabilityForDate(
   dateStr,
   treatmentId,
-  { allowInactiveIds = [], durationMinutes = null, skipLeadTime = false } = {}
+  {
+    allowInactiveIds = [],
+    durationMinutes = null,
+    skipLeadTime = false,
+    allowOutsideHours = false,
+  } = {}
 ) {
   const allowInactive = allowInactiveIds.includes(treatmentId);
   const treatmentResult = await query(
@@ -139,12 +259,14 @@ async function getAvailabilityForDate(
     durationMinutes != null ? snapDurationToGrid(durationMinutes, defaultBlock) : defaultBlock;
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
-  if (dateStr < bookingStartDate || isWeekendDay(dateStr)) {
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) || isWeekendDay(dateStr)) {
     return {
       slots: [],
       date: dateStr,
       treatmentId,
       bookingStartDate,
+      bookingEndDate,
       slotMinutes: SLOT_MINUTES,
       blockMinutes,
     };
@@ -153,6 +275,7 @@ async function getAvailabilityForDate(
   const busyRanges = await getBusyRangesForDate(dateStr);
   const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges, Date.now(), {
     skipLeadTime,
+    allowOutsideHours,
   });
 
   return {
@@ -160,6 +283,7 @@ async function getAvailabilityForDate(
     date: dateStr,
     treatmentId,
     bookingStartDate,
+    bookingEndDate,
     slotMinutes: SLOT_MINUTES,
     blockMinutes,
   };
@@ -170,7 +294,7 @@ async function hasSlotAvailable(
   timeStr,
   blockMinutes,
   excludeBookingId = null,
-  { skipLeadTime = false } = {}
+  { skipLeadTime = false, skipWorkHours = false } = {}
 ) {
   if (isWeekendDay(dateStr)) return false;
 
@@ -179,10 +303,15 @@ async function hasSlotAvailable(
   const end = new Date(start.getTime() + blockMinutes * 60000);
 
   if (!isOnGrid(start)) return false;
-  if (!slotFitsInWorkWindows(dateStr, start.getTime(), end.getTime())) return false;
+  if (skipWorkHours) {
+    if (!slotFitsInOwnerDisplayWindows(dateStr, start.getTime(), end.getTime())) return false;
+  } else if (!slotFitsInWorkWindows(dateStr, start.getTime(), end.getTime())) {
+    return false;
+  }
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
-  if (dateStr < bookingStartDate) return false;
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate)) return false;
   if (!skipLeadTime && isBeforeMinLead(start.getTime())) return false;
 
   const busyRanges = await getBusyRangesForDate(dateStr, excludeBookingId);
@@ -205,13 +334,19 @@ async function findNextAvailableSlot(treatmentId, fromDateStr = null) {
   );
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
+  const bookingEndDate = await studioSettings.getBookingEndDate();
   let cursorDate = fromDateStr || todayStudioDateStr();
 
   if (cursorDate < bookingStartDate) {
     cursorDate = bookingStartDate;
   }
 
-  const lastDate = addDaysToDateStr(cursorDate, MAX_NEXT_SLOT_DAYS - 1);
+  const searchDays = await getMaxSearchDays(cursorDate);
+  if (searchDays <= 0) {
+    return { date: null, time: null, blockMinutes, treatmentId };
+  }
+
+  const lastDate = addDaysToDateStr(cursorDate, searchDays - 1);
   const rangeStart = studioLocalToDate(cursorDate, 0, 0);
   const rangeEnd = studioLocalToDate(lastDate, 23, 59);
 
@@ -237,9 +372,9 @@ async function findNextAvailableSlot(treatmentId, fromDateStr = null) {
     ...ghostRanges,
   ];
 
-  for (let i = 0; i < MAX_NEXT_SLOT_DAYS; i++) {
+  for (let i = 0; i < searchDays; i++) {
     const dateStr = addDaysToDateStr(cursorDate, i);
-    if (dateStr < bookingStartDate) continue;
+    if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate)) continue;
 
     const busyRanges = rangesOverlappingDay(allBusy, dateStr);
     const slots = getSlotsForDate(dateStr, blockMinutes, busyRanges);
@@ -306,8 +441,9 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
     month
   );
 
-  const [bookingStartDate, bookedResult, ghostRanges] = await Promise.all([
+  const [bookingStartDate, bookingEndDate, bookedResult, ghostRanges] = await Promise.all([
     studioSettings.getBookingStartDate(),
+    studioSettings.getBookingEndDate(),
     query(
       `SELECT start_time, end_time FROM bookings
        WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
@@ -331,7 +467,7 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
 
   for (let day = 1; day <= lastDayNum; day++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (dateStr < bookingStartDate || isWeekendDay(dateStr)) continue;
+    if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) || isWeekendDay(dateStr)) continue;
     if (dateStr < firstDate || dateStr > lastDate) continue;
 
     const busyRanges = rangesOverlappingDay(allBusy, dateStr);
@@ -346,6 +482,7 @@ async function getAvailableDatesForMonth(year, month, treatmentId) {
     month,
     treatmentId,
     bookingStartDate,
+    bookingEndDate,
     dates,
     blockMinutes,
   };
@@ -457,7 +594,8 @@ async function hasJointSlotAvailable(
   if (!slotFitsInWorkWindows(dateStr, companionStart.getTime(), companionEnd.getTime())) return false;
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
-  if (dateStr < bookingStartDate) return false;
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate)) return false;
   if (!skipLeadTime && isBeforeMinLead(primaryStart.getTime())) return false;
 
   const busyRanges = await getBusyRangesForDate(dateStr);
@@ -499,7 +637,8 @@ async function getJointAvailabilityForDate(
   if (blocks.error) return blocks;
 
   const bookingStartDate = await studioSettings.getBookingStartDate();
-  if (dateStr < bookingStartDate || isWeekendDay(dateStr)) {
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) || isWeekendDay(dateStr)) {
     return {
       slots: [],
       date: dateStr,
@@ -508,6 +647,7 @@ async function getJointAvailabilityForDate(
       companionTreatmentId: blocks.companionTreatmentId,
       companionTreatmentName: blocks.companionTreatmentName,
       bookingStartDate,
+      bookingEndDate,
       primaryBlockMinutes: blocks.primaryBlock,
       companionBlockMinutes: blocks.companionBlock,
     };
@@ -543,6 +683,7 @@ async function getJointAvailabilityForDate(
     companionTreatmentId: blocks.companionTreatmentId,
     companionTreatmentName: blocks.companionTreatmentName,
     bookingStartDate,
+    bookingEndDate,
     primaryBlockMinutes: blocks.primaryBlock,
     companionBlockMinutes: blocks.companionBlock,
   };
@@ -562,8 +703,9 @@ async function getJointAvailableDatesForMonth(
   const { firstDate, lastDate, lastDayNum, rangeStart, rangeEnd } = monthDateBounds(year, month);
   const { loadPerfiladoBlockedWeekSet, mondayOfStudioDate } = require('../utils/perfiladoSpacing');
 
-  const [bookingStartDate, bookedResult, ghostRanges, primaryWeeks, companionWeeks] = await Promise.all([
+  const [bookingStartDate, bookingEndDate, bookedResult, ghostRanges, primaryWeeks, companionWeeks] = await Promise.all([
     studioSettings.getBookingStartDate(),
+    studioSettings.getBookingEndDate(),
     query(
       `SELECT start_time, end_time FROM bookings
        WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
@@ -593,7 +735,7 @@ async function getJointAvailableDatesForMonth(
 
   for (let day = 1; day <= lastDayNum; day++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (dateStr < bookingStartDate || isWeekendDay(dateStr)) continue;
+    if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) || isWeekendDay(dateStr)) continue;
 
     if (!skipPerfiladoLimit) {
       const week = mondayOfStudioDate(dateStr);
@@ -621,6 +763,7 @@ async function getJointAvailableDatesForMonth(
     companionTreatmentId: blocks.companionTreatmentId,
     companionTreatmentName: blocks.companionTreatmentName,
     bookingStartDate,
+    bookingEndDate,
     dates,
     primaryBlockMinutes: blocks.primaryBlock,
     companionBlockMinutes: blocks.companionBlock,
@@ -631,6 +774,8 @@ module.exports = {
   getBookedRangesForDate,
   getBusyRangesForDate,
   getSlotsForDate,
+  getSlotsInRange,
+  getAvailabilityInRange,
   getAvailabilityForDate,
   getAvailableDatesForMonth,
   hasSlotAvailable,

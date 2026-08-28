@@ -323,6 +323,7 @@ export default function BookingDetailContent({
                   {treatments.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
+                      {t.tag ? ` · ${t.tag}` : ''}
                     </option>
                   ))}
                 </select>
@@ -581,6 +582,15 @@ export default function BookingDetailContent({
                     {booking.jointPartner.treatmentName}
                   </p>
                 )}
+              </div>
+            )}
+
+            {booking?.complimentary && (
+              <div className="rounded-2xl border border-tertiary/25 bg-tertiary-container/40 px-4 py-3">
+                <p className="text-sm font-medium text-on-surface">Cita de cortesía · sin cobro</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Amiga / fuera de horario público. No cuenta en ingresos.
+                </p>
               </div>
             )}
 

@@ -6,6 +6,7 @@ const TABS = [
   { id: 'agenda', label: 'Agenda', icon: 'calendar_month' },
   { id: 'clients', label: 'Clientes', icon: 'group' },
   { id: 'services', label: 'Servicios', icon: 'spa' },
+  { id: 'settings', label: 'Ajustes', icon: 'settings' },
 ]
 
 export default function StudioLayout({ activeTab, onTabChange, onLogout, children }) {
@@ -75,7 +76,7 @@ export default function StudioLayout({ activeTab, onTabChange, onLogout, childre
         className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-t border-outline-variant/40 pb-[env(safe-area-inset-bottom,0px)]"
         aria-label="Secciones del estudio"
       >
-        <div className="grid grid-cols-4 h-[3.75rem]">
+        <div className="grid grid-cols-5 h-[3.75rem]">
           {TABS.map((tab) => {
             const active = activeTab === tab.id
             return (

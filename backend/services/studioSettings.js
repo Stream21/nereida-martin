@@ -1,16 +1,22 @@
 const { query } = require('../db/pool');
 
 const IMPORTED_CLIENT_EMAIL = 'imported@studio.local';
+const DEFAULT_BOOKING_END_DATE = '2027-01-31';
+
+function formatDateValue(d) {
+  if (!d) return null;
+  return d instanceof Date ? d.toISOString().split('T')[0] : String(d).split('T')[0];
+}
 
 async function getStudioSettings() {
   const result = await query('SELECT * FROM studio_settings WHERE id = 1');
   if (result.rows.length === 0) {
     const bookingStartDate = process.env.BOOKING_START_DATE || new Date().toISOString().split('T')[0];
     await query(
-      'INSERT INTO studio_settings (id, booking_start_date) VALUES (1, $1) ON CONFLICT (id) DO NOTHING',
-      [bookingStartDate]
+      'INSERT INTO studio_settings (id, booking_start_date, booking_end_date) VALUES (1, $1, $2) ON CONFLICT (id) DO NOTHING',
+      [bookingStartDate, DEFAULT_BOOKING_END_DATE]
     );
-    return { booking_start_date: bookingStartDate };
+    return { booking_start_date: bookingStartDate, booking_end_date: DEFAULT_BOOKING_END_DATE };
   }
   return result.rows[0];
 }
@@ -21,11 +27,69 @@ async function getBookingStartDate() {
 
   const settings = await getStudioSettings();
   if (settings.booking_start_date) {
-    const d = settings.booking_start_date;
-    return d instanceof Date ? d.toISOString().split('T')[0] : String(d).split('T')[0];
+    return formatDateValue(settings.booking_start_date);
   }
 
   return new Date().toISOString().split('T')[0];
+}
+
+async function getBookingEndDate() {
+  const settings = await getStudioSettings();
+  if (settings.booking_end_date) {
+    return formatDateValue(settings.booking_end_date);
+  }
+  return DEFAULT_BOOKING_END_DATE;
+}
+
+async function updateBookingWindow({ bookingStartDate, bookingEndDate }) {
+  const start = bookingStartDate || (await getBookingStartDate());
+  const end = bookingEndDate || (await getBookingEndDate());
+
+  if (start > end) {
+    return { error: 'La fecha de inicio no puede ser posterior a la de cierre', code: 'INVALID_RANGE', status: 400 };
+  }
+
+  await query(
+    `INSERT INTO studio_settings (id, booking_start_date, booking_end_date)
+     VALUES (1, $1, $2)
+     ON CONFLICT (id) DO UPDATE SET
+       booking_start_date = EXCLUDED.booking_start_date,
+       booking_end_date = EXCLUDED.booking_end_date,
+       updated_at = NOW()`,
+    [start, end]
+  );
+
+  return {
+    bookingStartDate: start,
+    bookingEndDate: end,
+  };
+}
+
+let googleRefreshTokenColumnReady = false;
+
+async function ensureGoogleRefreshTokenColumn() {
+  if (googleRefreshTokenColumnReady) return;
+  await query(
+    `ALTER TABLE studio_settings
+     ADD COLUMN IF NOT EXISTS google_refresh_token TEXT`
+  );
+  googleRefreshTokenColumnReady = true;
+}
+
+async function getGoogleRefreshToken() {
+  await ensureGoogleRefreshTokenColumn();
+  const settings = await getStudioSettings();
+  return settings.google_refresh_token || null;
+}
+
+async function updateGoogleRefreshToken(refreshToken) {
+  if (!refreshToken) return;
+  await ensureGoogleRefreshTokenColumn();
+  await getStudioSettings();
+  await query(
+    'UPDATE studio_settings SET google_refresh_token = $1, updated_at = NOW() WHERE id = 1',
+    [refreshToken]
+  );
 }
 
 async function updateSyncToken(syncToken) {
@@ -96,13 +160,18 @@ async function ensureBookingStartDateFromEnv() {
 
 module.exports = {
   getBookingStartDate,
+  getBookingEndDate,
   getStudioSettings,
+  updateBookingWindow,
   updateSyncToken,
   getSyncToken,
+  getGoogleRefreshToken,
+  updateGoogleRefreshToken,
   saveWatchChannel,
   getWatchChannel,
   clearWatchChannel,
   getImportedClientId,
   ensureBookingStartDateFromEnv,
   IMPORTED_CLIENT_EMAIL,
+  DEFAULT_BOOKING_END_DATE,
 };

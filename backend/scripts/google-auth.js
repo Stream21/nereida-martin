@@ -14,6 +14,8 @@
  */
 
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const { google } = require('googleapis');
 const http = require('http');
 const url = require('url');
@@ -89,14 +91,25 @@ function startGoogleAuth(overrides = {}) {
       try {
         const { tokens } = await oauth2Client.getToken(code);
 
+        if (!tokens.refresh_token) {
+          throw new Error(
+            'Google no devolvió refresh_token. Revoca el acceso en https://myaccount.google.com/permissions y vuelve a autorizar.'
+          );
+        }
+
+        const lifetime = describeTokenLifetime(tokens.refresh_token_expires_in);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
-          '<h1>¡Autorización correcta!</h1><p>Ya puedes cerrar esta pestaña.</p>'
+          `<h1>¡Autorización correcta!</h1>
+           <p>Vida del refresh token: <strong>${lifetime.label}</strong></p>
+           <p>Ya puedes cerrar esta pestaña.</p>`
         );
 
         server.close();
         resolve({
           refreshToken: tokens.refresh_token,
+          refreshTokenExpiresIn: tokens.refresh_token_expires_in,
+          lifetime,
           redirectUri,
           authUrl,
         });
@@ -130,17 +143,62 @@ function startGoogleAuth(overrides = {}) {
   });
 }
 
+function describeTokenLifetime(expiresIn) {
+  if (expiresIn == null || expiresIn === 0) {
+    return { days: null, label: 'sin caducidad (app en Producción)' };
+  }
+  const days = Math.round(Number(expiresIn) / 86400);
+  return {
+    days,
+    label: `${days} día${days === 1 ? '' : 's'} — la app OAuth sigue en modo Prueba`,
+  };
+}
+
+function persistRefreshTokenToEnv(refreshToken) {
+  const envPath = path.join(__dirname, '..', '.env');
+  if (!fs.existsSync(envPath)) return false;
+
+  const env = fs.readFileSync(envPath, 'utf8');
+  const next = /^GOOGLE_REFRESH_TOKEN=/m.test(env)
+    ? env.replace(/^GOOGLE_REFRESH_TOKEN=.*$/m, `GOOGLE_REFRESH_TOKEN=${refreshToken}`)
+    : `${env.replace(/\s*$/, '')}\nGOOGLE_REFRESH_TOKEN=${refreshToken}\n`;
+
+  fs.writeFileSync(envPath, next);
+  return true;
+}
+
+async function persistRefreshToken(refreshToken) {
+  const savedToEnv = persistRefreshTokenToEnv(refreshToken);
+  let savedToDb = false;
+
+  try {
+    const studioSettings = require('../services/studioSettings');
+    await studioSettings.updateGoogleRefreshToken(refreshToken);
+    savedToDb = true;
+  } catch (err) {
+    console.warn('Could not save refresh token to database:', err.message);
+  }
+
+  return { savedToEnv, savedToDb };
+}
+
 async function main() {
   try {
     const result = await startGoogleAuth();
+    const saved = await persistRefreshToken(result.refreshToken);
 
     console.log('=== SUCCESS ===\n');
-    console.log('Add this to your .env file:\n');
-    console.log(`GOOGLE_REFRESH_TOKEN=${result.refreshToken}`);
-    console.log('\nGOOGLE_CALENDAR_ID=primary');
+    console.log(`Token lifetime: ${result.lifetime.label}\n`);
+    if (result.lifetime.days) {
+      console.log('WARNING: This token will expire. Publish the OAuth app (not just verify),');
+      console.log('then run this script AGAIN so Google issues a non-expiring token.\n');
+    }
+    if (saved.savedToEnv) console.log('Saved to backend/.env');
+    if (saved.savedToDb) console.log('Saved to studio_settings (database)');
+    console.log('\nAlso copy GOOGLE_REFRESH_TOKEN to Render → nere-studio → Environment');
     console.log('\n===============\n');
 
-    process.exit(0);
+    process.exit(result.lifetime.days ? 2 : 0);
   } catch (err) {
     console.error('Authorization failed:', err.message);
     process.exit(1);
@@ -151,4 +209,11 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { startGoogleAuth, getConfig, SCOPES, DEFAULT_PORT };
+module.exports = {
+  startGoogleAuth,
+  persistRefreshToken,
+  describeTokenLifetime,
+  getConfig,
+  SCOPES,
+  DEFAULT_PORT,
+};

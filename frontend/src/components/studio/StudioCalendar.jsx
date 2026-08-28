@@ -25,18 +25,20 @@ import {
   createOwnerJointBooking,
   fetchClients,
   fetchOwnerAvailability,
+  fetchOwnerAvailabilityRange,
   fetchOwnerJointAvailability,
   fetchOwnerCalendar,
   fetchOwnerTreatments,
   fetchOwnerBooking,
 } from '../../utils/ownerApi'
 import { isPerfiladoTreatment } from '../../utils/browDesign'
-import { isGoogleBookingSource } from '../../utils/studioFormat'
+import { isGoogleBookingSource, studioTodayDate } from '../../utils/studioFormat'
 
 const WEEKDAY_SHORT = ['L', 'M', 'X', 'J', 'V']
 const WEEKDAY_MED = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
-const HOUR_START = 10
-const HOUR_END = 18
+/** Display window for owner agenda (wider than public booking hours). */
+const HOUR_START = 8
+const HOUR_END = 20
 const PX_PER_HOUR = 56
 const PX_PER_HOUR_MOBILE = 72
 
@@ -64,6 +66,37 @@ function workWindowsForDay(day) {
   ]
 }
 
+/** Franjas 08–20 fuera del horario público (solo citas de cortesía). */
+function outsideWindowsForDay(day) {
+  if (day.getDay() === 0 || day.getDay() === 6) return []
+  const afternoonEnd = day.getDay() === 5 ? 17 : 18
+  return [
+    { start: HOUR_START * 60, end: 10 * 60 },
+    { start: 14 * 60, end: 15 * 60 },
+    { start: afternoonEnd * 60, end: HOUR_END * 60 },
+  ]
+}
+
+function gapsInWindows(windows, busy, outsideHours) {
+  const gaps = []
+  for (const win of windows) {
+    let cursor = win.start
+    const relevant = busy.filter((b) => b.end > win.start && b.start < win.end)
+    for (const b of relevant) {
+      const bStart = Math.max(b.start, win.start)
+      const bEnd = Math.min(b.end, win.end)
+      if (bStart > cursor) {
+        gaps.push({ start: cursor, end: bStart, outsideHours })
+      }
+      cursor = Math.max(cursor, bEnd)
+    }
+    if (cursor < win.end) {
+      gaps.push({ start: cursor, end: win.end, outsideHours })
+    }
+  }
+  return gaps
+}
+
 function minsToLabel(mins) {
   const h = Math.floor(mins / 60)
   const m = mins % 60
@@ -83,7 +116,7 @@ function formatDurationLabel(minutes) {
   return `${minutes} min`
 }
 
-/** Free intervals within work windows minus booked events. */
+/** Free intervals: horario público + franjas de cortesía (08–20). */
 function freeGapsForDay(day, dayEvents) {
   const busy = dayEvents
     .map((ev) => ({
@@ -92,29 +125,17 @@ function freeGapsForDay(day, dayEvents) {
     }))
     .sort((a, b) => a.start - b.start)
 
-  const gaps = []
-  for (const win of workWindowsForDay(day)) {
-    let cursor = win.start
-    const relevant = busy.filter((b) => b.end > win.start && b.start < win.end)
-    for (const b of relevant) {
-      const bStart = Math.max(b.start, win.start)
-      const bEnd = Math.min(b.end, win.end)
-      if (bStart > cursor) {
-        gaps.push({ start: cursor, end: bStart })
-      }
-      cursor = Math.max(cursor, bEnd)
-    }
-    if (cursor < win.end) {
-      gaps.push({ start: cursor, end: win.end })
-    }
-  }
-  return gaps.filter((g) => g.end - g.start >= 15)
+  return [
+    ...gapsInWindows(workWindowsForDay(day), busy, false),
+    ...gapsInWindows(outsideWindowsForDay(day), busy, true),
+  ].filter((g) => g.end - g.start >= 15)
 }
 
+/** Hours outside bookable studio windows (still visible 08–20 for Google / overview). */
 function isClosedHour(hour, day) {
-  // 14:00–15:00 lunch; viernes 17:00–18:00 cerrado
-  if (hour === 14) return true
-  if (day?.getDay() === 5 && hour >= 17) return true
+  if (hour < 10 || hour >= 18) return true
+  if (hour === 14) return true // comida
+  if (day?.getDay() === 5 && hour >= 17) return true // viernes cierra 17:00
   return false
 }
 
@@ -150,12 +171,12 @@ function workMonthDays(anchor) {
   )
 }
 
-/** If date falls on weekend, snap to previous Friday (or next Monday if preferred). */
+/** If date falls on weekend, snap to next Monday (never backwards to Friday). */
 function snapToWorkday(date) {
   const d = startOfDay(date)
   const idx = weekdayIndex(d)
   if (idx >= 0) return d
-  if (d.getDay() === 6) return addDays(d, -1) // Sat → Fri
+  if (d.getDay() === 6) return addDays(d, 2) // Sat → Mon
   return addDays(d, 1) // Sun → Mon
 }
 
@@ -251,7 +272,54 @@ function layoutOverlaps(dayEvents, pxPerHour = PX_PER_HOUR) {
   return result
 }
 
-function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClose, onCreated }) {
+function timeToMins(timeStr) {
+  const [h, m] = String(timeStr || '').split(':').map(Number)
+  return h * 60 + m
+}
+
+function GapSlotPreview({ gapStart, gapEnd, time, durationMinutes }) {
+  if (!time || !durationMinutes || gapStart == null || gapEnd == null) return null
+  const start = timeToMins(time)
+  const end = start + durationMinutes
+  const before = start - gapStart
+  const after = gapEnd - end
+  const total = gapEnd - gapStart
+  const bookingWidth = Math.max(4, (durationMinutes / total) * 100)
+  const bookingLeft = ((start - gapStart) / total) * 100
+  const warnBefore = before > 0 && before < 15
+  const warnAfter = after > 0 && after < 15
+
+  return (
+    <div className="space-y-2">
+      <div className="relative h-3 rounded-full bg-surface-container overflow-hidden">
+        <div
+          className="absolute top-0 bottom-0 bg-primary/70 rounded-full"
+          style={{ left: `${bookingLeft}%`, width: `${bookingWidth}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-on-surface-variant tabular-nums">
+        <span>{minsToLabel(gapStart)}</span>
+        <span>{minsToLabel(gapEnd)}</span>
+      </div>
+      {(warnBefore || warnAfter) && (
+        <p className="text-xs text-amber-900 bg-amber-50 rounded-xl px-3 py-2 border border-amber-100">
+          Quedará un hueco menor de 15 min
+          {warnBefore && warnAfter ? ' antes y después' : warnBefore ? ' antes' : ' después'} de la cita.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CreateBookingModal({
+  initialDate,
+  initialTime,
+  gapStart,
+  gapEnd,
+  initialComplimentary = false,
+  onClose,
+  onCreated,
+}) {
   const [treatments, setTreatments] = useState([])
   const [clientSearch, setClientSearch] = useState('')
   const [clients, setClients] = useState([])
@@ -268,10 +336,10 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   const [companionClientId, setCompanionClientId] = useState(null)
   const [companionTreatmentName, setCompanionTreatmentName] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(null)
+  const [complimentary, setComplimentary] = useState(Boolean(initialComplimentary))
 
   const gapMinutes = gapStart != null && gapEnd != null ? gapEnd - gapStart : null
   const hasGap = gapMinutes != null && gapMinutes > 0
-  const lockedTime = hasGap ? initialTime || minsToLabel(gapStart) : null
   const isPerfilado = isPerfiladoTreatment(treatmentId)
   const isJoint = treatmentId === 'perfilado-conjunto'
   const jointEligible = isJoint && (!hasGap || gapMinutes >= 60)
@@ -288,7 +356,9 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       })
       .sort((a, b) => {
         if (a.fits !== b.fits) return a.fits ? -1 : 1
-        return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+        const byName = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+        if (byName !== 0) return byName
+        return String(a.tag || '').localeCompare(String(b.tag || ''), 'es', { sensitivity: 'base' })
       })
   }, [treatments, hasGap, gapMinutes, treatmentId, durationMinutes])
 
@@ -356,12 +426,6 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
   }, [treatmentId, treatments, isJoint, hasGap, gapMinutes])
 
   useEffect(() => {
-    if (hasGap && lockedTime) {
-      setTime(lockedTime)
-      setSlots([])
-      setLoadingSlots(false)
-      return
-    }
     if (!date || !treatmentId) {
       setSlots([])
       return
@@ -370,16 +434,36 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       setSlots([])
       return
     }
+    if (hasGap && (!durationMinutes || isJoint)) {
+      setSlots([])
+      return
+    }
+
     let cancelled = false
     setLoadingSlots(true)
-    const fetchSlots = isJoint
-      ? fetchOwnerJointAvailability({
+
+    const fetchSlots = hasGap
+      ? fetchOwnerAvailabilityRange({
           date,
           treatmentId,
-          companionClientId,
-          primaryClientId: clientId,
+          durationMinutes,
+          gapStart,
+          gapEnd,
+          allowOutsideHours: complimentary,
         })
-      : fetchOwnerAvailability({ date, treatmentId, durationMinutes })
+      : isJoint
+        ? fetchOwnerJointAvailability({
+            date,
+            treatmentId,
+            companionClientId,
+            primaryClientId: clientId,
+          })
+        : fetchOwnerAvailability({
+            date,
+            treatmentId,
+            durationMinutes,
+            allowOutsideHours: complimentary,
+          })
 
     fetchSlots
       .then((res) => {
@@ -406,12 +490,24 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap/joint change
-  }, [date, treatmentId, initialTime, hasGap, lockedTime, isJoint, companionClientId, clientId, durationMinutes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap/joint/cortesía change
+  }, [
+    date,
+    treatmentId,
+    initialTime,
+    hasGap,
+    gapStart,
+    gapEnd,
+    isJoint,
+    companionClientId,
+    clientId,
+    durationMinutes,
+    complimentary,
+  ])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const bookingTime = hasGap ? lockedTime : time
+    const bookingTime = time
     if (!clientId || !treatmentId || !date || !bookingTime) {
       setError('Selecciona cliente, tratamiento, fecha y hora')
       return
@@ -438,6 +534,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
           date,
           time: bookingTime,
           durationMinutes: durationMinutes || undefined,
+          complimentary,
         })
       }
       onCreated?.()
@@ -456,7 +553,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
       : treatmentsWithFit.find((t) => t.id === treatmentId)?.fits !== false)
   const canSubmit =
     selectedFits &&
-    (hasGap ? !!lockedTime : !!time) &&
+    !!time &&
     (!isJoint || !!companionClientId) &&
     (isJoint || durationMinutes != null)
 
@@ -479,17 +576,27 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
         </div>
 
         {hasGap && (
-          <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3">
-            <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Hueco libre
-            </p>
-            <p className="text-sm font-medium text-on-surface mt-0.5">
-              {minsToLabel(gapStart)} – {minsToLabel(gapEnd)}
-              <span className="text-on-surface-variant font-normal">
-                {' '}
-                · {formatDurationLabel(gapMinutes)}
-              </span>
-            </p>
+          <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3 space-y-3">
+            <div>
+              <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                Hueco libre
+              </p>
+              <p className="text-sm font-medium text-on-surface mt-0.5">
+                {minsToLabel(gapStart)} – {minsToLabel(gapEnd)}
+                <span className="text-on-surface-variant font-normal">
+                  {' '}
+                  · {formatDurationLabel(gapMinutes)}
+                </span>
+              </p>
+            </div>
+            {time && durationMinutes && (
+              <GapSlotPreview
+                gapStart={gapStart}
+                gapEnd={gapEnd}
+                time={time}
+                durationMinutes={durationMinutes}
+              />
+            )}
           </div>
         )}
 
@@ -598,9 +705,29 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
               Hora
             </span>
             {hasGap ? (
-              <p className="mt-1.5 flex items-center min-h-11 rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3 text-sm font-medium tabular-nums text-on-surface box-border">
-                {lockedTime}
-              </p>
+              loadingSlots ? (
+                <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
+                  Cargando…
+                </p>
+              ) : slots.length === 0 ? (
+                <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
+                  Sin inicios válidos
+                </p>
+              ) : (
+                <select
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
+                >
+                  <option value="">Elige inicio…</option>
+                  {slots.map((s) => (
+                    <option key={s.time} value={s.time}>
+                      {s.time}
+                      {s.outsideHours ? ' · cortesía' : ''}
+                    </option>
+                  ))}
+                </select>
+              )
             ) : loadingSlots ? (
               <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
                 Cargando…
@@ -619,6 +746,7 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                 {slots.map((s) => (
                   <option key={s.time} value={s.time}>
                     {s.time}
+                    {s.outsideHours ? ' · cortesía' : ''}
                     {isJoint && s.companionTime ? ` · ella ${s.companionTime}` : ''}
                   </option>
                 ))}
@@ -626,6 +754,24 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
             )}
           </label>
         </div>
+
+        <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3">
+          <input
+            type="checkbox"
+            checked={complimentary}
+            disabled={isJoint}
+            onChange={(e) => setComplimentary(e.target.checked)}
+            className="mt-0.5 h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary/30 disabled:opacity-40"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-on-surface">Amiga · sin cobro</span>
+            <span className="block text-xs text-on-surface-variant mt-0.5 leading-snug">
+              {isJoint
+                ? 'La cita conjunta no admite cortesía fuera de horario.'
+                : 'Permite horario fuera del público (8–20) y no suma ingresos. Las clientas no pueden reservarlo online.'}
+            </span>
+          </span>
+        </label>
 
         <div>
           <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
@@ -637,7 +783,11 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                 key={t.id}
                 type="button"
                 disabled={!t.fits}
-                onClick={() => t.fits && setTreatmentId(t.id)}
+                onClick={() => {
+                  if (!t.fits) return
+                  setTreatmentId(t.id)
+                  if (t.id === 'perfilado-conjunto') setComplimentary(false)
+                }}
                 className={`w-full text-left rounded-2xl px-3.5 py-3 min-h-11 border transition-colors ${
                   !t.fits
                     ? 'opacity-50 cursor-not-allowed border-outline-variant/25 bg-surface-container-low'
@@ -650,12 +800,16 @@ function CreateBookingModal({ initialDate, initialTime, gapStart, gapEnd, onClos
                   <div className="min-w-0">
                     <p className={`text-sm font-medium ${!t.fits ? 'text-on-surface-variant' : ''}`}>
                       {t.name}
+                      {t.tag ? (
+                        <span className="font-normal text-on-surface-variant"> · {t.tag}</span>
+                      ) : null}
                       {!t.active ? (
                         <span className="text-on-surface-variant font-normal"> · manual</span>
                       ) : null}
                     </p>
                     <p className="text-[11px] text-on-surface-variant mt-0.5">
                       {formatDurationLabel(t.duration)}
+                      {t.price != null ? ` · ${t.price} €` : null}
                       {!t.fits && hasGap
                         ? ` · no cabe en ${formatDurationLabel(gapMinutes)}`
                         : null}
@@ -906,18 +1060,29 @@ function TimedGrid({
                           onSlotClick(day, minsToLabel(gap.start), {
                             gapStart: gap.start,
                             gapEnd: gap.end,
+                            complimentary: Boolean(gap.outsideHours),
                           })
                         }
-                        className="cursor-pointer absolute left-0.5 right-0.5 z-0 rounded-md border border-dashed border-primary/25 bg-primary/[0.04] hover:bg-primary/[0.09] active:bg-primary/12 transition-colors text-left px-1 overflow-hidden"
+                        className={`cursor-pointer absolute left-0.5 right-0.5 z-0 rounded-md border border-dashed transition-colors text-left px-1 overflow-hidden ${
+                          gap.outsideHours
+                            ? 'border-tertiary/35 bg-tertiary/[0.06] hover:bg-tertiary/[0.12] active:bg-tertiary/15'
+                            : 'border-primary/25 bg-primary/[0.04] hover:bg-primary/[0.09] active:bg-primary/12'
+                        }`}
                         style={{ top, height }}
                       >
                         {showLabel && (
                           <span
-                            className={`block text-primary/80 font-medium leading-tight truncate ${
+                            className={`block font-medium leading-tight truncate ${
+                              gap.outsideHours ? 'text-tertiary' : 'text-primary/80'
+                            } ${
                               days.length > 1 ? 'text-[8px] sm:text-[9px]' : 'text-[10px] sm:text-[11px]'
                             }`}
                           >
-                            {days.length === 1 && height >= 36 ? label : ''}
+                            {days.length === 1 && height >= 36
+                              ? gap.outsideHours
+                                ? `Cortesía · ${label}`
+                                : label
+                              : ''}
                           </span>
                         )}
                       </button>
@@ -937,6 +1102,8 @@ function TimedGrid({
                           onEventClick(ev)
                         }}
                         title={`${formatRange(ev)} · ${ev.clientName} · ${ev.treatmentName}${
+                          ev.complimentary ? ' · Cortesía' : ''
+                        }${
                           ev.isJoint && ev.jointPartnerName ? ` · Con ${ev.jointPartnerName}` : ''
                         }${
                           ev.hasIntake
@@ -948,6 +1115,8 @@ function TimedGrid({
                         className={`cursor-pointer absolute z-[2] rounded-md sm:rounded-lg px-1 sm:px-1.5 py-0.5 text-left overflow-hidden border transition-shadow hover:z-[3] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
                           google
                             ? 'bg-surface-container border-outline-variant/40 text-on-surface-variant'
+                            : ev.complimentary
+                              ? 'bg-tertiary-container/90 border-tertiary/35 text-on-surface'
                             : ev.status === 'pending_review'
                               ? 'bg-tertiary-container/80 border-tertiary/30 text-on-surface'
                             : 'bg-primary/90 border-primary/30 text-on-primary'
@@ -1086,7 +1255,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
       ? 'day'
       : 'week'
   )
-  const [anchor, setAnchor] = useState(() => snapToWorkday(new Date()))
+  const [anchor, setAnchor] = useState(() => snapToWorkday(studioTodayDate()))
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1197,6 +1366,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
       time,
       gapStart: gapMeta?.gapStart ?? null,
       gapEnd: gapMeta?.gapEnd ?? null,
+      complimentary: Boolean(gapMeta?.complimentary),
     })
   }
 
@@ -1231,7 +1401,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
           </button>
           <button
             type="button"
-            onClick={() => setAnchor(snapToWorkday(new Date()))}
+            onClick={() => setAnchor(snapToWorkday(studioTodayDate()))}
             className="cursor-pointer text-[11px] font-semibold text-primary px-2 py-1.5 min-h-10 rounded-lg hover:bg-primary/10 shrink-0"
           >
             Hoy
@@ -1271,7 +1441,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
 
       <p className="hidden sm:flex shrink-0 text-xs text-on-surface-variant items-center gap-1.5 px-0">
         <Icon name="lock" className="text-sm" />
-        Google: solo lectura. Toca un hueco libre (línea discontinua) para crear. 14–15 cerrado.
+        Vista 8:00–20:00. Reservas públicas 10–14 / 15–18 (vie. hasta 17). Huecos fuera de horario = cortesía (amiga · sin cobro).
       </p>
 
       {error && (
@@ -1286,7 +1456,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
           <div className="grid grid-cols-5 divide-x divide-outline-variant/15">
             {weekDays.map((day) => {
               const selected = isSameDay(day, anchor)
-              const today = isToday(day)
+              const today = isSameDay(day, studioTodayDate())
               const count = events.filter((ev) => isSameDay(new Date(ev.startTime), day)).length
               return (
                 <button
@@ -1370,6 +1540,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
           initialTime={createModal.time}
           gapStart={createModal.gapStart}
           gapEnd={createModal.gapEnd}
+          initialComplimentary={Boolean(createModal.complimentary)}
           onClose={() => setCreateModal(null)}
           onCreated={load}
         />

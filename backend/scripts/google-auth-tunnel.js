@@ -13,7 +13,7 @@
 require('dotenv').config();
 const { spawn } = require('child_process');
 const readline = require('readline');
-const { startGoogleAuth, DEFAULT_PORT } = require('./google-auth');
+const { startGoogleAuth, persistRefreshToken, DEFAULT_PORT } = require('./google-auth');
 
 const TUNNEL_TARGET = `http://localhost:${process.env.GOOGLE_OAUTH_PORT || DEFAULT_PORT}`;
 
@@ -90,10 +90,16 @@ async function main() {
   try {
     const result = await startGoogleAuth({ redirectUri });
 
+    const saved = await persistRefreshToken(result.refreshToken);
+
     console.log('=== SUCCESS ===\n');
-    console.log('Add this to your .env file:\n');
-    console.log(`GOOGLE_REFRESH_TOKEN=${result.refreshToken}`);
-    console.log('\nGOOGLE_CALENDAR_ID=primary');
+    console.log(`Token lifetime: ${result.lifetime.label}\n`);
+    if (result.lifetime.days) {
+      console.log('WARNING: This token will expire. Publish the OAuth app, then authorize again.\n');
+    }
+    if (saved.savedToEnv) console.log('Saved to backend/.env');
+    if (saved.savedToDb) console.log('Saved to studio_settings (database)');
+    console.log('\nAlso copy GOOGLE_REFRESH_TOKEN to Render → nere-studio → Environment');
     console.log('\n===============\n');
   } catch (err) {
     console.error('Authorization failed:', err.message);
