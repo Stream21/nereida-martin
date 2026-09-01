@@ -329,7 +329,7 @@ router.patch('/bookings/:id', async (req, res) => {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: 'ID no válido' });
     }
-    const { date, time, startTime, treatmentId, durationMinutes } = req.body || {};
+    const { date, time, startTime, treatmentId, durationMinutes, complimentary } = req.body || {};
     const ownerBooking = require('../services/ownerBookingService');
     const result = await ownerBooking.updateOwnerBooking(id, {
       date,
@@ -337,6 +337,7 @@ router.patch('/bookings/:id', async (req, res) => {
       startTime,
       treatmentId,
       durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
+      complimentary: complimentary !== undefined ? Boolean(complimentary) : undefined,
     });
     if (result.error) {
       return res.status(result.status || 400).json({

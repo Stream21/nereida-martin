@@ -181,10 +181,17 @@ export function createOwnerBooking({
   })
 }
 
-export function updateOwnerBooking(bookingId, { date, time, startTime, treatmentId, durationMinutes }) {
+export function updateOwnerBooking(bookingId, { date, time, startTime, treatmentId, durationMinutes, complimentary }) {
   return ownerFetch(`/bookings/${bookingId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ date, time, startTime, treatmentId, durationMinutes }),
+    body: JSON.stringify({
+      date,
+      time,
+      startTime,
+      treatmentId,
+      durationMinutes,
+      complimentary,
+    }),
   })
 }
 

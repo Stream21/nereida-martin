@@ -159,12 +159,29 @@ export default function BookingDetailContent({
   }
 
 
+  const handleComplimentaryToggle = async (nextValue) => {
+    if (!Number.isFinite(numericId) || actionLoading || booking?.isJoint) return
+    setActionError('')
+    setActionLoading('complimentary')
+    try {
+      const res = await updateOwnerBooking(numericId, { complimentary: nextValue })
+      if (res.booking) setFetched(res.booking)
+      onUpdated?.(res.booking || { ...booking, complimentary: nextValue })
+    } catch (err) {
+      setActionError(err.message || 'No se pudo actualizar la cita')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
   const canManage =
     !google &&
     booking?.status !== 'cancelled' &&
     (!booking?.source || booking.source === 'web' || booking.source === 'owner') &&
     Number.isFinite(numericId) &&
     !String(bookingId || '').startsWith('gcal:')
+
+  const canMarkComplimentary = canManage && !booking?.isJoint
 
   const openEdit = () => {
     if (!booking?.startTime) return
@@ -585,13 +602,33 @@ export default function BookingDetailContent({
               </div>
             )}
 
-            {booking?.complimentary && (
+            {booking?.complimentary && !canMarkComplimentary && (
               <div className="rounded-2xl border border-tertiary/25 bg-tertiary-container/40 px-4 py-3">
-                <p className="text-sm font-medium text-on-surface">Cita de cortesía · sin cobro</p>
+                <p className="text-sm font-medium text-on-surface">Cita de amiga (sin cobro)</p>
                 <p className="text-xs text-on-surface-variant mt-0.5">
-                  Amiga / fuera de horario público. No cuenta en ingresos.
+                  No suma a tus ingresos ni a las estadísticas del estudio.
                 </p>
               </div>
+            )}
+
+            {canMarkComplimentary && (
+              <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={Boolean(booking?.complimentary)}
+                  disabled={actionLoading === 'complimentary'}
+                  onChange={(e) => handleComplimentaryToggle(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary/30 disabled:opacity-40"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-on-surface">Cita de amiga (sin cobro)</span>
+                  <span className="block text-xs text-on-surface-variant mt-0.5 leading-snug">
+                    {booking?.source === 'web'
+                      ? 'La clienta reservó online, pero puedes marcarla como cita de amiga. No contará en facturación.'
+                      : 'Marca si es una amiga o un regalo. No sumará a tus ingresos.'}
+                  </span>
+                </span>
+              </label>
             )}
 
             <div className="rounded-2xl bg-surface-container-low border border-outline-variant/25 px-4 py-3.5 space-y-3">

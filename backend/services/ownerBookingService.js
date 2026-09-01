@@ -31,6 +31,65 @@ function hasRealClientEmail(email) {
   return Boolean(email) && email !== 'imported@studio.local';
 }
 
+async function syncOwnerBookingGoogleCalendar(booking, {
+  treatmentName,
+  treatmentTag,
+  complimentary,
+  startTime,
+  endTime,
+}) {
+  if (!booking.google_event_id) return;
+  try {
+    const googleCalendar = require('./googleCalendar');
+    const pendingReview = booking.status === 'pending_review';
+    const summary = buildBookingSummary({
+      treatmentName: treatmentName || booking.treatment_name || 'Cita',
+      clientName: booking.client_name,
+      visitContext: booking.visit_context,
+      pendingReview,
+      complimentary: Boolean(complimentary),
+    });
+    const description = buildBookingDescription({
+      treatmentName: treatmentName || booking.treatment_name || 'Cita',
+      treatmentTag: treatmentTag || booking.treatment_tag || '',
+      clientName: booking.client_name,
+      clientEmail: booking.client_email,
+      clientPhone: booking.client_phone,
+      bookingId: booking.id,
+      visitContext: booking.visit_context,
+      pendingReview,
+      complimentary: Boolean(complimentary),
+    });
+    const colorId = getEventColorId({
+      visitContext: booking.visit_context,
+      pendingReview,
+      complimentary: Boolean(complimentary),
+    });
+    const startIso = new Date(startTime || booking.start_time).toISOString();
+    const endIso = new Date(endTime || booking.end_time).toISOString();
+    const event = await googleCalendar.updateEvent(booking.google_event_id, {
+      summary,
+      description,
+      startTime: startIso,
+      endTime: endIso,
+      clientEmail: booking.client_email,
+      isWebBooking: true,
+      bookingId: booking.id,
+      colorId,
+    });
+    await query(
+      `UPDATE bookings SET google_etag = $1, google_updated_at = $2 WHERE id = $3`,
+      [
+        event.etag || null,
+        event.updated ? new Date(event.updated).toISOString() : null,
+        booking.id,
+      ]
+    );
+  } catch (err) {
+    console.warn('Owner booking Google update failed:', err.message);
+  }
+}
+
 /**
  * Create a confirmed booking for an existing client from the owner panel.
  * Allows inactive micropigmentation treatment.
@@ -560,7 +619,7 @@ async function createOwnerJointBooking({
 }
 
 
-async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentId, durationMinutes } = {}) {
+async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentId, durationMinutes, complimentary } = {}) {
   const bookingRes = await query(
     `SELECT b.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone,
             t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min, t.duration_max
@@ -588,6 +647,32 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
   }
   if (!isAppManagedSource(booking.source)) {
     return { error: 'Solo se pueden modificar citas creadas con la aplicación', status: 403 };
+  }
+
+  const complimentaryProvided = complimentary !== undefined;
+  const scheduleChange =
+    date != null || time != null || startTime != null || treatmentId != null || durationMinutes != null;
+
+  if (complimentaryProvided && !scheduleChange) {
+    if (booking.joint_group_id) {
+      return {
+        error: 'En citas conjuntas no se puede marcar como amiga · sin cobro.',
+        code: 'JOINT_LOCKED',
+        status: 400,
+      };
+    }
+    const newComplimentary = Boolean(complimentary);
+    await query(
+      `UPDATE bookings SET complimentary = $1, last_sync_source = 'owner', updated_at = NOW()
+       WHERE id = $2`,
+      [newComplimentary, booking.id]
+    );
+    await syncOwnerBookingGoogleCalendar(booking, {
+      complimentary: newComplimentary,
+    });
+    const dashboard = require('./ownerDashboardService');
+    const updated = await dashboard.getBookingDetail(booking.id);
+    return { booking: updated };
   }
 
   const isJoint = Boolean(booking.joint_group_id);
@@ -785,45 +870,22 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
 
   await query(
     `UPDATE bookings SET start_time = $1, end_time = $2, treatment_id = $3,
-     last_sync_source = 'owner', updated_at = NOW()
+     last_sync_source = 'owner', updated_at = NOW()${complimentaryProvided ? ', complimentary = $5' : ''}
      WHERE id = $4`,
-    [start.toISOString(), end.toISOString(), newTreatmentId, booking.id]
+  complimentaryProvided
+    ? [start.toISOString(), end.toISOString(), newTreatmentId, booking.id, Boolean(complimentary)]
+    : [start.toISOString(), end.toISOString(), newTreatmentId, booking.id]
   );
 
-  if (booking.google_event_id) {
-    try {
-      const googleCalendar = require('./googleCalendar');
-      const event = await googleCalendar.updateEvent(booking.google_event_id, {
-        summary: buildBookingSummary({
-          treatmentName: treatmentName || 'Cita',
-          clientName: booking.client_name,
-        }),
-        description: buildBookingDescription({
-          treatmentName: treatmentName || 'Cita',
-          treatmentTag: treatmentTag || '',
-          clientName: booking.client_name,
-          clientEmail: booking.client_email,
-          clientPhone: booking.client_phone,
-          bookingId: booking.id,
-        }),
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
-        clientEmail: booking.client_email,
-        isWebBooking: true,
-        bookingId: booking.id,
-      });
-      await query(
-        `UPDATE bookings SET google_etag = $1, google_updated_at = $2 WHERE id = $3`,
-        [
-          event.etag || null,
-          event.updated ? new Date(event.updated).toISOString() : null,
-          booking.id,
-        ]
-      );
-    } catch (err) {
-      console.warn('Owner booking Google update failed:', err.message);
-    }
-  }
+  const nextComplimentary = complimentaryProvided ? Boolean(complimentary) : Boolean(booking.complimentary);
+
+  await syncOwnerBookingGoogleCalendar(booking, {
+    treatmentName,
+    treatmentTag,
+    complimentary: nextComplimentary,
+    startTime: start,
+    endTime: end,
+  });
 
   if (hasRealClientEmail(booking.client_email)) {
     try {

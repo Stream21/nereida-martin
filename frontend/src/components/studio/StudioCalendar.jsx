@@ -331,7 +331,7 @@ function GapSlotPreview({ gapStart, gapEnd, time, durationMinutes }) {
       </div>
       {(warnBefore || warnAfter) && (
         <p className="text-xs text-amber-900 bg-amber-50 rounded-xl px-3 py-2 border border-amber-100">
-          Quedará un hueco menor de 15 min
+          Quedará un espacio muy corto
           {warnBefore && warnAfter ? ' antes y después' : warnBefore ? ' antes' : ' después'} de la cita.
         </p>
       )}
@@ -355,7 +355,8 @@ function CreateBookingModal({
   const [treatmentId, setTreatmentId] = useState('')
   const [date, setDate] = useState(initialDate ? format(initialDate, 'yyyy-MM-dd') : '')
   const [slots, setSlots] = useState([])
-  const [time, setTime] = useState(initialTime || (gapStart != null ? minsToLabel(gapStart) : ''))
+  const [time, setTime] = useState('')
+  const gapTimeHintRef = useRef(initialTime || null)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -392,23 +393,9 @@ function CreateBookingModal({
 
   useEffect(() => {
     fetchOwnerTreatments()
-      .then((res) => {
-        const list = res.treatments || []
-        setTreatments(list)
-        const sorted = [...list]
-          .map((t) => ({
-            ...t,
-            fits: !hasGap || treatmentDurationMin(t) <= gapMinutes,
-          }))
-          .sort((a, b) => {
-            if (a.fits !== b.fits) return a.fits ? -1 : 1
-            return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
-          })
-        const preferred = sorted.find((t) => t.fits)
-        if (preferred) setTreatmentId(preferred.id)
-      })
+      .then((res) => setTreatments(res.treatments || []))
       .catch((err) => setError(err.message))
-  }, [hasGap, gapMinutes])
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -451,10 +438,17 @@ function CreateBookingModal({
     const maxAllowed = hasGap ? gapMinutes : null
     const next = maxAllowed != null ? Math.min(def, maxAllowed) : def
     setDurationMinutes(Math.max(15, Math.floor(next / 15) * 15))
-  }, [treatmentId, treatments, isJoint, hasGap, gapMinutes])
+    setTime('')
+    gapTimeHintRef.current = initialTime || null
+  }, [treatmentId, treatments, isJoint, hasGap, gapMinutes, initialTime])
 
   useEffect(() => {
-    if (!date || !treatmentId) {
+    setTime('')
+    gapTimeHintRef.current = initialTime || null
+  }, [clientId, complimentary, date, initialTime])
+
+  useEffect(() => {
+    if (!clientId || !date || !treatmentId) {
       setSlots([])
       return
     }
@@ -501,12 +495,10 @@ function CreateBookingModal({
         if (res.companionTreatmentName) {
           setCompanionTreatmentName(res.companionTreatmentName)
         }
-        if (initialTime && available.some((s) => s.time === initialTime)) {
-          setTime(initialTime)
-        } else if (available.length === 1) {
-          setTime(available[0].time)
-        } else if (time && !available.some((s) => s.time === time)) {
-          setTime(available[0]?.time || '')
+        const hint = gapTimeHintRef.current
+        if (hint && available.some((s) => s.time === hint)) {
+          setTime(hint)
+          gapTimeHintRef.current = null
         }
       })
       .catch((err) => {
@@ -518,11 +510,9 @@ function CreateBookingModal({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when date/treatment/gap/joint/cortesía change
   }, [
     date,
     treatmentId,
-    initialTime,
     hasGap,
     gapStart,
     gapEnd,
@@ -537,11 +527,11 @@ function CreateBookingModal({
     e.preventDefault()
     const bookingTime = time
     if (!clientId || !treatmentId || !date || !bookingTime) {
-      setError('Selecciona cliente, tratamiento, fecha y hora')
+      setError('Completa clienta, tratamiento, fecha y hora')
       return
     }
     if (isJoint && !companionClientId) {
-      setError('Selecciona la acompañante')
+      setError('Elige la segunda clienta')
       return
     }
     setSubmitting(true)
@@ -580,10 +570,16 @@ function CreateBookingModal({
       ? durationMinutes <= gapMinutes
       : treatmentsWithFit.find((t) => t.id === treatmentId)?.fits !== false)
   const canSubmit =
+    !!clientId &&
     selectedFits &&
     !!time &&
     (!isJoint || !!companionClientId) &&
     (isJoint || durationMinutes != null)
+  const scheduleReady = Boolean(
+    clientId &&
+      treatmentId &&
+      (isJoint ? companionClientId : durationMinutes != null)
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
@@ -607,7 +603,7 @@ function CreateBookingModal({
           <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3 space-y-3">
             <div>
               <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-                Hueco libre
+                Hueco disponible
               </p>
               <p className="text-sm font-medium text-on-surface mt-0.5">
                 {minsToLabel(gapStart)} – {minsToLabel(gapEnd)}
@@ -630,19 +626,19 @@ function CreateBookingModal({
 
         <label className="block">
           <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-            Cliente
+            Clienta
           </span>
           <input
             type="search"
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
-            placeholder="Buscar clienta activa…"
+            placeholder="Buscar por nombre…"
             className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-4 py-3 text-sm outline-none focus:border-primary"
           />
           <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
             {clients.length === 0 ? (
               <p className="text-xs text-on-surface-variant px-1 py-2">
-                Solo aparecen clientas con cuenta activa. Invítala o actívala en Clientes.
+                Solo aparecen clientas con cuenta activa. Puedes invitarla o activarla en Clientes.
               </p>
             ) : (
               clients.map((c) => (
@@ -652,6 +648,8 @@ function CreateBookingModal({
                 onClick={() => {
                   setClientId(c.id)
                   setClientSearch(c.name)
+                  setTreatmentId('')
+                  setTime('')
                 }}
                 className={`cursor-pointer w-full text-left rounded-xl px-3 py-2.5 text-sm min-h-11 ${
                   clientId === c.id ? 'bg-primary/12 text-primary font-medium' : 'hover:bg-surface-container-low'
@@ -665,25 +663,125 @@ function CreateBookingModal({
           </div>
         </label>
 
+        {clientId ? (
+          <div>
+            <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+              Tratamiento
+            </span>
+            <div className="mt-2 space-y-1.5 max-h-52 overflow-y-auto">
+              {treatmentsWithFit.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={!t.fits}
+                  onClick={() => {
+                    if (!t.fits) return
+                    setTreatmentId(t.id)
+                    if (t.id === 'perfilado-conjunto') setComplimentary(false)
+                  }}
+                  className={`w-full text-left rounded-2xl px-3.5 py-3 min-h-11 border transition-colors ${
+                    !t.fits
+                      ? 'opacity-50 cursor-not-allowed border-outline-variant/25 bg-surface-container-low'
+                      : treatmentId === t.id
+                        ? 'cursor-pointer border-primary/40 bg-primary/10 text-on-surface'
+                        : 'cursor-pointer border-outline-variant/30 hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium ${!t.fits ? 'text-on-surface-variant' : ''}`}>
+                        {t.name}
+                        {t.tag ? (
+                          <span className="font-normal text-on-surface-variant"> · {t.tag}</span>
+                        ) : null}
+                        {!t.active ? (
+                          <span className="text-on-surface-variant font-normal"> · manual</span>
+                        ) : null}
+                      </p>
+                      <p className="text-[11px] text-on-surface-variant mt-0.5">
+                        {formatDurationLabel(t.duration)}
+                        {t.price != null ? ` · ${t.price} €` : null}
+                        {!t.fits && hasGap
+                          ? ` · no cabe en este hueco`
+                          : null}
+                      </p>
+                    </div>
+                    {treatmentId === t.id && t.fits && (
+                      <Icon name="check" className="text-primary text-lg shrink-0" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-on-surface-variant rounded-2xl bg-surface-container-low px-4 py-3">
+            Elige primero la clienta para ver los tratamientos.
+          </p>
+        )}
+
+        {!isJoint && treatmentId && durationMinutes != null && (
+          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+              Tiempo de la cita
+            </p>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDurationMinutes((d) => Math.max(15, (d || 15) - 15))
+                  setTime('')
+                }}
+                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium"
+                aria-label="Reducir 15 minutos"
+              >
+                −
+              </button>
+              <p className="text-sm font-medium text-on-surface tabular-nums">
+                {formatDurationLabel(durationMinutes)}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDurationMinutes((d) => {
+                    const next = (d || 15) + 15
+                    if (hasGap && next > gapMinutes) return d
+                    return next
+                  })
+                  setTime('')
+                }}
+                disabled={hasGap && durationMinutes + 15 > gapMinutes}
+                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium disabled:opacity-40"
+                aria-label="Aumentar 15 minutos"
+              >
+                +
+              </button>
+            </div>
+            <p className="text-[11px] text-on-surface-variant mt-2">
+              Por defecto, el tiempo del tratamiento. Ajústalo en bloques de 15 minutos si lo necesitas.
+            </p>
+          </div>
+        )}
+
         {jointEligible && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
             <p className="text-xs font-label font-bold tracking-widest uppercase text-primary mb-2">
-              Perfilado Conjunto — selecciona acompañante
+              Perfilado conjunto — acompañante
             </p>
             <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Acompañante
+              Segunda clienta
             </span>
             <input
               type="search"
               value={companionSearch}
               onChange={(e) => setCompanionSearch(e.target.value)}
-              placeholder="Buscar acompañante activa…"
+              placeholder="Buscar por nombre…"
               className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-4 py-3 text-sm outline-none focus:border-primary"
             />
             <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
               {companionClients.length === 0 ? (
                 <p className="text-xs text-on-surface-variant px-1 py-2">
-                  Elige otra clienta activa distinta de la principal.
+                  Debe ser otra clienta activa, distinta de la principal.
                 </p>
               ) : (
                 companionClients.map((c) => (
@@ -714,32 +812,72 @@ function CreateBookingModal({
           </div>
         )}
 
-        {/* Fecha + hora: apilados en móvil (evita solapamiento de inputs nativos) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block min-w-0">
-            <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Fecha
-            </span>
+        {scheduleReady && !isJoint && (
+          <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3">
             <input
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
+              type="checkbox"
+              checked={complimentary}
+              onChange={(e) => setComplimentary(e.target.checked)}
+              className="mt-0.5 h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary/30"
             />
-          </label>
-          <label className="block min-w-0">
-            <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Hora
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-on-surface">Cita de amiga (sin cobro)</span>
+              <span className="block text-xs text-on-surface-variant mt-0.5 leading-snug">
+                No sumará a tus ingresos. Válida dentro o fuera del horario de reservas online.
+              </span>
             </span>
-            {hasGap ? (
-              loadingSlots ? (
+          </label>
+        )}
+
+        {scheduleReady ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block min-w-0">
+              <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                Fecha y hora
+              </span>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+                Hora de inicio
+              </span>
+              {hasGap ? (
+                loadingSlots ? (
+                  <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
+                    Cargando…
+                  </p>
+                ) : slots.length === 0 ? (
+                  <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
+                    No hay inicios válidos con este tiempo
+                  </p>
+                ) : (
+                  <select
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
+                  >
+                    <option value="">Selecciona hora…</option>
+                    {slots.map((s) => (
+                      <option key={s.time} value={s.time}>
+                        {s.time}
+                        {s.outsideHours ? ' · fuera de horario' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )
+              ) : loadingSlots ? (
                 <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
                   Cargando…
                 </p>
               ) : slots.length === 0 ? (
                 <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
-                  Sin inicios válidos
+                  No hay huecos con este tiempo
                 </p>
               ) : (
                 <select
@@ -747,156 +885,27 @@ function CreateBookingModal({
                   onChange={(e) => setTime(e.target.value)}
                   className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
                 >
-                  <option value="">Elige inicio…</option>
+                  <option value="">Selecciona hora…</option>
                   {slots.map((s) => (
                     <option key={s.time} value={s.time}>
                       {s.time}
-                      {s.outsideHours ? ' · cortesía' : ''}
+                      {s.outsideHours ? ' · fuera de horario' : ''}
+                      {isJoint && s.companionTime ? ` · acompañante ${s.companionTime}` : ''}
                     </option>
                   ))}
                 </select>
-              )
-            ) : loadingSlots ? (
-              <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
-                Cargando…
-              </p>
-            ) : slots.length === 0 ? (
-              <p className="mt-1.5 text-sm text-on-surface-variant min-h-11 flex items-center">
-                Sin huecos
-              </p>
-            ) : (
-              <select
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="mt-1.5 w-full max-w-full rounded-2xl border border-outline-variant/40 bg-background px-3 py-3 text-sm outline-none focus:border-primary min-h-11 box-border"
-              >
-                <option value="">Elige…</option>
-                {slots.map((s) => (
-                  <option key={s.time} value={s.time}>
-                    {s.time}
-                    {s.outsideHours ? ' · cortesía' : ''}
-                    {isJoint && s.companionTime ? ` · ella ${s.companionTime}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-        </div>
-
-        <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3">
-          <input
-            type="checkbox"
-            checked={complimentary}
-            disabled={isJoint}
-            onChange={(e) => setComplimentary(e.target.checked)}
-            className="mt-0.5 h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary/30 disabled:opacity-40"
-          />
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-on-surface">Amiga · sin cobro</span>
-            <span className="block text-xs text-on-surface-variant mt-0.5 leading-snug">
-              {isJoint
-                ? 'La cita conjunta no admite cortesía fuera de horario.'
-                : 'Permite horario fuera del público (8–20) y no suma ingresos. Las clientas no pueden reservarlo online.'}
-            </span>
-          </span>
-        </label>
-
-        <div>
-          <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-            Tratamiento
-          </span>
-          <div className="mt-2 space-y-1.5 max-h-52 overflow-y-auto">
-            {treatmentsWithFit.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                disabled={!t.fits}
-                onClick={() => {
-                  if (!t.fits) return
-                  setTreatmentId(t.id)
-                  if (t.id === 'perfilado-conjunto') setComplimentary(false)
-                }}
-                className={`w-full text-left rounded-2xl px-3.5 py-3 min-h-11 border transition-colors ${
-                  !t.fits
-                    ? 'opacity-50 cursor-not-allowed border-outline-variant/25 bg-surface-container-low'
-                    : treatmentId === t.id
-                      ? 'cursor-pointer border-primary/40 bg-primary/10 text-on-surface'
-                      : 'cursor-pointer border-outline-variant/30 hover:bg-surface-container-low'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className={`text-sm font-medium ${!t.fits ? 'text-on-surface-variant' : ''}`}>
-                      {t.name}
-                      {t.tag ? (
-                        <span className="font-normal text-on-surface-variant"> · {t.tag}</span>
-                      ) : null}
-                      {!t.active ? (
-                        <span className="text-on-surface-variant font-normal"> · manual</span>
-                      ) : null}
-                    </p>
-                    <p className="text-[11px] text-on-surface-variant mt-0.5">
-                      {formatDurationLabel(t.duration)}
-                      {t.price != null ? ` · ${t.price} €` : null}
-                      {!t.fits && hasGap
-                        ? ` · no cabe en ${formatDurationLabel(gapMinutes)}`
-                        : null}
-                    </p>
-                  </div>
-                  {treatmentId === t.id && t.fits && (
-                    <Icon name="check" className="text-primary text-lg shrink-0" />
-                  )}
-                </div>
-              </button>
-            ))}
+              )}
+            </label>
           </div>
-        </div>
-
-        
-        {!isJoint && treatmentId && durationMinutes != null && (
-          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
-            <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Duración
-            </p>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  setDurationMinutes((d) => Math.max(15, (d || 15) - 15))
-                }
-                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium"
-                aria-label="Reducir 15 minutos"
-              >
-                −
-              </button>
-              <p className="text-sm font-medium text-on-surface tabular-nums">
-                {formatDurationLabel(durationMinutes)}
-              </p>
-              <button
-                type="button"
-                onClick={() =>
-                  setDurationMinutes((d) => {
-                    const next = (d || 15) + 15
-                    if (hasGap && next > gapMinutes) return d
-                    return next
-                  })
-                }
-                disabled={hasGap && durationMinutes + 15 > gapMinutes}
-                className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-on-surface text-lg font-medium disabled:opacity-40"
-                aria-label="Aumentar 15 minutos"
-              >
-                +
-              </button>
-            </div>
-            <p className="text-[11px] text-on-surface-variant mt-2">
-              Por defecto la del tratamiento. Puedes ajustarla en pasos de 15 min.
-            </p>
-          </div>
-        )}
+        ) : clientId && treatmentId ? (
+          <p className="text-xs text-on-surface-variant rounded-2xl bg-surface-container-low px-4 py-3">
+            Indica el tiempo de la cita para ver los huecos disponibles.
+          </p>
+        ) : null}
 
         {isJoint && (
           <p className="text-xs text-on-surface-variant rounded-2xl bg-primary/5 border border-primary/15 px-4 py-3">
-            Se confirman las dos citas al momento; no hace falta que la acompañante acepte un enlace.
+            Se reservan las dos citas a la vez. La acompañante no tiene que confirmar nada.
           </p>
         )}
 
@@ -1120,7 +1129,7 @@ function TimedGrid({
                               ? past
                                 ? `Pasado · ${label}`
                                 : gap.outsideHours
-                                  ? `Cortesía · ${label}`
+                                ? `Amiga · ${label}`
                                   : label
                               : ''}
                           </span>
@@ -1142,7 +1151,7 @@ function TimedGrid({
                           onEventClick(ev)
                         }}
                         title={`${formatRange(ev)} · ${ev.clientName} · ${ev.treatmentName}${
-                          ev.complimentary ? ' · Cortesía' : ''
+                          ev.complimentary ? ' · Amiga' : ''
                         }${
                           ev.isJoint && ev.jointPartnerName ? ` · Con ${ev.jointPartnerName}` : ''
                         }${
@@ -1481,7 +1490,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
 
       <p className="hidden sm:flex shrink-0 text-xs text-on-surface-variant items-center gap-1.5 px-0">
         <Icon name="lock" className="text-sm" />
-        Vista 8:00–20:00. Reservas públicas 10–14 / 15–18 (vie. hasta 17). Huecos fuera de horario = cortesía (amiga · sin cobro).
+        Vista 8:00–20:00. Reservas online 10–14 y 15–18 (viernes hasta 17:00). Fuera de ese horario, marca la cita como amiga sin cobro.
       </p>
 
       {error && (
