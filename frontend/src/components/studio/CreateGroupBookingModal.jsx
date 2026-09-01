@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
 import {
   fetchClients,
@@ -24,37 +25,71 @@ function formatDurationLabel(minutes) {
   return `${minutes} min`
 }
 
-function emptyClientSlot() {
-  return {
-    search: '',
-    clientId: null,
-    clientName: '',
-    clientPhone: '',
-    results: [],
-    loading: false,
-    focused: false,
-  }
-}
+function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
+  const [search, setSearch] = useState('')
+  const [focused, setFocused] = useState(false)
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
 
-function ClientSlotPicker({ index, slot, onChange, onPick }) {
-  const showDropdown = slot.focused && !slot.clientId && slot.search.trim().length >= 2
+  const excludeKey = excludeIds.map(String).join(',')
+
+  useEffect(() => {
+    if (selection?.clientId) return undefined
+
+    const query = search.trim()
+    if (!focused || query.length < 2) {
+      setResults([])
+      setLoading(false)
+      return undefined
+    }
+
+    const requestId = ++requestIdRef.current
+
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      fetchClients({ search: query, page: 1, limit: 12, status: 'active' })
+        .then((res) => {
+          if (requestId !== requestIdRef.current) return
+          const taken = new Set(excludeKey ? excludeKey.split(',').filter(Boolean) : [])
+          setResults((res.clients || []).filter((c) => !taken.has(String(c.id))))
+          setLoading(false)
+        })
+        .catch(() => {
+          if (requestId !== requestIdRef.current) return
+          setResults([])
+          setLoading(false)
+        })
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [search, focused, selection?.clientId, excludeKey])
+
+  const showDropdown = focused && !selection?.clientId && search.trim().length >= 2
 
   return (
     <div className="rounded-2xl border border-outline-variant/30 bg-background px-3 py-3">
       <p className="text-[11px] font-medium text-on-surface-variant mb-1.5">
         Clienta {index + 1}
       </p>
-      {slot.clientId ? (
+      {selection?.clientId ? (
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-on-surface">{slot.clientName}</p>
-            {slot.clientPhone ? (
-              <p className="text-xs text-on-surface-variant mt-0.5">{slot.clientPhone}</p>
+            <p className="text-sm font-medium text-on-surface">{selection.clientName}</p>
+            {selection.clientPhone ? (
+              <p className="text-xs text-on-surface-variant mt-0.5">{selection.clientPhone}</p>
             ) : null}
           </div>
           <button
             type="button"
-            onClick={() => onChange(index, emptyClientSlot())}
+            onClick={() => {
+              setSearch('')
+              setResults([])
+              setFocused(false)
+              onClear()
+            }}
             className="cursor-pointer text-xs text-primary font-medium min-h-9 px-2 shrink-0"
           >
             Cambiar
@@ -64,42 +99,39 @@ function ClientSlotPicker({ index, slot, onChange, onPick }) {
         <div className="relative">
           <input
             type="search"
-            value={slot.search}
-            onChange={(e) => {
-              const value = e.target.value
-              onChange(index, {
-                ...slot,
-                search: value,
-                focused: true,
-                results: value.trim().length < 2 ? [] : slot.results,
-              })
-            }}
-            onFocus={() => onChange(index, { ...slot, focused: true })}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setFocused(true)}
             onBlur={() => {
-              window.setTimeout(() => {
-                onChange(index, { ...slot, focused: false })
-              }, 150)
+              window.setTimeout(() => setFocused(false), 160)
             }}
             placeholder="Nombre o teléfono (mín. 2 caracteres)…"
             autoComplete="off"
             className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-2.5 text-sm min-h-11"
           />
-          {slot.loading && (
+          {loading && (
             <p className="text-[11px] text-on-surface-variant mt-1.5 px-0.5">Buscando…</p>
           )}
-          {showDropdown && !slot.loading && slot.results.length === 0 && (
+          {showDropdown && !loading && results.length === 0 && (
             <p className="text-[11px] text-on-surface-variant mt-1.5 px-0.5">
-              No hay clientas activas con ese criterio.
+              {excludeKey
+                ? 'No hay más clientas con ese criterio (puede que ya esté en el grupo).'
+                : 'No hay clientas activas con ese criterio.'}
             </p>
           )}
-          {showDropdown && slot.results.length > 0 && (
+          {showDropdown && results.length > 0 && (
             <div className="absolute left-0 right-0 z-10 mt-1 max-h-36 overflow-y-auto rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0_8px_24px_rgba(67,61,60,0.12)]">
-              {slot.results.map((c) => (
+              {results.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onPick(index, c)}
+                  onClick={() => {
+                    setSearch('')
+                    setResults([])
+                    setFocused(false)
+                    onPick(c)
+                  }}
                   className="cursor-pointer w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container-low min-h-11 border-b border-outline-variant/15 last:border-b-0"
                 >
                   <span className="font-medium text-on-surface">{c.name}</span>
@@ -116,14 +148,23 @@ function ClientSlotPicker({ index, slot, onChange, onPick }) {
   )
 }
 
-export default function CreateGroupBookingModal({ initialDate, onClose, onCreated }) {
+export default function CreateGroupBookingModal({
+  initialDate,
+  initialTime,
+  gapStart,
+  gapEnd,
+  initialComplimentary = false,
+  onClose,
+  onCreated,
+}) {
   const [participantCount, setParticipantCount] = useState(GROUP_BOOKING_MIN)
-  const [clientSlots, setClientSlots] = useState(() =>
-    Array.from({ length: GROUP_BOOKING_MIN }, emptyClientSlot)
+  const [selections, setSelections] = useState(() =>
+    Array.from({ length: GROUP_BOOKING_MIN }, () => null)
   )
   const [durationMinutes, setDurationMinutes] = useState(GROUP_DEFAULT_PERSON_MINUTES)
   const [date, setDate] = useState(initialDate ? format(initialDate, 'yyyy-MM-dd') : '')
   const [time, setTime] = useState('')
+  const gapTimeHintRef = useRef(initialTime || null)
   const [slots, setSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [pricePreview, setPricePreview] = useState(null)
@@ -131,9 +172,12 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const gapMinutes = gapStart != null && gapEnd != null ? gapEnd - gapStart : null
+  const hasGap = gapMinutes != null && gapMinutes > 0
+
   const selectedClientIds = useMemo(
-    () => clientSlots.map((s) => s.clientId).filter((id) => id != null),
-    [clientSlots]
+    () => selections.map((s) => s?.clientId).filter((id) => id != null),
+    [selections]
   )
   const allClientsSelected =
     selectedClientIds.length === participantCount &&
@@ -141,75 +185,16 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
   const totalMinutes = durationMinutes * participantCount
   const scheduleReady = allClientsSelected && durationMinutes > 0
   const canSubmit = scheduleReady && date && time && !submitting
-
-  const updateSlot = useCallback((index, nextSlot) => {
-    setClientSlots((prev) => {
-      const next = [...prev]
-      next[index] = nextSlot
-      return next
-    })
-  }, [])
-
-  const pickClient = useCallback((index, client) => {
-    setClientSlots((prev) => {
-      const next = [...prev]
-      next[index] = {
-        ...emptyClientSlot(),
-        clientId: client.id,
-        clientName: client.name,
-        clientPhone: client.phone || '',
-      }
-      return next
-    })
-  }, [])
+  const hasPresetSlot = Boolean(initialDate && initialTime)
 
   useEffect(() => {
-    setClientSlots((prev) =>
-      Array.from({ length: participantCount }, (_, i) => prev[i] || emptyClientSlot())
+    setSelections((prev) =>
+      Array.from({ length: participantCount }, (_, i) => prev[i] || null)
     )
     setTime('')
+    gapTimeHintRef.current = initialTime || null
     setPricePreview(null)
-  }, [participantCount])
-
-  useEffect(() => {
-    const timers = clientSlots.map((slot, index) => {
-      if (slot.clientId || !slot.focused) return null
-      const query = slot.search.trim()
-      if (query.length < 2) {
-        if (slot.results.length > 0 || slot.loading) {
-          updateSlot(index, { ...slot, results: [], loading: false })
-        }
-        return null
-      }
-      return window.setTimeout(() => {
-        updateSlot(index, { ...slot, loading: true })
-        fetchClients({ search: query, page: 1, limit: 12, status: 'active' })
-          .then((res) => {
-            const exclude = new Set(
-              clientSlots.map((s) => s.clientId).filter((id) => id != null && id !== slot.clientId)
-            )
-            const results = (res.clients || []).filter((c) => !exclude.has(c.id))
-            setClientSlots((prev) => {
-              const current = prev[index]
-              if (!current || current.clientId || current.search.trim() !== query) return prev
-              const next = [...prev]
-              next[index] = { ...current, results, loading: false }
-              return next
-            })
-          })
-          .catch(() => {
-            setClientSlots((prev) => {
-              const current = prev[index]
-              if (!current) return prev
-              const next = [...prev]
-              next[index] = { ...current, results: [], loading: false }
-              return next
-            })
-          })
-      }, 280)
-    })
-    return () => timers.forEach((t) => t && clearTimeout(t))
-  }, [clientSlots, updateSlot])
+  }, [participantCount, initialTime])
 
   useEffect(() => {
     if (!allClientsSelected) {
@@ -247,7 +232,13 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
     })
       .then((res) => {
         if (cancelled) return
-        setSlots((res.slots || []).filter((s) => s.available))
+        const available = (res.slots || []).filter((s) => s.available)
+        setSlots(available)
+        const hint = gapTimeHintRef.current
+        if (hint && available.some((s) => s.time === hint)) {
+          setTime(hint)
+          gapTimeHintRef.current = null
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message)
@@ -262,7 +253,8 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
 
   useEffect(() => {
     setTime('')
-  }, [date, durationMinutes, participantCount, selectedClientIds.join(',')])
+    gapTimeHintRef.current = initialTime || null
+  }, [date, durationMinutes, participantCount, selectedClientIds.join(','), initialTime])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -300,7 +292,7 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
           <div>
             <h3 className="font-headline text-xl text-on-surface">Perfilado en grupo</h3>
             <p className="text-xs text-on-surface-variant mt-0.5">
-              De {GROUP_BOOKING_MIN} a {GROUP_BOOKING_MAX} clientas · solo agenda
+              De {GROUP_BOOKING_MIN} a {GROUP_BOOKING_MAX} clientas
             </p>
           </div>
           <button
@@ -312,6 +304,21 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
             <Icon name="close" />
           </button>
         </div>
+
+        {hasPresetSlot && (
+          <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3">
+            <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
+              Hueco seleccionado
+            </p>
+            <p className="text-sm font-medium text-on-surface mt-0.5 tabular-nums">
+              {format(initialDate, "EEEE d 'de' MMMM", { locale: es })}
+              {initialTime ? ` · ${initialTime}` : ''}
+            </p>
+            {initialComplimentary && (
+              <p className="text-xs text-on-surface-variant mt-1">Fuera de horario público</p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
           <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
@@ -328,7 +335,7 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
               −
             </button>
             <p className="text-sm font-medium text-on-surface tabular-nums">
-              {participantCount} {participantCount === 1 ? 'clienta' : 'clientas'}
+              {participantCount} clientas
             </p>
             <button
               type="button"
@@ -346,13 +353,32 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
           <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
             Clientas del grupo
           </p>
-          {clientSlots.map((slot, index) => (
+          {selections.map((selection, index) => (
             <ClientSlotPicker
               key={index}
               index={index}
-              slot={slot}
-              onChange={updateSlot}
-              onPick={pickClient}
+              selection={selection}
+              excludeIds={selectedClientIds.filter(
+                (id) => id !== selection?.clientId
+              )}
+              onPick={(client) => {
+                setSelections((prev) => {
+                  const next = [...prev]
+                  next[index] = {
+                    clientId: client.id,
+                    clientName: client.name,
+                    clientPhone: client.phone || '',
+                  }
+                  return next
+                })
+              }}
+              onClear={() => {
+                setSelections((prev) => {
+                  const next = [...prev]
+                  next[index] = null
+                  return next
+                })
+              }}
             />
           ))}
         </div>
@@ -376,12 +402,17 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
               </p>
               <p className="text-[11px] text-on-surface-variant">
                 Total · {formatDurationLabel(totalMinutes)}
+                {hasGap ? ` · hueco ${formatDurationLabel(gapMinutes)}` : ''}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setDurationMinutes((d) => Math.min(45, d + 15))}
-              disabled={durationMinutes >= 45}
+              onClick={() => {
+                const next = durationMinutes + 15
+                if (hasGap && next > gapMinutes) return
+                setDurationMinutes(next)
+              }}
+              disabled={hasGap && durationMinutes + 15 > gapMinutes}
               className="cursor-pointer min-h-11 min-w-11 rounded-xl bg-surface-container-lowest border border-outline-variant/40 text-lg disabled:opacity-40"
               aria-label="Aumentar 15 minutos"
             >
@@ -481,7 +512,7 @@ export default function CreateGroupBookingModal({ initialDate, onClose, onCreate
             {(selectedSlot.memberTimes || []).map((m) => (
               <p key={m.position} className="text-sm text-on-surface">
                 <span className="text-on-surface-variant">{m.position}.</span>{' '}
-                {clientSlots[m.position - 1]?.clientName || `Clienta ${m.position}`}
+                {selections[m.position - 1]?.clientName || `Clienta ${m.position}`}
                 <span className="text-on-surface-variant tabular-nums">
                   {' '}
                   · {m.time} – {m.endTime}

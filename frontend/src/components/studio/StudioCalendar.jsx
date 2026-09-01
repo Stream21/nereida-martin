@@ -337,6 +337,82 @@ function GapSlotPreview({ gapStart, gapEnd, time, durationMinutes }) {
   )
 }
 
+function BookingSlotChooser({ slot, onChooseSingle, onChooseGroup, onClose }) {
+  const dateLabel = slot.date
+    ? format(slot.date, "EEEE d 'de' MMMM", { locale: es })
+    : ''
+  const hasGap = slot.gapStart != null && slot.gapEnd != null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
+      <div className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl bg-surface-container-lowest shadow-[0_20px_50px_rgba(67,61,60,0.14)] p-5 sm:p-6 space-y-4 safe-pb">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-headline text-xl text-on-surface">Nueva reserva</h3>
+            <p className="text-sm text-on-surface-variant mt-0.5 capitalize tabular-nums">
+              {dateLabel}
+              {slot.time ? ` · ${slot.time}` : ''}
+            </p>
+            {hasGap && (
+              <p className="text-xs text-on-surface-variant mt-1">
+                Hueco {minsToLabel(slot.gapStart)} – {minsToLabel(slot.gapEnd)}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer p-2.5 min-h-11 min-w-11 rounded-full hover:bg-surface-container shrink-0"
+            aria-label="Cerrar"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+
+        <p className="text-sm text-on-surface-variant">
+          ¿Qué tipo de cita quieres crear en este hueco?
+        </p>
+
+        <button
+          type="button"
+          onClick={onChooseSingle}
+          className="cursor-pointer w-full rounded-2xl border border-outline-variant/30 bg-background px-4 py-4 min-h-14 text-left hover:bg-surface-container-low transition-colors"
+        >
+          <span className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary">
+              <Icon name="person" className="text-xl" />
+            </span>
+            <span>
+              <span className="block text-sm font-medium text-on-surface">Cita individual</span>
+              <span className="block text-xs text-on-surface-variant mt-0.5">
+                Una clienta, cualquier tratamiento
+              </span>
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onChooseGroup}
+          className="cursor-pointer w-full rounded-2xl border border-primary/25 bg-primary/8 px-4 py-4 min-h-14 text-left hover:bg-primary/12 transition-colors"
+        >
+          <span className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary">
+              <Icon name="group" className="text-xl" />
+            </span>
+            <span>
+              <span className="block text-sm font-medium text-on-surface">Perfilado en grupo</span>
+              <span className="block text-xs text-on-surface-variant mt-0.5">
+                De 2 a 6 clientas seguidas
+              </span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function CreateBookingModal({
   initialDate,
   initialTime,
@@ -1202,8 +1278,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [createModal, setCreateModal] = useState(null)
-  const [groupModal, setGroupModal] = useState(false)
+  const [slotDraft, setSlotDraft] = useState(null)
   const [detailEvent, setDetailEvent] = useState(null)
 
   const range = useMemo(() => {
@@ -1305,19 +1380,22 @@ export default function StudioCalendar({ initialBookingId = null }) {
 
   const onSlotClick = (day, time, gapMeta = null) => {
     setDetailEvent(null)
-    setCreateModal({
+    setSlotDraft({
       date: day,
       time,
       gapStart: gapMeta?.gapStart ?? null,
       gapEnd: gapMeta?.gapEnd ?? null,
       complimentary: Boolean(gapMeta?.complimentary),
+      mode: 'choose',
     })
   }
 
   const onEventClick = (ev) => {
-    setCreateModal(null)
+    setSlotDraft(null)
     setDetailEvent(ev)
   }
+
+  const closeSlotDraft = () => setSlotDraft(null)
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full sm:space-y-4">
@@ -1350,27 +1428,6 @@ export default function StudioCalendar({ initialBookingId = null }) {
           >
             Hoy
           </button>
-          <button
-            type="button"
-            onClick={() => setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })}
-            className="cursor-pointer hidden sm:inline-flex items-center justify-center gap-0.5 rounded-xl bg-primary text-on-primary px-3.5 py-2 min-h-11 text-xs font-medium shrink-0"
-            aria-label="Nueva cita"
-          >
-            <Icon name="add" className="text-lg" />
-            Cita
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCreateModal(null)
-              setGroupModal(true)
-            }}
-            className="cursor-pointer hidden sm:inline-flex items-center justify-center gap-0.5 rounded-xl bg-primary/15 text-primary px-3 py-2 min-h-11 text-xs font-medium shrink-0"
-            aria-label="Cita en grupo"
-          >
-            <Icon name="group" className="text-lg" />
-            Grupo
-          </button>
         </div>
 
         <div className="inline-flex rounded-lg bg-surface-container-low p-0.5 w-full sm:w-auto">
@@ -1395,9 +1452,11 @@ export default function StudioCalendar({ initialBookingId = null }) {
         </div>
       </div>
 
-      <p className="hidden sm:flex shrink-0 text-xs text-on-surface-variant items-center gap-1.5 px-0">
-        <Icon name="lock" className="text-sm" />
-        Vista 8:00–20:00. Reservas online 10–14 y 15–18 (viernes hasta 17:00). Fuera de ese horario, marca la cita como amiga sin cobro.
+      <p className="flex shrink-0 text-xs text-on-surface-variant items-center gap-1.5 px-0">
+        <Icon name="touch_app" className="text-sm shrink-0" />
+        <span className="sm:inline">
+          Toca un hueco libre para crear cita individual o perfilado en grupo (2–6 clientas).
+        </span>
       </p>
 
       {error && (
@@ -1490,50 +1549,37 @@ export default function StudioCalendar({ initialBookingId = null }) {
         )}
       </div>
 
-      {createModal && (
+      {slotDraft?.mode === 'choose' && (
+        <BookingSlotChooser
+          slot={slotDraft}
+          onClose={closeSlotDraft}
+          onChooseSingle={() => setSlotDraft((s) => ({ ...s, mode: 'single' }))}
+          onChooseGroup={() => setSlotDraft((s) => ({ ...s, mode: 'group' }))}
+        />
+      )}
+
+      {slotDraft?.mode === 'single' && (
         <CreateBookingModal
-          initialDate={createModal.date}
-          initialTime={createModal.time}
-          gapStart={createModal.gapStart}
-          gapEnd={createModal.gapEnd}
-          initialComplimentary={Boolean(createModal.complimentary)}
-          onClose={() => setCreateModal(null)}
+          initialDate={slotDraft.date}
+          initialTime={slotDraft.time}
+          gapStart={slotDraft.gapStart}
+          gapEnd={slotDraft.gapEnd}
+          initialComplimentary={Boolean(slotDraft.complimentary)}
+          onClose={closeSlotDraft}
           onCreated={load}
         />
       )}
 
-      {groupModal && (
+      {slotDraft?.mode === 'group' && (
         <CreateGroupBookingModal
-          initialDate={anchor}
-          onClose={() => setGroupModal(false)}
+          initialDate={slotDraft.date}
+          initialTime={slotDraft.time}
+          gapStart={slotDraft.gapStart}
+          gapEnd={slotDraft.gapEnd}
+          initialComplimentary={Boolean(slotDraft.complimentary)}
+          onClose={closeSlotDraft}
           onCreated={load}
         />
-      )}
-
-      {isMobile && (
-        <>
-          <button
-            type="button"
-            aria-label="Cita en grupo"
-            onClick={() => {
-              setCreateModal(null)
-              setGroupModal(true)
-            }}
-            className="cursor-pointer fixed z-40 right-[4.75rem] bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] min-h-14 min-w-14 rounded-full bg-primary/15 text-primary shadow-[0_8px_24px_rgba(183,139,125,0.25)] flex items-center justify-center active:scale-95 transition-transform"
-          >
-            <Icon name="group" className="text-2xl" />
-          </button>
-          <button
-            type="button"
-            aria-label="Nueva cita flotante"
-            onClick={() =>
-              setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })
-            }
-            className="cursor-pointer fixed z-40 right-4 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(183,139,125,0.45)] flex items-center justify-center active:scale-95 transition-transform"
-          >
-            <Icon name="add" className="text-2xl" />
-          </button>
-        </>
       )}
 
       {detailEvent && (
