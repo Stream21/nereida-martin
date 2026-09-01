@@ -8,7 +8,7 @@ router.get('/', async (req, res) => {
     const result = await query(
       `SELECT id, category, name, tag, duration_min, duration_max, price
        FROM treatments
-       WHERE active = true
+       WHERE active = true AND COALESCE(owner_only, false) = false
        ORDER BY
          CASE category
            WHEN 'cejas' THEN 1

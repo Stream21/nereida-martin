@@ -770,6 +770,182 @@ async function getJointAvailableDatesForMonth(
   };
 }
 
+function getGroupSlotsForDate(
+  dateStr,
+  personBlockMinutes,
+  participantCount,
+  busyRanges,
+  now = Date.now()
+) {
+  if (isWeekendDay(dateStr)) return [];
+  if (!participantCount || participantCount < 2) return [];
+
+  const totalMinutes = personBlockMinutes * participantCount;
+  const primarySlots = getSlotsForDate(dateStr, personBlockMinutes, busyRanges, now);
+  const groupSlots = [];
+
+  for (const slot of primarySlots) {
+    if (!slot.available) continue;
+
+    const [hour, minute] = slot.time.split(':').map(Number);
+    const groupStart = studioLocalToDate(dateStr, hour, minute);
+    const groupEnd = new Date(groupStart.getTime() + totalMinutes * 60000);
+
+    if (!slotFitsInWorkWindows(dateStr, groupStart.getTime(), groupEnd.getTime())) {
+      continue;
+    }
+
+    let valid = true;
+    let cursor = groupStart;
+    for (let i = 0; i < participantCount; i++) {
+      const legStart = cursor;
+      const legEnd = new Date(legStart.getTime() + personBlockMinutes * 60000);
+      if (
+        hasOverlapWithRanges(legStart, legEnd, busyRanges) ||
+        !slotFitsInWorkWindows(dateStr, legStart.getTime(), legEnd.getTime())
+      ) {
+        valid = false;
+        break;
+      }
+      cursor = legEnd;
+    }
+    if (!valid) continue;
+
+    const memberTimes = [];
+    cursor = groupStart;
+    for (let i = 0; i < participantCount; i++) {
+      memberTimes.push({
+        position: i + 1,
+        time: formatStudioTime(cursor),
+        endTime: formatStudioTime(new Date(cursor.getTime() + personBlockMinutes * 60000)),
+      });
+      cursor = new Date(cursor.getTime() + personBlockMinutes * 60000);
+    }
+
+    groupSlots.push({
+      time: slot.time,
+      available: true,
+      endTime: formatStudioTime(groupEnd),
+      totalMinutes,
+      memberTimes,
+    });
+  }
+
+  return groupSlots;
+}
+
+async function hasGroupSlotAvailable(
+  dateStr,
+  timeStr,
+  clientIds,
+  personBlockMinutes,
+  { skipPerfiladoLimit = false, skipLeadTime = false } = {}
+) {
+  const ids = [...new Set((clientIds || []).map(Number).filter((id) => id > 0))];
+  if (ids.length < 2) return false;
+
+  const block = blockDurationMinutes(personBlockMinutes);
+  const participantCount = ids.length;
+  const totalMinutes = block * participantCount;
+
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const groupStart = studioLocalToDate(dateStr, hour, minute);
+  const groupEnd = new Date(groupStart.getTime() + totalMinutes * 60000);
+
+  if (!isOnGrid(groupStart)) return false;
+  if (!slotFitsInWorkWindows(dateStr, groupStart.getTime(), groupEnd.getTime())) return false;
+
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (!isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate)) return false;
+  if (!skipLeadTime && isBeforeMinLead(groupStart.getTime())) return false;
+
+  const busyRanges = await getBusyRangesForDate(dateStr);
+  let cursor = groupStart;
+  for (let i = 0; i < participantCount; i++) {
+    const legStart = cursor;
+    const legEnd = new Date(legStart.getTime() + block * 60000);
+    if (
+      hasOverlapWithRanges(legStart, legEnd, busyRanges) ||
+      !slotFitsInWorkWindows(dateStr, legStart.getTime(), legEnd.getTime())
+    ) {
+      return false;
+    }
+    cursor = legEnd;
+  }
+
+  if (!skipPerfiladoLimit) {
+    const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+    const { resolveCompanionTreatment } = require('./jointBookingService');
+    cursor = groupStart;
+    for (const clientId of ids) {
+      const info = await resolveCompanionTreatment(clientId);
+      if (info.error) return false;
+      const clash = await findPerfiladoWeekConflict({
+        clientId,
+        treatmentId: info.companionTreatmentId,
+        startTime: cursor,
+      });
+      if (clash) return false;
+      cursor = new Date(cursor.getTime() + block * 60000);
+    }
+  }
+
+  return true;
+}
+
+async function getGroupAvailabilityForDate(
+  dateStr,
+  clientIds,
+  personBlockMinutes,
+  { skipPerfiladoLimit = false, skipLeadTime = false } = {}
+) {
+  const ids = [...new Set((clientIds || []).map(Number).filter((id) => id > 0))];
+  const block = blockDurationMinutes(personBlockMinutes);
+  const participantCount = ids.length;
+
+  const bookingStartDate = await studioSettings.getBookingStartDate();
+  const bookingEndDate = await studioSettings.getBookingEndDate();
+  if (
+    participantCount < 2 ||
+    !isDateInBookingWindow(dateStr, bookingStartDate, bookingEndDate) ||
+    isWeekendDay(dateStr)
+  ) {
+    return {
+      slots: [],
+      date: dateStr,
+      participantCount,
+      personBlockMinutes: block,
+      totalMinutes: block * participantCount,
+      bookingStartDate,
+      bookingEndDate,
+    };
+  }
+
+  const busyRanges = await getBusyRangesForDate(dateStr);
+  const now = skipLeadTime ? 0 : Date.now();
+  let slots = getGroupSlotsForDate(dateStr, block, participantCount, busyRanges, now);
+
+  if (!skipPerfiladoLimit && ids.length > 0) {
+    const { loadPerfiladoBlockedWeekSet, mondayOfStudioDate } = require('../utils/perfiladoSpacing');
+    const week = mondayOfStudioDate(dateStr);
+    const weekSets = await Promise.all(ids.map((id) => loadPerfiladoBlockedWeekSet(id)));
+    if (weekSets.some((set) => set.has(week))) {
+      slots = [];
+    }
+  }
+
+  return {
+    slots,
+    date: dateStr,
+    participantCount,
+    personBlockMinutes: block,
+    totalMinutes: block * participantCount,
+    bookingStartDate,
+    bookingEndDate,
+  };
+}
+
 module.exports = {
   getBookedRangesForDate,
   getBusyRangesForDate,
@@ -785,4 +961,7 @@ module.exports = {
   hasJointSlotAvailable,
   getJointAvailabilityForDate,
   getJointAvailableDatesForMonth,
+  getGroupSlotsForDate,
+  hasGroupSlotAvailable,
+  getGroupAvailabilityForDate,
 };

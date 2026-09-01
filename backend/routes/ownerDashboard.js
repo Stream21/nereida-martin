@@ -232,6 +232,89 @@ router.post('/bookings/joint', async (req, res) => {
   }
 });
 
+router.post('/bookings/group', async (req, res) => {
+  try {
+    const { clientIds, startTime, date, time, durationMinutes } = req.body || {};
+    if (!Array.isArray(clientIds) || clientIds.length < 2 || (!startTime && !(date && time))) {
+      return res.status(400).json({
+        error: 'clientIds (mín. 2) y startTime (o date+time) son obligatorios',
+      });
+    }
+    const groupBooking = require('../services/groupBookingService');
+    const result = await groupBooking.createOwnerGroupBooking({
+      clientIds,
+      startTime,
+      date,
+      time,
+      durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
+    });
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        message: result.message,
+        code: result.code,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Owner create group booking error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/bookings/group/preview', async (req, res) => {
+  try {
+    const { clientIds } = req.body || {};
+    if (!Array.isArray(clientIds) || clientIds.length < 2) {
+      return res.status(400).json({ error: 'Indica al menos 2 clientIds' });
+    }
+    const groupBooking = require('../services/groupBookingService');
+    const result = await groupBooking.previewGroupParticipants(clientIds);
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        code: result.code,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner group preview error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/availability/group', async (req, res) => {
+  try {
+    const { date, clientIds, durationMinutes } = req.query;
+    const ids = []
+      .concat(clientIds || [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    const uniqueIds = [...new Set(ids)];
+    if (!date || uniqueIds.length < 2) {
+      return res.status(400).json({
+        error: 'date y al menos 2 clientIds son obligatorios',
+      });
+    }
+    const availabilityService = require('../services/availabilityService');
+    const { getDefaultPersonBlockMinutes } = require('../services/groupBookingService');
+    const personBlock =
+      durationMinutes != null
+        ? Number(durationMinutes)
+        : await getDefaultPersonBlockMinutes();
+    const data = await availabilityService.getGroupAvailabilityForDate(
+      date,
+      uniqueIds,
+      personBlock,
+      { skipPerfiladoLimit: true, skipLeadTime: true }
+    );
+    res.json(data);
+  } catch (err) {
+    console.error('Owner group availability error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/availability/joint', async (req, res) => {
   try {
     const { date, treatmentId, companionClientId, primaryClientId } = req.query;

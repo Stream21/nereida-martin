@@ -20,18 +20,16 @@ import {
 import { es } from 'date-fns/locale'
 import Icon from '../ui/Icon'
 import BookingDetailModal from './BookingDetailModal'
+import CreateGroupBookingModal from './CreateGroupBookingModal'
 import {
   createOwnerBooking,
-  createOwnerJointBooking,
   fetchClients,
   fetchOwnerAvailability,
   fetchOwnerAvailabilityRange,
-  fetchOwnerJointAvailability,
   fetchOwnerCalendar,
   fetchOwnerTreatments,
   fetchOwnerBooking,
 } from '../../utils/ownerApi'
-import { isPerfiladoTreatment } from '../../utils/browDesign'
 import { isGoogleBookingSource, studioTodayDate, studioNowMinutes } from '../../utils/studioFormat'
 
 const WEEKDAY_SHORT = ['L', 'M', 'X', 'J', 'V']
@@ -360,18 +358,11 @@ function CreateBookingModal({
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [companionSearch, setCompanionSearch] = useState('')
-  const [companionClients, setCompanionClients] = useState([])
-  const [companionClientId, setCompanionClientId] = useState(null)
-  const [companionTreatmentName, setCompanionTreatmentName] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(null)
   const [complimentary, setComplimentary] = useState(Boolean(initialComplimentary))
 
   const gapMinutes = gapStart != null && gapEnd != null ? gapEnd - gapStart : null
   const hasGap = gapMinutes != null && gapMinutes > 0
-  const isPerfilado = isPerfiladoTreatment(treatmentId)
-  const isJoint = treatmentId === 'perfilado-conjunto'
-  const jointEligible = isJoint && (!hasGap || gapMinutes >= 60)
 
   const treatmentsWithFit = useMemo(() => {
     return treatments
@@ -393,7 +384,13 @@ function CreateBookingModal({
 
   useEffect(() => {
     fetchOwnerTreatments()
-      .then((res) => setTreatments(res.treatments || []))
+      .then((res) =>
+        setTreatments(
+          (res.treatments || []).filter(
+            (t) => t.id !== 'perfilado-grupo' && t.id !== 'perfilado-conjunto'
+          )
+        )
+      )
       .catch((err) => setError(err.message))
   }, [])
 
@@ -406,29 +403,9 @@ function CreateBookingModal({
     return () => clearTimeout(t)
   }, [clientSearch])
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      fetchClients({ search: companionSearch, page: 1, limit: 15, status: 'active' })
-        .then((res) => {
-          const list = (res.clients || []).filter((c) => c.id !== clientId)
-          setCompanionClients(list)
-        })
-        .catch(() => setCompanionClients([]))
-    }, 250)
-    return () => clearTimeout(t)
-  }, [companionSearch, clientId])
-
-  useEffect(() => {
-    if (!jointEligible) {
-      setCompanionClientId(null)
-      setCompanionSearch('')
-      setCompanionTreatmentName('')
-    }
-  }, [jointEligible])
-
   // Reset duration when treatment changes
   useEffect(() => {
-    if (!treatmentId || isJoint) {
+    if (!treatmentId) {
       setDurationMinutes(null)
       return
     }
@@ -440,7 +417,7 @@ function CreateBookingModal({
     setDurationMinutes(Math.max(15, Math.floor(next / 15) * 15))
     setTime('')
     gapTimeHintRef.current = initialTime || null
-  }, [treatmentId, treatments, isJoint, hasGap, gapMinutes, initialTime])
+  }, [treatmentId, treatments, hasGap, gapMinutes, initialTime])
 
   useEffect(() => {
     setTime('')
@@ -452,11 +429,7 @@ function CreateBookingModal({
       setSlots([])
       return
     }
-    if (isJoint && (!companionClientId || !clientId)) {
-      setSlots([])
-      return
-    }
-    if (hasGap && (!durationMinutes || isJoint)) {
+    if (hasGap && !durationMinutes) {
       setSlots([])
       return
     }
@@ -473,28 +446,18 @@ function CreateBookingModal({
           gapEnd,
           allowOutsideHours: complimentary,
         })
-      : isJoint
-        ? fetchOwnerJointAvailability({
-            date,
-            treatmentId,
-            companionClientId,
-            primaryClientId: clientId,
-          })
-        : fetchOwnerAvailability({
-            date,
-            treatmentId,
-            durationMinutes,
-            allowOutsideHours: complimentary,
-          })
+      : fetchOwnerAvailability({
+          date,
+          treatmentId,
+          durationMinutes,
+          allowOutsideHours: complimentary,
+        })
 
     fetchSlots
       .then((res) => {
         if (cancelled) return
         const available = (res.slots || []).filter((s) => s.available)
         setSlots(available)
-        if (res.companionTreatmentName) {
-          setCompanionTreatmentName(res.companionTreatmentName)
-        }
         const hint = gapTimeHintRef.current
         if (hint && available.some((s) => s.time === hint)) {
           setTime(hint)
@@ -516,8 +479,6 @@ function CreateBookingModal({
     hasGap,
     gapStart,
     gapEnd,
-    isJoint,
-    companionClientId,
     clientId,
     durationMinutes,
     complimentary,
@@ -530,31 +491,17 @@ function CreateBookingModal({
       setError('Completa clienta, tratamiento, fecha y hora')
       return
     }
-    if (isJoint && !companionClientId) {
-      setError('Elige la segunda clienta')
-      return
-    }
     setSubmitting(true)
     setError('')
     try {
-      if (isJoint) {
-        await createOwnerJointBooking({
-          primaryClientId: clientId,
-          companionClientId,
-          treatmentId,
-          date,
-          time: bookingTime,
-        })
-      } else {
-        await createOwnerBooking({
-          clientId,
-          treatmentId,
-          date,
-          time: bookingTime,
-          durationMinutes: durationMinutes || undefined,
-          complimentary,
-        })
-      }
+      await createOwnerBooking({
+        clientId,
+        treatmentId,
+        date,
+        time: bookingTime,
+        durationMinutes: durationMinutes || undefined,
+        complimentary,
+      })
       onCreated?.()
       onClose()
     } catch (err) {
@@ -573,13 +520,8 @@ function CreateBookingModal({
     !!clientId &&
     selectedFits &&
     !!time &&
-    (!isJoint || !!companionClientId) &&
-    (isJoint || durationMinutes != null)
-  const scheduleReady = Boolean(
-    clientId &&
-      treatmentId &&
-      (isJoint ? companionClientId : durationMinutes != null)
-  )
+    durationMinutes != null
+  const scheduleReady = Boolean(clientId && treatmentId && durationMinutes != null)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-on-surface/35 backdrop-blur-[2px] p-0 sm:p-4">
@@ -677,7 +619,6 @@ function CreateBookingModal({
                   onClick={() => {
                     if (!t.fits) return
                     setTreatmentId(t.id)
-                    if (t.id === 'perfilado-conjunto') setComplimentary(false)
                   }}
                   className={`w-full text-left rounded-2xl px-3.5 py-3 min-h-11 border transition-colors ${
                     !t.fits
@@ -720,7 +661,7 @@ function CreateBookingModal({
           </p>
         )}
 
-        {!isJoint && treatmentId && durationMinutes != null && (
+        {treatmentId && durationMinutes != null && (
           <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
             <p className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
               Tiempo de la cita
@@ -763,56 +704,7 @@ function CreateBookingModal({
           </div>
         )}
 
-        {jointEligible && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
-            <p className="text-xs font-label font-bold tracking-widest uppercase text-primary mb-2">
-              Perfilado conjunto — acompañante
-            </p>
-            <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-              Segunda clienta
-            </span>
-            <input
-              type="search"
-              value={companionSearch}
-              onChange={(e) => setCompanionSearch(e.target.value)}
-              placeholder="Buscar por nombre…"
-              className="mt-1.5 w-full rounded-2xl border border-outline-variant/40 bg-background px-4 py-3 text-sm outline-none focus:border-primary"
-            />
-            <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
-              {companionClients.length === 0 ? (
-                <p className="text-xs text-on-surface-variant px-1 py-2">
-                  Debe ser otra clienta activa, distinta de la principal.
-                </p>
-              ) : (
-                companionClients.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setCompanionClientId(c.id)
-                      setCompanionSearch(c.name)
-                    }}
-                    className={`cursor-pointer w-full text-left rounded-xl px-3 py-2.5 text-sm min-h-11 ${
-                      companionClientId === c.id
-                        ? 'bg-primary/12 text-primary font-medium'
-                        : 'hover:bg-surface-container-low'
-                    }`}
-                  >
-                    {c.name}
-                    {c.phone ? <span className="text-on-surface-variant"> · {c.phone}</span> : null}
-                  </button>
-                ))
-              )}
-            </div>
-            {companionTreatmentName && (
-              <p className="text-xs text-on-surface-variant mt-2 px-1">
-                Tratamiento acompañante: {companionTreatmentName}
-              </p>
-            )}
-          </div>
-        )}
-
-        {scheduleReady && !isJoint && (
+        {scheduleReady && (
           <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3">
             <input
               type="checkbox"
@@ -890,7 +782,6 @@ function CreateBookingModal({
                     <option key={s.time} value={s.time}>
                       {s.time}
                       {s.outsideHours ? ' · fuera de horario' : ''}
-                      {isJoint && s.companionTime ? ` · acompañante ${s.companionTime}` : ''}
                     </option>
                   ))}
                 </select>
@@ -903,12 +794,6 @@ function CreateBookingModal({
           </p>
         ) : null}
 
-        {isJoint && (
-          <p className="text-xs text-on-surface-variant rounded-2xl bg-primary/5 border border-primary/15 px-4 py-3">
-            Se reservan las dos citas a la vez. La acompañante no tiene que confirmar nada.
-          </p>
-        )}
-
         {error && <p className="text-sm text-error">{error}</p>}
 
         <button
@@ -916,7 +801,7 @@ function CreateBookingModal({
           disabled={submitting || !canSubmit}
           className="cursor-pointer w-full rounded-2xl bg-primary text-on-primary py-3.5 min-h-12 text-sm font-medium disabled:opacity-60"
         >
-          {submitting ? 'Creando…' : isJoint ? 'Confirmar cita conjunta' : 'Confirmar cita'}
+          {submitting ? 'Creando…' : 'Confirmar cita'}
         </button>
       </form>
     </div>
@@ -1155,6 +1040,10 @@ function TimedGrid({
                         }${
                           ev.isJoint && ev.jointPartnerName ? ` · Con ${ev.jointPartnerName}` : ''
                         }${
+                          ev.isGroup && ev.groupParticipantCount
+                            ? ` · Grupo (${ev.groupParticipantCount})`
+                            : ''
+                        }${
                           ev.hasIntake
                             ? ev.intakeFlagged
                               ? ' · Revisar cuestionario'
@@ -1198,6 +1087,11 @@ function TimedGrid({
                               name="group"
                               className="text-[10px] sm:text-xs shrink-0 mt-0.5 opacity-90"
                             />
+                          )}
+                          {!google && ev.isGroup && (
+                            <span className="text-[9px] font-bold shrink-0 mt-0.5 opacity-90 tabular-nums">
+                              G{ev.groupParticipantCount || ''}
+                            </span>
                           )}
                           <div className="min-w-0 flex-1 leading-tight">
                             <p
@@ -1309,6 +1203,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [createModal, setCreateModal] = useState(null)
+  const [groupModal, setGroupModal] = useState(false)
   const [detailEvent, setDetailEvent] = useState(null)
 
   const range = useMemo(() => {
@@ -1464,6 +1359,18 @@ export default function StudioCalendar({ initialBookingId = null }) {
             <Icon name="add" className="text-lg" />
             Cita
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreateModal(null)
+              setGroupModal(true)
+            }}
+            className="cursor-pointer hidden sm:inline-flex items-center justify-center gap-0.5 rounded-xl bg-primary/15 text-primary px-3 py-2 min-h-11 text-xs font-medium shrink-0"
+            aria-label="Cita en grupo"
+          >
+            <Icon name="group" className="text-lg" />
+            Grupo
+          </button>
         </div>
 
         <div className="inline-flex rounded-lg bg-surface-container-low p-0.5 w-full sm:w-auto">
@@ -1595,17 +1502,38 @@ export default function StudioCalendar({ initialBookingId = null }) {
         />
       )}
 
+      {groupModal && (
+        <CreateGroupBookingModal
+          initialDate={anchor}
+          onClose={() => setGroupModal(false)}
+          onCreated={load}
+        />
+      )}
+
       {isMobile && (
-        <button
-          type="button"
-          aria-label="Nueva cita flotante"
-          onClick={() =>
-            setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })
-          }
-          className="cursor-pointer fixed z-40 right-4 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(183,139,125,0.45)] flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <Icon name="add" className="text-2xl" />
-        </button>
+        <>
+          <button
+            type="button"
+            aria-label="Cita en grupo"
+            onClick={() => {
+              setCreateModal(null)
+              setGroupModal(true)
+            }}
+            className="cursor-pointer fixed z-40 right-[4.75rem] bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] min-h-14 min-w-14 rounded-full bg-primary/15 text-primary shadow-[0_8px_24px_rgba(183,139,125,0.25)] flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Icon name="group" className="text-2xl" />
+          </button>
+          <button
+            type="button"
+            aria-label="Nueva cita flotante"
+            onClick={() =>
+              setCreateModal({ date: anchor, time: null, gapStart: null, gapEnd: null })
+            }
+            className="cursor-pointer fixed z-40 right-4 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:bottom-[max(1.25rem,env(safe-area-inset-bottom))] min-h-14 min-w-14 rounded-full bg-primary text-on-primary shadow-[0_8px_24px_rgba(183,139,125,0.45)] flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Icon name="add" className="text-2xl" />
+          </button>
+        </>
       )}
 
       {detailEvent && (

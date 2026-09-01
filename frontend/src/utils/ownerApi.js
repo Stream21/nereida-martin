@@ -220,6 +220,29 @@ export function createOwnerJointBooking({
   })
 }
 
+export function createOwnerGroupBooking({ clientIds, startTime, date, time, durationMinutes }) {
+  return ownerFetch('/bookings/group', {
+    method: 'POST',
+    body: JSON.stringify({ clientIds, startTime, date, time, durationMinutes }),
+  })
+}
+
+export function fetchOwnerGroupPreview(clientIds) {
+  return ownerFetch('/bookings/group/preview', {
+    method: 'POST',
+    body: JSON.stringify({ clientIds }),
+  })
+}
+
+export function fetchOwnerGroupAvailability({ date, clientIds, durationMinutes }) {
+  const params = new URLSearchParams({ date })
+  for (const id of clientIds || []) {
+    params.append('clientIds', String(id))
+  }
+  if (durationMinutes != null) params.set('durationMinutes', String(durationMinutes))
+  return ownerFetch(`/availability/group?${params}`)
+}
+
 export function fetchOwnerAvailability({ date, treatmentId, durationMinutes, allowOutsideHours }) {
   const params = new URLSearchParams({ date, treatmentId })
   if (durationMinutes != null) params.set('durationMinutes', String(durationMinutes))

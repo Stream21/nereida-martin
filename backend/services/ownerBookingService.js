@@ -654,10 +654,10 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     date != null || time != null || startTime != null || treatmentId != null || durationMinutes != null;
 
   if (complimentaryProvided && !scheduleChange) {
-    if (booking.joint_group_id) {
+    if (booking.joint_group_id || booking.group_booking_id) {
       return {
-        error: 'En citas conjuntas no se puede marcar como amiga · sin cobro.',
-        code: 'JOINT_LOCKED',
+        error: 'En citas de grupo no se puede marcar como amiga · sin cobro.',
+        code: 'GROUP_LOCKED',
         status: 400,
       };
     }
@@ -676,11 +676,12 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
   }
 
   const isJoint = Boolean(booking.joint_group_id);
-  if (isJoint && (treatmentId || durationMinutes != null)) {
+  const isGroup = Boolean(booking.group_booking_id);
+  if ((isJoint || isGroup) && (treatmentId || durationMinutes != null)) {
     return {
       error:
-        'En citas conjuntas no se puede cambiar el tratamiento ni la duración. Cancela y crea de nuevo.',
-      code: 'JOINT_LOCKED',
+        'En citas de grupo no se puede cambiar el tratamiento ni la duración. Cancela y crea de nuevo.',
+      code: 'GROUP_LOCKED',
       status: 400,
     };
   }
@@ -843,6 +844,83 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     return { booking: updated };
   }
 
+  if (isGroup) {
+    const {
+      getGroupBookingsForGroup,
+    } = require('./groupBookingService');
+    const { syncGoogleCalendarForBooking } = require('./jointBookingService');
+    const { findPerfiladoWeekConflict } = require('../utils/perfiladoSpacing');
+
+    const groupRes = await query(`SELECT * FROM booking_groups WHERE id = $1`, [
+      booking.group_booking_id,
+    ]);
+    if (groupRes.rows.length === 0) {
+      return { error: 'Grupo no encontrado', status: 404 };
+    }
+    const group = groupRes.rows[0];
+    const personBlock = group.person_block_minutes;
+    const legs = await getGroupBookingsForGroup(booking.group_booking_id);
+    const fullEnd = new Date(start.getTime() + personBlock * legs.length * 60000);
+    const bookingIds = legs.map((leg) => leg.id);
+
+    const overlap = await query(
+      `SELECT id FROM bookings
+       WHERE status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
+         AND start_time < $2 AND end_time > $1
+         AND id != ALL($3::int[])
+       LIMIT 1`,
+      [start.toISOString(), fullEnd.toISOString(), bookingIds]
+    );
+    if (overlap.rows.length > 0) {
+      return { error: 'Horario no disponible', status: 409 };
+    }
+
+    let cursor = start;
+    for (const leg of legs) {
+      const legEnd = new Date(cursor.getTime() + personBlock * 60000);
+      const clash = await findPerfiladoWeekConflict({
+        clientId: leg.client_id,
+        treatmentId: leg.treatment_id,
+        startTime: cursor,
+        excludeBookingId: leg.id,
+      });
+      if (clash) return { ...clash, status: 409 };
+
+      await query(
+        `UPDATE bookings SET start_time = $1, end_time = $2, last_sync_source = 'owner', updated_at = NOW()
+         WHERE id = $3`,
+        [cursor.toISOString(), legEnd.toISOString(), leg.id]
+      );
+      cursor = legEnd;
+    }
+
+    for (const leg of legs) {
+      await syncGoogleCalendarForBooking(leg.id);
+    }
+
+    const emailService = require('./emailService');
+    const refreshedLegs = await getGroupBookingsForGroup(booking.group_booking_id);
+    for (const leg of refreshedLegs) {
+      if (!hasRealClientEmail(leg.client_email)) continue;
+      try {
+        await emailService.sendGoogleChangeNotice({
+          to: leg.client_email,
+          clientName: leg.client_name,
+          treatment: { name: leg.treatment_name || 'Perfilado', tag: leg.treatment_tag || '' },
+          startTime: new Date(leg.start_time),
+          endTime: new Date(leg.end_time),
+          changeType: 'rescheduled',
+        });
+      } catch (err) {
+        console.warn('Owner group reschedule email failed:', err.message);
+      }
+    }
+
+    const dashboard = require('./ownerDashboardService');
+    const updated = await dashboard.getBookingDetail(bookingId);
+    return { booking: updated };
+  }
+
   const end = new Date(start.getTime() + blockDuration * 60000);
   const dateStr = formatStudioDate(start);
   const timeStr = formatStudioTime(start);
@@ -975,6 +1053,12 @@ async function cancelOwnerBooking(bookingId) {
     }
 
     return { ok: true, joint: true };
+  }
+
+  if (booking.group_booking_id) {
+    const { cancelGroupBookings } = require('./groupBookingService');
+    await cancelGroupBookings(booking.group_booking_id, { notify: true });
+    return { ok: true, group: true };
   }
 
   await query(

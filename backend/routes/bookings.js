@@ -177,6 +177,36 @@ router.post('/cancel/:token', async (req, res) => {
       });
     }
 
+    if (row.group_booking_id) {
+      const { cancelGroupBookings } = require('../services/groupBookingService');
+      await cancelGroupBookings(row.group_booking_id, { notify: false });
+      await client.query('COMMIT');
+
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendCancellationConfirmation({
+          to: row.client_email,
+          clientName: row.client_name,
+          treatment: { name: row.treatment_name || 'Cita', tag: row.treatment_tag || '' },
+          startTime,
+          endTime: new Date(row.end_time),
+        });
+      } catch (err) {
+        console.error('Group cancellation email failed:', err.message);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Tu cita de grupo ha sido cancelada correctamente',
+        booking: {
+          id: row.id,
+          status: 'cancelled',
+          startTime: startTime.toISOString(),
+          group: true,
+        },
+      });
+    }
+
     await client.query(
       `UPDATE bookings SET status = 'cancelled', last_sync_source = 'web', updated_at = NOW()
        WHERE id = $1 AND status = 'confirmed'`,

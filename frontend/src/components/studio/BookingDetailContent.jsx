@@ -181,7 +181,7 @@ export default function BookingDetailContent({
     Number.isFinite(numericId) &&
     !String(bookingId || '').startsWith('gcal:')
 
-  const canMarkComplimentary = canManage && !booking?.isJoint
+  const canMarkComplimentary = canManage && !booking?.isJoint && !booking?.isGroup
 
   const openEdit = () => {
     if (!booking?.startTime) return
@@ -209,7 +209,7 @@ export default function BookingDetailContent({
   }
 
   useEffect(() => {
-    if (!editing || !editDate || !editTreatmentId || booking?.isJoint) {
+    if (!editing || !editDate || !editTreatmentId || booking?.isJoint || booking?.isGroup) {
       setEditSlots([])
       return undefined
     }
@@ -258,7 +258,7 @@ export default function BookingDetailContent({
     setActionLoading('save')
     try {
       const payload = { date: editDate, time: editTime }
-      if (!booking?.isJoint) {
+      if (!booking?.isJoint && !booking?.isGroup) {
         payload.treatmentId = editTreatmentId
         payload.durationMinutes = editDuration
       }
@@ -279,9 +279,11 @@ export default function BookingDetailContent({
       {editing ? (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-4 space-y-3">
           <p className="text-sm font-medium text-on-surface">Modificar cita</p>
-          {booking?.isJoint && (
+          {(booking?.isJoint || booking?.isGroup) && (
             <p className="text-xs text-on-surface-variant">
-              Cita conjunta: solo se puede cambiar fecha y hora (ambas clientas).
+              {booking?.isGroup
+                ? 'Cita en grupo: solo se puede cambiar la hora de inicio (se mueven todas las clientas).'
+                : 'Cita conjunta: solo se puede cambiar fecha y hora (ambas clientas).'}
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -318,7 +320,7 @@ export default function BookingDetailContent({
               )}
             </label>
           </div>
-          {!booking?.isJoint && (
+          {!booking?.isJoint && !booking?.isGroup && (
             <>
               <label className="block">
                 <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
@@ -579,6 +581,40 @@ export default function BookingDetailContent({
               >
                 {bookingStatusLabel(booking.status)}
               </span>
+            )}
+
+            {booking?.isGroup && booking?.groupMembers?.length > 0 && (
+              <div className="rounded-2xl bg-primary/8 border border-primary/15 px-4 py-3 space-y-2">
+                <p className="text-sm font-medium text-on-surface inline-flex items-center gap-1.5">
+                  <Icon name="group" className="text-base" />
+                  Grupo · {booking.groupParticipantCount || booking.groupMembers.length} clientas
+                </p>
+                {booking.groupMembers.map((member) => (
+                  <div
+                    key={member.bookingId}
+                    className="flex items-start justify-between gap-2 text-sm border-t border-primary/10 first:border-t-0 first:pt-0 pt-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-on-surface">{member.clientName}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        {member.treatmentName}
+                        {member.treatmentTag ? ` · ${member.treatmentTag}` : ''}
+                      </p>
+                      {member.startTime && (
+                        <p className="text-xs text-on-surface-variant tabular-nums mt-0.5">
+                          {formatStudioTime(new Date(member.startTime))}
+                          {member.endTime
+                            ? ` – ${formatStudioTime(new Date(member.endTime))}`
+                            : ''}
+                        </p>
+                      )}
+                    </div>
+                    {member.price != null && (
+                      <p className="text-sm text-on-surface shrink-0">{formatEuro(member.price)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             {booking?.isJoint && (

@@ -2,6 +2,14 @@ export const BROW_DESIGN_PRIMERA = 'brow-design-primera'
 export const BROW_DESIGN_SEGUIMIENTO = 'brow-design-seguimiento'
 export const BROW_DESIGN_DEFINE = 'brow-define'
 export const PERFILADO_CONJUNTO_ID = 'perfilado-conjunto'
+export const PERFILADO_GRUPO_ID = 'perfilado-grupo'
+export const GROUP_BOOKING_MIN = 2
+export const GROUP_BOOKING_MAX = 6
+export const GROUP_DEFAULT_PERSON_MINUTES = 30
+
+export function isGroupTreatment(treatmentId) {
+  return treatmentId === PERFILADO_GRUPO_ID
+}
 
 /** Solo perfilado puro (primera / mantenimiento), no Brow Define ni laminados. */
 export const PERFILADO_TREATMENT_IDS = [BROW_DESIGN_PRIMERA, BROW_DESIGN_SEGUIMIENTO]

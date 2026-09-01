@@ -788,8 +788,9 @@ async function updateClient(clientId, { name, phone, email, notes, hasPerfiladoH
 async function listCalendarEvents({ from, to }) {
   const result = await query(
     `SELECT b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id,
-            b.google_event_id, b.joint_group_id, b.joint_role,
+            b.google_event_id, b.joint_group_id, b.joint_role, b.group_booking_id,
             COALESCE(b.complimentary, false) AS complimentary,
+            bg.participant_count AS group_participant_count,
             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
             t.name AS treatment_name, t.tag AS treatment_tag, t.duration_min,
             b.intake_id, i.flagged AS intake_flagged,
@@ -809,6 +810,7 @@ async function listCalendarEvents({ from, to }) {
      LEFT JOIN booking_intakes i ON i.id = b.intake_id
      LEFT JOIN bookings jb ON jb.joint_group_id = b.joint_group_id AND jb.id <> b.id
      LEFT JOIN clients jp ON jp.id = jb.client_id
+     LEFT JOIN booking_groups bg ON bg.id = b.group_booking_id
      WHERE b.status IN ('confirmed', 'pending_review', 'pending_companion', 'google_overlap')
        AND b.start_time < $2
        AND b.end_time > $1
@@ -838,6 +840,11 @@ async function listCalendarEvents({ from, to }) {
     jointRole: row.joint_role,
     jointPartnerName: row.joint_partner_name || null,
     isJoint: Boolean(row.joint_group_id),
+    groupBookingId: row.group_booking_id || null,
+    groupParticipantCount: row.group_participant_count
+      ? Number(row.group_participant_count)
+      : null,
+    isGroup: Boolean(row.group_booking_id),
   }));
 
   let googleItems = [];
@@ -965,8 +972,10 @@ async function getBookingDetail(bookingId) {
   const result = await query(
     `SELECT
        b.id, b.start_time, b.end_time, b.status, b.source, b.treatment_id, b.visit_context,
-       b.intake_id, b.joint_group_id, b.joint_role,
+       b.intake_id, b.joint_group_id, b.joint_role, b.group_booking_id,
        COALESCE(b.complimentary, false) AS complimentary,
+       bg.participant_count AS group_participant_count,
+       bg.person_block_minutes AS group_person_block_minutes,
        c.id AS client_id, c.name AS client_name, c.email AS client_email, c.phone AS client_phone,
        t.name AS treatment_name, t.tag AS treatment_tag, t.price, t.category AS treatment_category,
        i.id AS intake_pk, i.intake_type, i.answers, i.flagged, i.flag_reason,
@@ -981,6 +990,7 @@ async function getBookingDetail(bookingId) {
      LEFT JOIN bookings jb ON jb.joint_group_id = b.joint_group_id AND jb.id <> b.id
      LEFT JOIN clients jc ON jc.id = jb.client_id
      LEFT JOIN treatments jt ON jt.id = jb.treatment_id
+     LEFT JOIN booking_groups bg ON bg.id = b.group_booking_id
      WHERE b.id = $1`,
     [bookingId]
   );
@@ -999,6 +1009,33 @@ async function getBookingDetail(bookingId) {
      ORDER BY created_at DESC`,
     [row.id, row.client_id, row.treatment_id]
   );
+
+  let groupMembers = null;
+  if (row.group_booking_id) {
+    const membersRes = await query(
+      `SELECT b.id AS booking_id, b.start_time, b.end_time, m.position,
+              c.id AS client_id, c.name AS client_name,
+              t.name AS treatment_name, t.tag AS treatment_tag, t.price
+       FROM booking_group_members m
+       JOIN bookings b ON b.id = m.booking_id
+       JOIN clients c ON c.id = m.client_id
+       LEFT JOIN treatments t ON t.id = b.treatment_id
+       WHERE m.group_id = $1
+       ORDER BY m.position ASC`,
+      [row.group_booking_id]
+    );
+    groupMembers = membersRes.rows.map((m) => ({
+      bookingId: m.booking_id,
+      clientId: m.client_id,
+      clientName: m.client_name,
+      treatmentName: m.treatment_name,
+      treatmentTag: m.treatment_tag,
+      price: m.price != null ? Number(m.price) : null,
+      startTime: m.start_time,
+      endTime: m.end_time,
+      position: m.position,
+    }));
+  }
 
   return {
     id: row.id,
@@ -1037,6 +1074,15 @@ async function getBookingDetail(bookingId) {
           treatmentName: row.joint_partner_treatment_name,
         }
       : null,
+    groupBookingId: row.group_booking_id || null,
+    groupParticipantCount: row.group_participant_count
+      ? Number(row.group_participant_count)
+      : null,
+    groupPersonBlockMinutes: row.group_person_block_minutes
+      ? Number(row.group_person_block_minutes)
+      : null,
+    isGroup: Boolean(row.group_booking_id),
+    groupMembers,
   };
 }
 

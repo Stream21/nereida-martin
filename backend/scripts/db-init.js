@@ -78,6 +78,8 @@ async function main() {
     await runFile(pool, 'migration_complimentary_bookings.sql');
     await runFile(pool, 'migration_booking_end_date.sql');
     await runFile(pool, 'migration_password_reset_tokens.sql');
+    await runFile(pool, 'migration_group_bookings.sql');
+    await runFile(pool, 'migration_group_min_two.sql');
     await runFile(pool, 'migration_google_refresh_token.sql');
     await runFile(pool, 'seed.sql');
 
