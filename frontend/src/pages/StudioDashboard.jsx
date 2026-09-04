@@ -11,6 +11,7 @@ import SourcePieChart from '../components/studio/SourcePieChart'
 import TopClientsCard from '../components/studio/TopClientsCard'
 import ClientsTable from '../components/studio/ClientsTable'
 import ServicesTable from '../components/studio/ServicesTable'
+import TreatmentsCatalog from '../components/studio/TreatmentsCatalog'
 import StudioCalendar from '../components/studio/StudioCalendar'
 import StudioSettingsPanel from '../components/studio/StudioSettingsPanel'
 import { useOwnerAuth } from '../hooks/useOwnerAuth'
@@ -42,6 +43,10 @@ export default function StudioDashboard() {
       tabFromUrl === 'settings'
       ? tabFromUrl
       : 'overview'
+  )
+  const servicesSectionFromUrl = searchParams.get('section')
+  const [servicesSection, setServicesSection] = useState(
+    servicesSectionFromUrl === 'historial' ? 'historial' : 'catalog'
   )
   const [overview, setOverview] = useState(null)
   const [monthly, setMonthly] = useState([])
@@ -171,8 +176,32 @@ export default function StudioDashboard() {
         )}
 
         {activeTab === 'services' && (
-          <motion.div key="services" variants={tabVariants} initial="initial" animate="animate" exit="exit">
-            <ServicesTable />
+          <motion.div key="services" variants={tabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+            <div className="flex gap-2 p-1 rounded-2xl bg-surface-container-low w-full sm:w-auto sm:inline-flex">
+              <button
+                type="button"
+                onClick={() => setServicesSection('catalog')}
+                className={`cursor-pointer flex-1 sm:flex-none rounded-xl px-4 py-2.5 text-sm font-medium min-h-11 transition-colors ${
+                  servicesSection === 'catalog'
+                    ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                    : 'text-on-surface-variant'
+                }`}
+              >
+                Catálogo
+              </button>
+              <button
+                type="button"
+                onClick={() => setServicesSection('historial')}
+                className={`cursor-pointer flex-1 sm:flex-none rounded-xl px-4 py-2.5 text-sm font-medium min-h-11 transition-colors ${
+                  servicesSection === 'historial'
+                    ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                    : 'text-on-surface-variant'
+                }`}
+              >
+                Historial
+              </button>
+            </div>
+            {servicesSection === 'catalog' ? <TreatmentsCatalog /> : <ServicesTable />}
           </motion.div>
         )}
 

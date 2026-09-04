@@ -139,6 +139,31 @@ export function fetchOwnerTreatments() {
   return ownerFetch('/treatments')
 }
 
+export function fetchOwnerTreatmentsCatalog() {
+  return ownerFetch('/treatments/catalog')
+}
+
+export function createOwnerTreatment(payload) {
+  return ownerFetch('/treatments', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateOwnerTreatment(id, payload) {
+  return ownerFetch(`/treatments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function reorderOwnerTreatments(items) {
+  return ownerFetch('/treatments/reorder', {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+  })
+}
+
 export function fetchOwnerBooking(bookingId) {
   return ownerFetch(`/bookings/${bookingId}`)
 }

@@ -8,8 +8,12 @@ CREATE TABLE treatments (
   duration_min INTEGER NOT NULL,
   duration_max INTEGER,
   price DECIMAL(8,2),
-  active BOOLEAN DEFAULT true
+  active BOOLEAN DEFAULT true,
+  owner_only BOOLEAN NOT NULL DEFAULT false,
+  display_order INTEGER NOT NULL DEFAULT 100
 );
+
+CREATE INDEX idx_treatments_display_order ON treatments (display_order, id);
 
 CREATE TABLE clients (
   id SERIAL PRIMARY KEY,

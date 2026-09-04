@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const multer = require('multer');
 const requireOwnerAuth = require('../middleware/requireOwnerAuth');
 const dashboard = require('../services/ownerDashboardService');
+const treatmentCatalog = require('../services/treatmentCatalogService');
 const clientAuth = require('../services/clientAuthService');
 const clientImport = require('../services/clientImportService');
 const { TIMEZONE, formatStudioDate, formatStudioTime } = require('../utils/studioTimezone');
@@ -139,6 +140,59 @@ router.get('/treatments', async (req, res) => {
   } catch (err) {
     console.error('Owner treatments error:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/treatments/catalog', async (req, res) => {
+  try {
+    const treatments = await treatmentCatalog.listCatalog();
+    res.json({ treatments, categories: treatmentCatalog.CATEGORIES });
+  } catch (err) {
+    console.error('Owner catalog list error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/treatments', async (req, res) => {
+  try {
+    const treatment = await treatmentCatalog.createTreatment(req.body || {});
+    res.status(201).json({ treatment });
+  } catch (err) {
+    console.error('Owner create treatment error:', err);
+    res.status(err.status || 500).json({
+      error: err.message || 'Error interno del servidor',
+      details: err.details,
+    });
+  }
+});
+
+router.patch('/treatments/:id', async (req, res) => {
+  try {
+    const treatment = await treatmentCatalog.updateTreatment(
+      req.params.id,
+      req.body || {}
+    );
+    res.json({ treatment });
+  } catch (err) {
+    console.error('Owner update treatment error:', err);
+    res.status(err.status || 500).json({
+      error: err.message || 'Error interno del servidor',
+      details: err.details,
+    });
+  }
+});
+
+router.put('/treatments/reorder', async (req, res) => {
+  try {
+    const treatments = await treatmentCatalog.reorderTreatments(
+      req.body?.items || req.body?.treatments || []
+    );
+    res.json({ treatments });
+  } catch (err) {
+    console.error('Owner reorder treatments error:', err);
+    res.status(err.status || 500).json({
+      error: err.message || 'Error interno del servidor',
+    });
   }
 });
 

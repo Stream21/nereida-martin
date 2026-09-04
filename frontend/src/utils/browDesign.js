@@ -129,14 +129,27 @@ export function resolveMaintenanceBooking(treatmentIds = [], { silent = false } 
 }
 
 export function sortTreatmentsForDisplay(items, catalogTreatments = []) {
-  const catalogOrder = new Map(catalogTreatments.map((t, index) => [t.id, index]))
+  const catalogOrder = new Map(
+    catalogTreatments.map((t, index) => [
+      t.id,
+      t.displayOrder ?? t.display_order ?? index,
+    ])
+  )
   return [...items].sort((a, b) => {
+    const hasCatalogA = catalogOrder.has(a.id)
+    const hasCatalogB = catalogOrder.has(b.id)
+    if (hasCatalogA || hasCatalogB) {
+      const pa = catalogOrder.get(a.id) ?? 9999
+      const pb = catalogOrder.get(b.id) ?? 9999
+      if (pa !== pb) return pa - pb
+      return String(a.name || '').localeCompare(String(b.name || ''), 'es')
+    }
     const ia = TREATMENT_DISPLAY_ORDER.indexOf(a.id)
     const ib = TREATMENT_DISPLAY_ORDER.indexOf(b.id)
     const pa = ia === -1 ? 1000 : ia
     const pb = ib === -1 ? 1000 : ib
     if (pa !== pb) return pa - pb
-    return (catalogOrder.get(a.id) ?? 999) - (catalogOrder.get(b.id) ?? 999)
+    return String(a.name || '').localeCompare(String(b.name || ''), 'es')
   })
 }
 

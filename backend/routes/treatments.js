@@ -6,40 +6,16 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, category, name, tag, duration_min, duration_max, price
+      `SELECT id, category, name, tag, duration_min, duration_max, price,
+              COALESCE(display_order, 100) AS display_order
        FROM treatments
        WHERE active = true AND COALESCE(owner_only, false) = false
-       ORDER BY
-         CASE category
-           WHEN 'cejas' THEN 1
-           WHEN 'pestanas' THEN 2
-           WHEN 'rostro' THEN 3
-           WHEN 'depilacion' THEN 4
-           WHEN 'smile' THEN 5
-         END,
-         CASE id
-           WHEN 'brow-design-primera' THEN 1
-           WHEN 'brow-design-seguimiento' THEN 2
-           WHEN 'perfilado-conjunto' THEN 3
-           WHEN 'brow-define' THEN 4
-           WHEN 'brow-lami' THEN 5
-           WHEN 'brow-lami-define' THEN 6
-           WHEN 'brow-henna' THEN 7
-           WHEN 'brow-restored' THEN 8
-           WHEN 'micropigmentacion-soft-pixel' THEN 9
-           WHEN 'lash-lift-korean' THEN 10
-           WHEN 'skin-reset' THEN 11
-           WHEN 'skin-boost' THEN 12
-           WHEN 'labio-superior' THEN 13
-           WHEN 'depilacion-facial' THEN 14
-           WHEN 'smile-gem' THEN 15
-           ELSE 99
-         END,
-         name`
+       ORDER BY display_order ASC, name ASC`
     );
 
     const treatments = result.rows.map((t) => ({
       ...t,
+      displayOrder: Number(t.display_order),
       duration: formatDuration(t.duration_min, t.duration_max),
       priceLabel: formatPrice(t.price, t.tag),
     }));

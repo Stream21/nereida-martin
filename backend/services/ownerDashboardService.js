@@ -1088,10 +1088,12 @@ async function getBookingDetail(bookingId) {
 
 async function listOwnerTreatments() {
   const result = await query(
-    `SELECT id, category, name, tag, duration_min, duration_max, price, active
+    `SELECT id, category, name, tag, duration_min, duration_max, price, active,
+            COALESCE(owner_only, false) AS owner_only,
+            COALESCE(display_order, 100) AS display_order
      FROM treatments
      WHERE active = true OR id = 'micropigmentacion-soft-pixel'
-     ORDER BY active DESC, category, name`
+     ORDER BY display_order ASC, name ASC`
   );
   return result.rows.map((t) => ({
     id: t.id,
@@ -1102,6 +1104,8 @@ async function listOwnerTreatments() {
     durationMax: t.duration_max,
     price: t.price != null ? Number(t.price) : null,
     active: t.active,
+    ownerOnly: Boolean(t.owner_only),
+    displayOrder: Number(t.display_order),
   }));
 }
 
