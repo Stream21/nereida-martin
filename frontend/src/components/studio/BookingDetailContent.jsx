@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import IntakeAnswers from './IntakeAnswers'
 import AssessmentPhotos from './AssessmentPhotos'
+import BookingNotesSection from './BookingNotesSection'
 import {
   fetchOwnerBooking,
   confirmOwnerBookingReview,
@@ -723,6 +724,17 @@ export default function BookingDetailContent({
                 </div>
               </div>
             )}
+
+            {!loading &&
+              booking?.clientId &&
+              Number.isFinite(numericId) &&
+              !String(bookingId || '').startsWith('gcal:') && (
+                <BookingNotesSection
+                  clientId={booking.clientId}
+                  bookingId={numericId}
+                  notes={booking.notes}
+                />
+              )}
 
             {hasIntake && (
               <motion.button

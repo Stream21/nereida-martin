@@ -1,5 +1,6 @@
 const { query } = require('../db/pool');
 const { TIMEZONE } = require('../utils/studioTimezone');
+const notesService = require('./ownerNotesService');
 const { formatIntakeForOwner } = require('../config/intakeQuestions');
 const { IMPORTED_CLIENT_EMAIL } = require('./studioSettings');
 const { listGoogleCalendarItemsInRange } = require('./ghostBlockRanges');
@@ -748,7 +749,8 @@ async function updateClient(clientId, { name, phone, email, notes, hasPerfiladoH
     return { error: 'Teléfono no válido', status: 400 };
   }
 
-  const notesVal = notes != null ? String(notes) : null;
+  const notesProvided = notes !== undefined;
+  const notesVal = notesProvided ? String(notes) : null;
   const perfiladoFlag =
     hasPerfiladoHistory === undefined ? null : Boolean(hasPerfiladoHistory);
 
@@ -759,11 +761,20 @@ async function updateClient(clientId, { name, phone, email, notes, hasPerfiladoH
            email = $2,
            phone = $3,
            phone_normalized = $4,
-           notes = $5,
-           has_perfilado_history = COALESCE($6, has_perfilado_history)
-       WHERE id = $7
+           notes = CASE WHEN $5::boolean THEN $6 ELSE notes END,
+           has_perfilado_history = COALESCE($7, has_perfilado_history)
+       WHERE id = $8
        RETURNING id, name, email, phone, notes, account_status, has_perfilado_history`,
-      [nameTrim, emailTrim, phoneTrim || null, phoneNorm, notesVal, perfiladoFlag, clientId]
+      [
+        nameTrim,
+        emailTrim,
+        phoneTrim || null,
+        phoneNorm,
+        notesProvided,
+        notesVal,
+        perfiladoFlag,
+        clientId,
+      ]
     );
     const row = result.rows[0];
     return {
@@ -1009,6 +1020,7 @@ async function getBookingDetail(bookingId) {
      ORDER BY created_at DESC`,
     [row.id, row.client_id, row.treatment_id]
   );
+  const notes = await notesService.listByBooking(row.id);
 
   let groupMembers = null;
   if (row.group_booking_id) {
@@ -1064,6 +1076,7 @@ async function getBookingDetail(bookingId) {
     intake,
     hasPhoto: photos.length > 0,
     photos,
+    notes,
     jointGroupId: row.joint_group_id,
     jointRole: row.joint_role,
     isJoint: Boolean(row.joint_group_id),

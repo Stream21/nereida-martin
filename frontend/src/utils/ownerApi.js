@@ -123,6 +123,28 @@ export function updateClient(clientId, payload) {
   })
 }
 
+export function fetchClientNotes(clientId) {
+  return ownerFetch(`/clients/${clientId}/notes`)
+}
+
+export function createClientNote(clientId, { body, bookingId }) {
+  return ownerFetch(`/clients/${clientId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ body, bookingId: bookingId || null }),
+  })
+}
+
+export function updateClientNote(noteId, { body }) {
+  return ownerFetch(`/notes/${noteId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body }),
+  })
+}
+
+export function deleteClientNote(noteId) {
+  return ownerFetch(`/notes/${noteId}`, { method: 'DELETE' })
+}
+
 export function createClient({ name, phone, email, hasPerfiladoHistory }) {
   return ownerFetch('/clients', {
     method: 'POST',

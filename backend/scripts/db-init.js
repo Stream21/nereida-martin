@@ -82,6 +82,7 @@ async function main() {
     await runFile(pool, 'migration_group_min_two.sql');
     await runFile(pool, 'migration_google_refresh_token.sql');
     await runFile(pool, 'migration_treatments_catalog.sql');
+    await runFile(pool, 'migration_studio_notes.sql');
     await runFile(pool, 'seed.sql');
 
     const counts = await pool.query(`

@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const multer = require('multer');
 const requireOwnerAuth = require('../middleware/requireOwnerAuth');
 const dashboard = require('../services/ownerDashboardService');
+const notesService = require('../services/ownerNotesService');
 const treatmentCatalog = require('../services/treatmentCatalogService');
 const clientAuth = require('../services/clientAuthService');
 const clientImport = require('../services/clientImportService');
@@ -114,6 +115,74 @@ router.patch('/clients/:id', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Owner update client error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.get('/clients/:id/notes', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const data = await notesService.listByClient(id);
+    if (!data) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Owner list notes error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.post('/clients/:id/notes', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await notesService.createNote(id, req.body || {});
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Owner create note error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.patch('/notes/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await notesService.updateNote(id, req.body || {});
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner update note error:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+router.delete('/notes/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'ID no válido' });
+    }
+    const result = await notesService.deleteNote(id);
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Owner delete note error:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

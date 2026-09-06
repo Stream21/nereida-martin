@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Icon from '../ui/Icon'
 import ClientHistoryModal from './ClientHistoryModal'
+import ClientNotesModal from './ClientNotesModal'
 import MobileFilterSheet from './MobileFilterSheet'
 import {
   createClient,
@@ -95,11 +96,11 @@ function statusMeta(client) {
   }
 }
 
-function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
+function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory, onOpenNotes }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '', hasPerfiladoHistory: false })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', hasPerfiladoHistory: false })
   const [history, setHistory] = useState([])
 
   useEffect(() => {
@@ -113,7 +114,6 @@ function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
           name: c.name || '',
           email: c.email || '',
           phone: c.phone || '',
-          notes: c.notes || '',
           hasPerfiladoHistory: Boolean(c.hasPerfiladoHistory),
         })
         setHistory(c.history || [])
@@ -190,18 +190,21 @@ function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory }) {
                 className="mt-1 w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm outline-none focus:border-primary"
               />
             </label>
-            <label className="block">
-              <span className="text-[10px] font-label font-bold tracking-widest uppercase text-primary">
-                Notas internas
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenNotes?.(clientId)
+                onClose()
+              }}
+              className="cursor-pointer w-full rounded-2xl bg-primary/10 text-primary px-4 py-3 min-h-12 text-sm font-medium flex items-center justify-between gap-3"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Icon name="sticky_note_2" className="text-lg" />
+                Abrir notas
               </span>
-              <textarea
-                rows={4}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Alergias, preferencias, observaciones…"
-                className="mt-1 w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm outline-none focus:border-primary resize-none"
-              />
-            </label>
+              <Icon name="chevron_right" className="text-lg" />
+            </button>
 
             {error && <p className="text-sm text-error">{error}</p>}
 
@@ -291,6 +294,7 @@ export default function ClientsTable() {
   const [importing, setImporting] = useState(false)
   const [fichaId, setFichaId] = useState(null)
   const [historyId, setHistoryId] = useState(null)
+  const [notesId, setNotesId] = useState(null)
   const fileRef = useRef(null)
   const tableTopRef = useRef(null)
 
@@ -551,6 +555,15 @@ export default function ClientsTable() {
         className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
       >
         <Icon name="history" className="text-lg" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setNotesId(client.id)}
+        title="Notas"
+        aria-label="Notas"
+        className="cursor-pointer p-2 rounded-xl text-primary hover:bg-primary/10 transition-colors"
+      >
+        <Icon name="sticky_note_2" className="text-lg" />
       </button>
       {client.accountStatus !== 'active' && client.accountStatus !== 'disabled' && (
         <button
@@ -1001,6 +1014,7 @@ export default function ClientsTable() {
           clientId={fichaId}
           onClose={() => setFichaId(null)}
           onOpenHistory={(id) => setHistoryId(id)}
+          onOpenNotes={(id) => setNotesId(id)}
           onSaved={() => {
             showToast('Ficha actualizada')
             loadClients()
@@ -1009,6 +1023,9 @@ export default function ClientsTable() {
       )}
       {historyId && (
         <ClientHistoryModal clientId={historyId} onClose={() => setHistoryId(null)} />
+      )}
+      {notesId && (
+        <ClientNotesModal clientId={notesId} onClose={() => setNotesId(null)} />
       )}
     </div>
   )
