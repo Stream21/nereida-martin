@@ -160,6 +160,7 @@ router.post('/cancel/:token', async (req, res) => {
           treatment: { name: row.treatment_name || 'Cita', tag: row.treatment_tag || '' },
           startTime,
           endTime: new Date(row.end_time),
+          cancelledBy: 'client',
         });
       } catch (err) {
         console.error('Joint cancellation email failed:', err.message);
@@ -190,6 +191,7 @@ router.post('/cancel/:token', async (req, res) => {
           treatment: { name: row.treatment_name || 'Cita', tag: row.treatment_tag || '' },
           startTime,
           endTime: new Date(row.end_time),
+          cancelledBy: 'client',
         });
       } catch (err) {
         console.error('Group cancellation email failed:', err.message);
@@ -234,6 +236,7 @@ router.post('/cancel/:token', async (req, res) => {
         treatment: { name: row.treatment_name || 'Cita', tag: row.treatment_tag || '' },
         startTime,
         endTime: new Date(row.end_time),
+        cancelledBy: 'client',
       });
     } catch (err) {
       console.error('Cancellation email failed:', err.message);
@@ -328,6 +331,26 @@ router.patch('/:id', async (req, res) => {
       return res.status(409).json(perfiladoClash);
     }
 
+    const previousStart = new Date(booking.start_time);
+    const previousEnd = new Date(booking.end_time);
+    const previousTreatment = {
+      name: booking.treatment_name || 'Cita',
+      tag: booking.treatment_tag || '',
+    };
+
+    let nextTreatmentName = booking.treatment_name || 'Cita';
+    let nextTreatmentTag = booking.treatment_tag || '';
+    if (treatmentId && treatmentId !== booking.treatment_id) {
+      const tRes = await query(
+        `SELECT name, tag FROM treatments WHERE id = $1`,
+        [treatmentId]
+      );
+      if (tRes.rows[0]) {
+        nextTreatmentName = tRes.rows[0].name;
+        nextTreatmentTag = tRes.rows[0].tag || '';
+      }
+    }
+
     await query(
       `UPDATE bookings SET start_time = $1, end_time = $2, treatment_id = $3,
        last_sync_source = 'web', updated_at = NOW()
@@ -340,12 +363,12 @@ router.patch('/:id', async (req, res) => {
         const googleCalendar = require('../services/googleCalendar');
         const event = await googleCalendar.updateEvent(booking.google_event_id, {
           summary: buildBookingSummary({
-            treatmentName: booking.treatment_name || 'Cita',
+            treatmentName: nextTreatmentName,
             clientName: booking.client_name,
           }),
           description: buildBookingDescription({
-            treatmentName: booking.treatment_name || 'Cita',
-            treatmentTag: booking.treatment_tag || '',
+            treatmentName: nextTreatmentName,
+            treatmentTag: nextTreatmentTag,
             clientName: booking.client_name,
             clientEmail: booking.client_email,
             bookingId: booking.id,
@@ -363,6 +386,25 @@ router.patch('/:id', async (req, res) => {
         );
       } catch (err) {
         console.error('Google Calendar update failed:', err.message);
+      }
+    }
+
+    if (booking.client_email && booking.client_email !== 'imported@studio.local') {
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendRescheduleNotice({
+          to: booking.client_email,
+          clientName: booking.client_name,
+          treatment: { name: nextTreatmentName, tag: nextTreatmentTag },
+          previousTreatment,
+          previousStartTime: previousStart,
+          previousEndTime: previousEnd,
+          startTime: start,
+          endTime: end,
+          changedBy: 'client',
+        });
+      } catch (err) {
+        console.error('Client reschedule email failed:', err.message);
       }
     }
 

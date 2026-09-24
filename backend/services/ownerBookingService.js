@@ -798,6 +798,20 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     });
     if (companionClash) return { ...companionClash, status: 409 };
 
+    const previousLegs = await query(
+      `SELECT b.id, b.start_time, b.end_time, c.name AS client_name, c.email AS client_email,
+              t.name AS treatment_name, t.tag AS treatment_tag
+       FROM bookings b
+       JOIN clients c ON c.id = b.client_id
+       LEFT JOIN treatments t ON t.id = b.treatment_id
+       WHERE b.joint_group_id = $1
+       ORDER BY b.start_time ASC`,
+      [booking.joint_group_id]
+    );
+    const previousById = new Map(
+      previousLegs.rows.map((leg) => [leg.id, leg])
+    );
+
     await query(
       `UPDATE bookings SET start_time = $1, end_time = $2, last_sync_source = 'owner', updated_at = NOW()
        WHERE id = $3`,
@@ -825,14 +839,21 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     const emailService = require('./emailService');
     for (const leg of legs.rows) {
       if (!hasRealClientEmail(leg.client_email)) continue;
+      const prev = previousById.get(leg.id);
       try {
-        await emailService.sendGoogleChangeNotice({
+        await emailService.sendRescheduleNotice({
           to: leg.client_email,
           clientName: leg.client_name,
           treatment: { name: leg.treatment_name || 'Cita', tag: leg.treatment_tag || '' },
+          previousTreatment: {
+            name: prev?.treatment_name || leg.treatment_name || 'Cita',
+            tag: prev?.treatment_tag || '',
+          },
+          previousStartTime: new Date(prev?.start_time || leg.start_time),
+          previousEndTime: new Date(prev?.end_time || leg.end_time),
           startTime: new Date(leg.start_time),
           endTime: new Date(leg.end_time),
-          changeType: 'rescheduled',
+          changedBy: 'studio',
         });
       } catch (err) {
         console.warn('Owner joint reschedule email failed:', err.message);
@@ -875,6 +896,18 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
       return { error: 'Horario no disponible', status: 409 };
     }
 
+    const previousById = new Map(
+      legs.map((leg) => [
+        leg.id,
+        {
+          start_time: leg.start_time,
+          end_time: leg.end_time,
+          treatment_name: leg.treatment_name,
+          treatment_tag: leg.treatment_tag,
+        },
+      ])
+    );
+
     let cursor = start;
     for (const leg of legs) {
       const legEnd = new Date(cursor.getTime() + personBlock * 60000);
@@ -902,14 +935,21 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     const refreshedLegs = await getGroupBookingsForGroup(booking.group_booking_id);
     for (const leg of refreshedLegs) {
       if (!hasRealClientEmail(leg.client_email)) continue;
+      const prev = previousById.get(leg.id);
       try {
-        await emailService.sendGoogleChangeNotice({
+        await emailService.sendRescheduleNotice({
           to: leg.client_email,
           clientName: leg.client_name,
           treatment: { name: leg.treatment_name || 'Perfilado', tag: leg.treatment_tag || '' },
+          previousTreatment: {
+            name: prev?.treatment_name || leg.treatment_name || 'Perfilado',
+            tag: prev?.treatment_tag || '',
+          },
+          previousStartTime: new Date(prev?.start_time || leg.start_time),
+          previousEndTime: new Date(prev?.end_time || leg.end_time),
           startTime: new Date(leg.start_time),
           endTime: new Date(leg.end_time),
-          changeType: 'rescheduled',
+          changedBy: 'studio',
         });
       } catch (err) {
         console.warn('Owner group reschedule email failed:', err.message);
@@ -946,6 +986,13 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     return { ...perfiladoClash, status: 409 };
   }
 
+  const previousStart = new Date(booking.start_time);
+  const previousEnd = new Date(booking.end_time);
+  const previousTreatment = {
+    name: booking.treatment_name || 'Cita',
+    tag: booking.treatment_tag || '',
+  };
+
   await query(
     `UPDATE bookings SET start_time = $1, end_time = $2, treatment_id = $3,
      last_sync_source = 'owner', updated_at = NOW()${complimentaryProvided ? ', complimentary = $5' : ''}
@@ -968,13 +1015,16 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
   if (hasRealClientEmail(booking.client_email)) {
     try {
       const emailService = require('./emailService');
-      await emailService.sendGoogleChangeNotice({
+      await emailService.sendRescheduleNotice({
         to: booking.client_email,
         clientName: booking.client_name,
         treatment: { name: treatmentName || 'Cita', tag: treatmentTag || '' },
+        previousTreatment,
+        previousStartTime: previousStart,
+        previousEndTime: previousEnd,
         startTime: start,
         endTime: end,
-        changeType: 'rescheduled',
+        changedBy: 'studio',
       });
     } catch (err) {
       console.warn('Owner reschedule email failed:', err.message);
@@ -1046,6 +1096,7 @@ async function cancelOwnerBooking(bookingId) {
           },
           startTime: new Date(row.start_time),
           endTime: new Date(row.end_time),
+          cancelledBy: 'studio',
         });
       } catch (err) {
         console.warn('Owner joint cancel email failed:', err.message);
@@ -1087,6 +1138,7 @@ async function cancelOwnerBooking(bookingId) {
         },
         startTime: new Date(booking.start_time),
         endTime: new Date(booking.end_time),
+        cancelledBy: 'studio',
       });
     } catch (err) {
       console.warn('Owner cancel email failed:', err.message);

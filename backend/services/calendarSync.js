@@ -1,6 +1,5 @@
 const { query } = require('../db/pool');
 const googleCalendar = require('./googleCalendar');
-const emailService = require('./emailService');
 const studioSettings = require('./studioSettings');
 const {
   buildWebBookingSummary,
@@ -227,14 +226,7 @@ async function upsertFromGoogleEvent(
       throw err;
     }
 
-    if (existing.source === 'web' && existing.client_id) {
-      await notifyClientOfGoogleChange(existing.id, {
-        type: cancelled ? 'cancelled' : timesChanged ? 'rescheduled' : 'updated',
-        startTime,
-        endTime,
-      });
-    }
-
+    // App-managed emails only: never notify clients from Google Calendar sync.
     return {
       action: cancelled ? 'cancelled' : 'updated',
       eventId: event.id,
@@ -348,43 +340,10 @@ function tallyImportResult(stats, result) {
   else stats.skipped++;
 }
 
-async function notifyClientOfGoogleChange(bookingId, { type, startTime, endTime }) {
-  try {
-    const result = await query(
-      `SELECT b.start_time, b.end_time, c.name AS client_name, c.email AS client_email,
-              t.name AS treatment_name, t.tag AS treatment_tag
-       FROM bookings b
-       JOIN clients c ON b.client_id = c.id
-       LEFT JOIN treatments t ON b.treatment_id = t.id
-       WHERE b.id = $1`,
-      [bookingId]
-    );
-
-    if (result.rows.length === 0) return;
-
-    const row = result.rows[0];
-    if (row.client_email === studioSettings.IMPORTED_CLIENT_EMAIL) return;
-
-    await emailService.sendGoogleChangeNotice({
-      to: row.client_email,
-      clientName: row.client_name,
-      treatment: {
-        name: row.treatment_name || 'Tu cita',
-        tag: row.treatment_tag || '',
-      },
-      startTime: startTime || new Date(row.start_time),
-      endTime: endTime || new Date(row.end_time),
-      changeType: type,
-    });
-  } catch (err) {
-    console.error(`Failed to notify client for booking ${bookingId}:`, err.message);
-  }
-}
-
 async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin, timeMax } = {}) {
   const params = [knownEventIds.length > 0 ? knownEventIds : ['__none__']];
   let sql = `
-    SELECT id, google_event_id, source FROM bookings
+    SELECT id, google_event_id FROM bookings
     WHERE google_event_id IS NOT NULL
       AND status IN ('confirmed', 'google_overlap')
       AND google_event_id != ALL($1::varchar[])`;
@@ -412,10 +371,6 @@ async function cancelOrphanBookings(knownEventIds, { dryRun = false, timeMin, ti
        WHERE id = $1`,
       [row.id]
     );
-
-    if (row.source === 'web') {
-      await notifyClientOfGoogleChange(row.id, { type: 'cancelled' });
-    }
 
     results.push({ action: 'cancelled_orphan', bookingId: row.id, eventId: row.google_event_id });
   }
@@ -566,16 +521,12 @@ async function reconcilePendingGoogleDeletes() {
   }
 }
 
-async function cancelBookingFromGoogle(bookingId, { notify = true } = {}) {
+async function cancelBookingFromGoogle(bookingId) {
   await query(
     `UPDATE bookings SET status = 'cancelled', last_sync_source = 'google', updated_at = NOW()
      WHERE id = $1 AND status IN ('confirmed', 'google_overlap')`,
     [bookingId]
   );
-
-  if (notify) {
-    await notifyClientOfGoogleChange(bookingId, { type: 'cancelled' });
-  }
 }
 
 /**
@@ -598,7 +549,7 @@ async function reconcileStaleGoogleBookings() {
     try {
       const event = await googleCalendar.getEvent(row.google_event_id);
       if (event.status === 'cancelled') {
-        await cancelBookingFromGoogle(row.id, { notify: row.source === 'web' });
+        await cancelBookingFromGoogle(row.id);
         cancelled.push({ bookingId: row.id, eventId: row.google_event_id, reason: 'cancelled' });
       }
     } catch (err) {
@@ -608,7 +559,7 @@ async function reconcileStaleGoogleBookings() {
         err.message?.includes('Not Found');
 
       if (notFound) {
-        await cancelBookingFromGoogle(row.id, { notify: row.source === 'web' });
+        await cancelBookingFromGoogle(row.id);
         cancelled.push({ bookingId: row.id, eventId: row.google_event_id, reason: 'deleted' });
       } else {
         errors.push({ bookingId: row.id, eventId: row.google_event_id, error: err.message });

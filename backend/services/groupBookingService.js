@@ -101,7 +101,7 @@ async function getGroupBookingsForGroup(groupId) {
   return result.rows;
 }
 
-async function cancelGroupBookings(groupId, { notify = true } = {}) {
+async function cancelGroupBookings(groupId, { notify = true, cancelledBy = 'studio' } = {}) {
   const groupRes = await query(
     `SELECT g.*, array_agg(b.google_event_id) FILTER (WHERE b.google_event_id IS NOT NULL) AS google_ids
      FROM booking_groups g
@@ -150,6 +150,7 @@ async function cancelGroupBookings(groupId, { notify = true } = {}) {
           },
           startTime: new Date(leg.start_time),
           endTime: new Date(leg.end_time),
+          cancelledBy,
         });
       } catch (err) {
         console.warn('Group cancel email failed:', err.message);

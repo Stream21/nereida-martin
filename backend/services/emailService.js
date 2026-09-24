@@ -170,7 +170,12 @@ function buildConfirmationHTML({
 </html>`;
 }
 
-function buildCancellationHTML({ clientName, treatment, startTime, endTime }) {
+function buildCancellationHTML({ clientName, treatment, startTime, endTime, cancelledBy = 'client' }) {
+  const intro =
+    cancelledBy === 'studio'
+      ? `El estudio ha cancelado tu cita de <strong>${treatment.name}</strong>.`
+      : `Tu cita de <strong>${treatment.name}</strong> ha sido cancelada correctamente.`;
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -182,10 +187,14 @@ function buildCancellationHTML({ clientName, treatment, startTime, endTime }) {
     </div>
     <div style="background:${E.white};border-radius:16px;padding:28px;box-shadow:0 2px 12px ${E.shadow};">
       <p style="color:${E.text};font-size:16px;margin:0 0 16px;">Hola <strong>${clientName}</strong>,</p>
-      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 20px;">
-        Tu cita de <strong>${treatment.name}</strong> del ${formatDate(startTime)} a las ${formatTime(startTime)} ha sido cancelada correctamente.
-      </p>
-      <p style="color:${E.muted};font-size:13px;margin:0;">Si deseas reservar de nuevo, visita nuestra web cuando quieras.</p>
+      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 20px;">${intro}</p>
+      <div style="background:${E.panel};border-radius:12px;padding:20px;margin:0 0 20px;">
+        <p style="color:${E.accent};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 8px;">Cita cancelada</p>
+        <p style="color:${E.text};font-size:16px;font-weight:600;margin:0;text-transform:capitalize;">${formatDate(startTime)}</p>
+        <p style="color:${E.muted};font-size:13px;margin:4px 0 0;">${formatTime(startTime)}${endTime ? ` – ${formatTime(endTime)}` : ''}</p>
+        <p style="color:${E.muted};font-size:13px;margin:8px 0 0;">${treatment.name}</p>
+      </div>
+      <p style="color:${E.muted};font-size:13px;margin:0;">Si deseas reservar de nuevo, visita nuestra web cuando quieras. Si tienes dudas, contáctanos.</p>
     </div>
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
       <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
@@ -195,17 +204,32 @@ function buildCancellationHTML({ clientName, treatment, startTime, endTime }) {
 </html>`;
 }
 
-function buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, changeType }) {
-  const titles = {
-    cancelled: 'Tu cita ha sido cancelada',
-    rescheduled: 'Tu cita ha sido reprogramada',
-    updated: 'Tu cita ha sido actualizada',
-  };
-  const messages = {
-    cancelled: 'El estudio ha cancelado tu cita. Si tienes dudas, contáctanos.',
-    rescheduled: 'El estudio ha cambiado la fecha u hora de tu cita. Revisa los nuevos datos:',
-    updated: 'El estudio ha actualizado los detalles de tu cita:',
-  };
+function slotBlock({ label, startTime, endTime, treatmentName }) {
+  return `
+      <div style="background:${E.panel};border-radius:12px;padding:20px;margin:0 0 12px;">
+        <p style="color:${E.accent};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 8px;">${label}</p>
+        <p style="color:${E.text};font-size:16px;font-weight:600;margin:0;text-transform:capitalize;">${formatDate(startTime)}</p>
+        <p style="color:${E.muted};font-size:13px;margin:4px 0 0;">${formatTime(startTime)}${endTime ? ` – ${formatTime(endTime)}` : ''}</p>
+        ${treatmentName ? `<p style="color:${E.muted};font-size:13px;margin:8px 0 0;">${treatmentName}</p>` : ''}
+      </div>`;
+}
+
+function buildRescheduleHTML({
+  clientName,
+  treatment,
+  previousTreatment,
+  previousStartTime,
+  previousEndTime,
+  startTime,
+  endTime,
+  changedBy = 'studio',
+}) {
+  const intro =
+    changedBy === 'client'
+      ? 'Has cambiado los datos de tu cita. Resumen:'
+      : 'El estudio ha cambiado los datos de tu cita. Resumen:';
+  const prevName = previousTreatment?.name || treatment?.name || 'Cita';
+  const nextName = treatment?.name || prevName;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -214,18 +238,24 @@ function buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, chan
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
       <h1 style="color:${E.text};font-size:22px;font-weight:600;margin:0;">Nereida Martín Studio</h1>
-      <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">${titles[changeType] || titles.updated}</p>
+      <p style="color:${E.accent};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Cita reprogramada</p>
     </div>
     <div style="background:${E.white};border-radius:16px;padding:28px;box-shadow:0 2px 12px ${E.shadow};">
       <p style="color:${E.text};font-size:16px;margin:0 0 16px;">Hola <strong>${clientName}</strong>,</p>
-      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 20px;">${messages[changeType] || messages.updated}</p>
-      ${changeType !== 'cancelled' ? `
-      <div style="background:${E.panel};border-radius:12px;padding:20px;">
-        <p style="color:${E.accent};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 8px;">Nueva fecha y hora</p>
-        <p style="color:${E.text};font-size:16px;font-weight:600;margin:0;text-transform:capitalize;">${formatDate(startTime)}</p>
-        <p style="color:${E.muted};font-size:13px;margin:4px 0 0;">${formatTime(startTime)} – ${formatTime(endTime)}</p>
-        <p style="color:${E.muted};font-size:13px;margin:8px 0 0;">${treatment.name}</p>
-      </div>` : ''}
+      <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 20px;">${intro}</p>
+      ${slotBlock({
+        label: 'Cita anterior',
+        startTime: previousStartTime,
+        endTime: previousEndTime,
+        treatmentName: prevName,
+      })}
+      ${slotBlock({
+        label: 'Nueva cita',
+        startTime,
+        endTime,
+        treatmentName: nextName,
+      })}
+      <p style="color:${E.muted};font-size:13px;margin:8px 0 0;">Si tienes dudas, contáctanos.</p>
     </div>
     <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid ${E.border};">
       <p style="color:${E.muted};font-size:11px;margin:0;">Nereida Martín Studio · Nereida Martín</p>
@@ -301,37 +331,85 @@ async function sendConfirmation({
   });
 }
 
-async function sendCancellationConfirmation({ to, clientName, treatment, startTime, endTime }) {
-  const transport = getTransporter();
-
-  await transport.sendMail({
-    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
-    to,
-    subject: `Cita cancelada – ${treatment.name} | Nereida Martín Studio`,
-    html: buildCancellationHTML({ clientName, treatment, startTime, endTime }),
-  });
-}
-
-async function sendGoogleChangeNotice({
+async function sendCancellationConfirmation({
   to,
   clientName,
   treatment,
   startTime,
   endTime,
-  changeType,
+  cancelledBy = 'client',
 }) {
   const transport = getTransporter();
-  const subjects = {
-    cancelled: 'Tu cita ha sido cancelada',
-    rescheduled: 'Tu cita ha sido reprogramada',
-    updated: 'Actualización de tu cita',
-  };
+  const subjectTreatment = treatment?.name || 'Cita';
+  const when = formatTime(startTime);
 
   await transport.sendMail({
     from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `${subjects[changeType] || subjects.updated} | Nereida Martín Studio`,
-    html: buildGoogleChangeHTML({ clientName, treatment, startTime, endTime, changeType }),
+    subject: `Cita cancelada – ${subjectTreatment} · ${when} | Nereida Martín Studio`,
+    html: buildCancellationHTML({
+      clientName,
+      treatment,
+      startTime,
+      endTime,
+      cancelledBy,
+    }),
+  });
+}
+
+async function sendRescheduleNotice({
+  to,
+  clientName,
+  treatment,
+  previousTreatment,
+  previousStartTime,
+  previousEndTime,
+  startTime,
+  endTime,
+  changedBy = 'studio',
+}) {
+  const transport = getTransporter();
+  const subjectTreatment = treatment?.name || previousTreatment?.name || 'Cita';
+
+  await transport.sendMail({
+    from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: `Cita reprogramada – ${subjectTreatment} | Nereida Martín Studio`,
+    html: buildRescheduleHTML({
+      clientName,
+      treatment,
+      previousTreatment,
+      previousStartTime,
+      previousEndTime,
+      startTime,
+      endTime,
+      changedBy,
+    }),
+  });
+}
+
+/** @deprecated Use sendRescheduleNotice. Kept for any leftover callers. */
+async function sendGoogleChangeNotice(opts) {
+  if (opts.changeType === 'cancelled') {
+    return sendCancellationConfirmation({
+      to: opts.to,
+      clientName: opts.clientName,
+      treatment: opts.treatment,
+      startTime: opts.startTime,
+      endTime: opts.endTime,
+      cancelledBy: 'studio',
+    });
+  }
+  return sendRescheduleNotice({
+    to: opts.to,
+    clientName: opts.clientName,
+    treatment: opts.treatment,
+    previousTreatment: opts.previousTreatment,
+    previousStartTime: opts.previousStartTime || opts.startTime,
+    previousEndTime: opts.previousEndTime || opts.endTime,
+    startTime: opts.startTime,
+    endTime: opts.endTime,
+    changedBy: opts.changedBy || 'studio',
   });
 }
 
@@ -652,6 +730,7 @@ async function sendPasswordReset({ to, name, resetUrl }) {
 module.exports = {
   sendConfirmation,
   sendCancellationConfirmation,
+  sendRescheduleNotice,
   sendGoogleChangeNotice,
   sendReminder,
   sendRebookingFollowup,
