@@ -223,16 +223,12 @@ async function createOwnerGroupBooking({
 
     for (const clientId of ids) {
       const clientRes = await dbClient.query(
-        `SELECT id, account_status FROM clients WHERE id = $1 FOR UPDATE`,
+        `SELECT id FROM clients WHERE id = $1 FOR UPDATE`,
         [clientId]
       );
       if (clientRes.rows.length === 0) {
         await dbClient.query('ROLLBACK');
         return { error: 'Clienta no encontrada', status: 404 };
-      }
-      if (clientRes.rows[0].account_status !== 'active') {
-        await dbClient.query('ROLLBACK');
-        return { error: 'Todas las clientas deben estar activas', status: 403 };
       }
     }
 

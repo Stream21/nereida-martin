@@ -30,7 +30,12 @@ import {
   fetchOwnerTreatments,
   fetchOwnerBooking,
 } from '../../utils/ownerApi'
-import { isGoogleBookingSource, studioTodayDate, studioNowMinutes } from '../../utils/studioFormat'
+import {
+  clientAccountStatusMeta,
+  isGoogleBookingSource,
+  studioTodayDate,
+  studioNowMinutes,
+} from '../../utils/studioFormat'
 
 const WEEKDAY_SHORT = ['L', 'M', 'X', 'J', 'V']
 const WEEKDAY_MED = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
@@ -472,8 +477,10 @@ function CreateBookingModal({
 
   useEffect(() => {
     const t = setTimeout(() => {
-      fetchClients({ search: clientSearch, page: 1, limit: 15, status: 'active' })
-        .then((res) => setClients(res.clients || []))
+      fetchClients({ search: clientSearch, page: 1, limit: 15 })
+        .then((res) =>
+          setClients((res.clients || []).filter((c) => c.accountStatus !== 'disabled'))
+        )
         .catch(() => setClients([]))
     }, 250)
     return () => clearTimeout(t)
@@ -656,27 +663,46 @@ function CreateBookingModal({
           <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
             {clients.length === 0 ? (
               <p className="text-xs text-on-surface-variant px-1 py-2">
-                Solo aparecen clientas con cuenta activa. Puedes invitarla o activarla en Clientes.
+                No hay clientas con ese criterio. Prueba otro nombre o teléfono.
               </p>
             ) : (
-              clients.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  setClientId(c.id)
-                  setClientSearch(c.name)
-                  setTreatmentId('')
-                  setTime('')
-                }}
-                className={`cursor-pointer w-full text-left rounded-xl px-3 py-2.5 text-sm min-h-11 ${
-                  clientId === c.id ? 'bg-primary/12 text-primary font-medium' : 'hover:bg-surface-container-low'
-                }`}
-              >
-                {c.name}
-                {c.phone ? <span className="text-on-surface-variant"> · {c.phone}</span> : null}
-              </button>
-              ))
+              clients.map((c) => {
+                const status = clientAccountStatusMeta(c)
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setClientId(c.id)
+                      setClientSearch(c.name)
+                      setTreatmentId('')
+                      setTime('')
+                    }}
+                    className={`cursor-pointer w-full text-left rounded-xl px-3 py-2.5 text-sm min-h-11 ${
+                      clientId === c.id
+                        ? 'bg-primary/12 text-primary font-medium'
+                        : 'hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate">
+                        {c.name}
+                        {c.phone ? (
+                          <span className="text-on-surface-variant font-normal"> · {c.phone}</span>
+                        ) : null}
+                      </span>
+                      {c.accountStatus !== 'active' ? (
+                        <span
+                          className={`shrink-0 inline-flex items-center gap-1 text-[10px] rounded-full pl-1.5 pr-2 py-0.5 ${status.className}`}
+                        >
+                          <Icon name={status.icon} className="text-sm" />
+                          {status.label}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                )
+              })
             )}
           </div>
         </label>

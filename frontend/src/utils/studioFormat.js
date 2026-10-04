@@ -107,3 +107,25 @@ export function photoSourceLabel(source) {
   if (source === 'micro_request') return 'Solicitud micropigmentación'
   return 'Valoración de cita'
 }
+
+/** Account status badge for owner client pickers / CRM. */
+export function clientAccountStatusMeta(client) {
+  if (client?.accountStatus === 'disabled') {
+    return { icon: 'block', label: 'Desactivada', className: 'bg-error-container text-error' }
+  }
+  if (client?.accountStatus === 'active') {
+    return { icon: 'check_circle', label: 'Activa', className: 'bg-primary/15 text-primary' }
+  }
+  if (client?.hasInvite) {
+    return {
+      icon: 'mail',
+      label: 'Invitada',
+      className: 'bg-tertiary-container/40 text-on-surface',
+    }
+  }
+  return {
+    icon: 'schedule',
+    label: 'Pendiente',
+    className: 'bg-amber-100 text-amber-900',
+  }
+}

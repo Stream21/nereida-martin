@@ -16,6 +16,7 @@ import {
   sendClientPasswordReset,
   updateClient,
 } from '../../utils/ownerApi'
+import { clientAccountStatusMeta } from '../../utils/studioFormat'
 
 const PAGE_SIZE = 10
 
@@ -76,24 +77,7 @@ function ContactCell({ client }) {
 }
 
 function statusMeta(client) {
-  if (client.accountStatus === 'disabled') {
-    return { icon: 'block', label: 'Desactivada', className: 'bg-error-container text-error' }
-  }
-  if (client.accountStatus === 'active') {
-    return { icon: 'check_circle', label: 'Activa', className: 'bg-primary/15 text-primary' }
-  }
-  if (client.hasInvite) {
-    return {
-      icon: 'mail',
-      label: 'Invitada',
-      className: 'bg-tertiary-container/40 text-on-surface',
-    }
-  }
-  return {
-    icon: 'schedule',
-    label: 'Pendiente',
-    className: 'bg-tertiary-container/40 text-on-surface',
-  }
+  return clientAccountStatusMeta(client)
 }
 
 function ClientFichaModal({ clientId, onClose, onSaved, onOpenHistory, onOpenNotes }) {

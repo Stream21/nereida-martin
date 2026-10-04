@@ -364,7 +364,7 @@ async function createOwnerJointBooking({
     await dbClient.query('BEGIN');
 
     const primaryRes = await dbClient.query(
-      `SELECT id, name, email, phone, account_status FROM clients WHERE id = $1 FOR UPDATE`,
+      `SELECT id, name, email, phone FROM clients WHERE id = $1 FOR UPDATE`,
       [primaryClientId]
     );
     if (primaryRes.rows.length === 0) {
@@ -372,13 +372,9 @@ async function createOwnerJointBooking({
       return { error: 'Cliente principal no encontrado', status: 404 };
     }
     const primaryRow = primaryRes.rows[0];
-    if (primaryRow.account_status !== 'active') {
-      await dbClient.query('ROLLBACK');
-      return { error: 'La clienta principal debe estar activa', status: 403 };
-    }
 
     const companionRes = await dbClient.query(
-      `SELECT id, name, email, phone, account_status FROM clients WHERE id = $1 FOR UPDATE`,
+      `SELECT id, name, email, phone FROM clients WHERE id = $1 FOR UPDATE`,
       [companionClientId]
     );
     if (companionRes.rows.length === 0) {
@@ -386,10 +382,6 @@ async function createOwnerJointBooking({
       return { error: 'Acompañante no encontrada', status: 404 };
     }
     const companionRow = companionRes.rows[0];
-    if (companionRow.account_status !== 'active') {
-      await dbClient.query('ROLLBACK');
-      return { error: 'La acompañante debe estar activa', status: 403 };
-    }
 
     let primaryTreatment;
     let realPrimaryTreatmentId = treatmentId;

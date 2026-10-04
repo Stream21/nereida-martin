@@ -8,7 +8,7 @@ import {
   fetchOwnerGroupAvailability,
   fetchOwnerGroupPreview,
 } from '../../utils/ownerApi'
-import { formatEuro } from '../../utils/studioFormat'
+import { clientAccountStatusMeta, formatEuro } from '../../utils/studioFormat'
 import {
   GROUP_BOOKING_MAX,
   GROUP_BOOKING_MIN,
@@ -23,6 +23,19 @@ function formatDurationLabel(minutes) {
     return r > 0 ? `${h} h ${r} min` : `${h} h`
   }
   return `${minutes} min`
+}
+
+function AccountStatusBadge({ client }) {
+  if (!client || client.accountStatus === 'active') return null
+  const status = clientAccountStatusMeta(client)
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center gap-1 text-[10px] rounded-full pl-1.5 pr-2 py-0.5 ${status.className}`}
+    >
+      <Icon name={status.icon} className="text-sm" />
+      {status.label}
+    </span>
+  )
 }
 
 function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
@@ -48,11 +61,15 @@ function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
 
     const timer = window.setTimeout(() => {
       setLoading(true)
-      fetchClients({ search: query, page: 1, limit: 12, status: 'active' })
+      fetchClients({ search: query, page: 1, limit: 12 })
         .then((res) => {
           if (requestId !== requestIdRef.current) return
           const taken = new Set(excludeKey ? excludeKey.split(',').filter(Boolean) : [])
-          setResults((res.clients || []).filter((c) => !taken.has(String(c.id))))
+          setResults(
+            (res.clients || []).filter(
+              (c) => c.accountStatus !== 'disabled' && !taken.has(String(c.id))
+            )
+          )
           setLoading(false)
         })
         .catch(() => {
@@ -77,7 +94,10 @@ function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
       {selection?.clientId ? (
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-on-surface">{selection.clientName}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium text-on-surface">{selection.clientName}</p>
+              <AccountStatusBadge client={selection} />
+            </div>
             {selection.clientPhone ? (
               <p className="text-xs text-on-surface-variant mt-0.5">{selection.clientPhone}</p>
             ) : null}
@@ -116,7 +136,7 @@ function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
             <p className="text-[11px] text-on-surface-variant mt-1.5 px-0.5">
               {excludeKey
                 ? 'No hay más clientas con ese criterio (puede que ya esté en el grupo).'
-                : 'No hay clientas activas con ese criterio.'}
+                : 'No hay clientas con ese criterio.'}
             </p>
           )}
           {showDropdown && results.length > 0 && (
@@ -134,10 +154,15 @@ function ClientSlotPicker({ index, selection, excludeIds, onPick, onClear }) {
                   }}
                   className="cursor-pointer w-full text-left px-3 py-2.5 text-sm hover:bg-surface-container-low min-h-11 border-b border-outline-variant/15 last:border-b-0"
                 >
-                  <span className="font-medium text-on-surface">{c.name}</span>
-                  {c.phone ? (
-                    <span className="text-on-surface-variant"> · {c.phone}</span>
-                  ) : null}
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium text-on-surface">{c.name}</span>
+                      {c.phone ? (
+                        <span className="text-on-surface-variant"> · {c.phone}</span>
+                      ) : null}
+                    </span>
+                    <AccountStatusBadge client={c} />
+                  </span>
                 </button>
               ))}
             </div>
@@ -368,6 +393,8 @@ export default function CreateGroupBookingModal({
                     clientId: client.id,
                     clientName: client.name,
                     clientPhone: client.phone || '',
+                    accountStatus: client.accountStatus,
+                    hasInvite: Boolean(client.hasInvite),
                   }
                   return next
                 })
