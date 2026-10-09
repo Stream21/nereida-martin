@@ -12,7 +12,7 @@ const WORK_WINDOWS_FRIDAY = [
   { startHour: 15, startMin: 0, endHour: 17, endMin: 0 },
 ];
 
-/** Ventana visible / cortesía en agenda owner (clientes no reservan aquí). */
+/** Ventana visible en agenda owner (clientes no reservan aquí; el estudio sí puede). */
 const OWNER_DISPLAY_WINDOW = { startHour: 8, startMin: 0, endHour: 20, endMin: 0 };
 
 function isWeekendDay(dateStr) {

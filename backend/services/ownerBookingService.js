@@ -148,27 +148,17 @@ async function createOwnerBooking({
 
     const dateStr = formatStudioDate(start);
     const timeStr = formatStudioTime(start);
-    const { slotFitsInWorkWindows } = require('../utils/studioHours');
-    const inWorkHours = slotFitsInWorkWindows(dateStr, start.getTime(), end.getTime());
-    const isComplimentary = Boolean(complimentary) || !inWorkHours;
-
-    if (!inWorkHours && !isComplimentary) {
-      await client.query('ROLLBACK');
-      return {
-        error: 'Fuera de horario',
-        message:
-          'Fuera del horario público solo se pueden crear citas de cortesía (amiga · sin cobro).',
-        status: 400,
-        code: 'OUTSIDE_HOURS',
-      };
-    }
+    // From the studio panel, outside public hours is allowed (08–20).
+    // Complimentary is only when explicitly requested — those bookings still count on the calendar
+    // but are excluded from revenue metrics.
+    const isComplimentary = Boolean(complimentary);
 
     const slotAvailable = await availabilityService.hasSlotAvailable(
       dateStr,
       timeStr,
       blockDuration,
       null,
-      { skipLeadTime: true, skipWorkHours: !inWorkHours }
+      { skipLeadTime: true, skipWorkHours: true }
     );
     if (!slotAvailable) {
       await client.query('ROLLBACK');
@@ -961,7 +951,7 @@ async function updateOwnerBooking(bookingId, { date, time, startTime, treatmentI
     timeStr,
     blockDuration,
     booking.id,
-    { skipLeadTime: true }
+    { skipLeadTime: true, skipWorkHours: true }
   );
   if (!slotAvailable) {
     return { error: 'Horario no disponible', status: 409 };

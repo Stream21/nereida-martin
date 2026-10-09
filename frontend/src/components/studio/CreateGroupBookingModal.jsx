@@ -178,7 +178,7 @@ export default function CreateGroupBookingModal({
   initialTime,
   gapStart,
   gapEnd,
-  initialComplimentary = false,
+  initialOutsideHours = false,
   onClose,
   onCreated,
 }) {
@@ -339,7 +339,7 @@ export default function CreateGroupBookingModal({
               {format(initialDate, "EEEE d 'de' MMMM", { locale: es })}
               {initialTime ? ` · ${initialTime}` : ''}
             </p>
-            {initialComplimentary && (
+            {initialOutsideHours && (
               <p className="text-xs text-on-surface-variant mt-1">Fuera de horario público</p>
             )}
           </div>

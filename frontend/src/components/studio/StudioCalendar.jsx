@@ -69,7 +69,7 @@ function workWindowsForDay(day) {
   ]
 }
 
-/** Franjas 08–20 fuera del horario público (solo citas de cortesía). */
+/** Franjas 08–20 fuera del horario público (reservables solo desde el estudio). */
 function outsideWindowsForDay(day) {
   if (day.getDay() === 0 || day.getDay() === 6) return []
   const afternoonEnd = day.getDay() === 5 ? 17 : 18
@@ -119,7 +119,7 @@ function formatDurationLabel(minutes) {
   return `${minutes} min`
 }
 
-/** Free intervals: horario público + franjas de cortesía (08–20). */
+/** Free intervals: horario público + franjas del estudio fuera de horario online (08–20). */
 function freeGapsForDay(day, dayEvents) {
   const busy = dayEvents
     .map((ev) => ({
@@ -505,7 +505,7 @@ function CreateBookingModal({
   useEffect(() => {
     setTime('')
     gapTimeHintRef.current = initialTime || null
-  }, [clientId, complimentary, date, initialTime])
+  }, [clientId, date, initialTime])
 
   useEffect(() => {
     if (!clientId || !date || !treatmentId) {
@@ -520,6 +520,7 @@ function CreateBookingModal({
     let cancelled = false
     setLoadingSlots(true)
 
+    // Studio panel can always book 08–20 (outside public online hours).
     const fetchSlots = hasGap
       ? fetchOwnerAvailabilityRange({
           date,
@@ -527,13 +528,13 @@ function CreateBookingModal({
           durationMinutes,
           gapStart,
           gapEnd,
-          allowOutsideHours: complimentary,
+          allowOutsideHours: true,
         })
       : fetchOwnerAvailability({
           date,
           treatmentId,
           durationMinutes,
-          allowOutsideHours: complimentary,
+          allowOutsideHours: true,
         })
 
     fetchSlots
@@ -564,7 +565,6 @@ function CreateBookingModal({
     gapEnd,
     clientId,
     durationMinutes,
-    complimentary,
   ])
 
   const handleSubmit = async (e) => {
@@ -817,7 +817,7 @@ function CreateBookingModal({
             <span className="min-w-0">
               <span className="block text-sm font-medium text-on-surface">Cita de amiga (sin cobro)</span>
               <span className="block text-xs text-on-surface-variant mt-0.5 leading-snug">
-                No sumará a tus ingresos. Válida dentro o fuera del horario de reservas online.
+                No sumará a tus ingresos. Puedes usarlo dentro o fuera del horario online.
               </span>
             </span>
           </label>
@@ -1088,7 +1088,7 @@ function TimedGrid({
                           onSlotClick(day, minsToLabel(bookStart), {
                             gapStart: bookStart,
                             gapEnd: gap.end,
-                            complimentary: Boolean(gap.outsideHours),
+                            outsideHours: Boolean(gap.outsideHours),
                           })
                         }}
                         className={`absolute left-0.5 right-0.5 z-0 rounded-md border border-dashed text-left px-1 overflow-hidden ${
@@ -1116,7 +1116,7 @@ function TimedGrid({
                               ? past
                                 ? `Pasado · ${label}`
                                 : gap.outsideHours
-                                ? `Amiga · ${label}`
+                                  ? `Fuera de horario · ${label}`
                                   : label
                               : ''}
                           </span>
@@ -1411,7 +1411,9 @@ export default function StudioCalendar({ initialBookingId = null }) {
       time,
       gapStart: gapMeta?.gapStart ?? null,
       gapEnd: gapMeta?.gapEnd ?? null,
-      complimentary: Boolean(gapMeta?.complimentary),
+      // Outside-hours gaps are billable by default; "amiga" stays an explicit choice.
+      complimentary: false,
+      outsideHours: Boolean(gapMeta?.outsideHours),
       mode: 'choose',
     })
   }
@@ -1602,7 +1604,7 @@ export default function StudioCalendar({ initialBookingId = null }) {
           initialTime={slotDraft.time}
           gapStart={slotDraft.gapStart}
           gapEnd={slotDraft.gapEnd}
-          initialComplimentary={Boolean(slotDraft.complimentary)}
+          initialOutsideHours={Boolean(slotDraft.outsideHours)}
           onClose={closeSlotDraft}
           onCreated={load}
         />
