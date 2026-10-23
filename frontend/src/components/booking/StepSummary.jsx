@@ -188,7 +188,7 @@ export default function StepSummary({
                   ? 'Tu reserva quedará pendiente hasta que tu acompañante confirme por email en 24 horas. No recibirás confirmación final hasta entonces.'
                   : pendingReview
                     ? 'Tu cita quedará pendiente de valoración por foto. Te avisaremos por email cuando confirmemos tu aptitud.'
-                    : 'Recibirás un email de confirmación con un enlace para cancelar y un recordatorio 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
+                    : 'Recibirás un email de confirmación con un enlace para cancelar, un recordatorio el día anterior y otro 6 horas antes de tu cita. Puedes cancelar hasta el día anterior a tu cita, a la misma hora.'}
               </p>
             </div>
           </div>

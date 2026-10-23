@@ -57,6 +57,7 @@ CREATE TABLE bookings (
   last_sync_source VARCHAR(20),
   sync_pending BOOLEAN DEFAULT false,
   reminder_sent BOOLEAN DEFAULT false,
+  reminder_day_before_sent BOOLEAN DEFAULT false,
   confirmation_sent BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -68,6 +69,8 @@ CREATE TABLE bookings (
 CREATE INDEX idx_bookings_start_time ON bookings(start_time);
 CREATE INDEX idx_bookings_status ON bookings(status);
 CREATE INDEX idx_bookings_reminder ON bookings(reminder_sent, start_time) WHERE status = 'confirmed';
+CREATE INDEX idx_bookings_reminder_day_before ON bookings(reminder_day_before_sent, start_time)
+  WHERE status = 'confirmed' AND reminder_day_before_sent = false;
 CREATE INDEX idx_bookings_google_event_id ON bookings(google_event_id) WHERE google_event_id IS NOT NULL;
 CREATE INDEX idx_bookings_cancel_token ON bookings(cancel_token) WHERE cancel_token IS NOT NULL;
 

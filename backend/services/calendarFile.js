@@ -33,6 +33,11 @@ function generateICS({ title, startTime, endTime, description, location }) {
     alarms: [
       {
         action: 'display',
+        description: `Tu cita es mañana: ${title}`,
+        trigger: { hours: 24, before: true },
+      },
+      {
+        action: 'display',
         description: `Tu cita es en 6 horas: ${title}`,
         trigger: { hours: 6, before: true },
       },

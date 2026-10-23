@@ -265,7 +265,12 @@ function buildRescheduleHTML({
 </html>`;
 }
 
-function buildReminderHTML({ clientName, treatment, startTime, endTime }) {
+function buildReminderHTML({ clientName, treatment, startTime, endTime, kind }) {
+  const whenLine =
+    kind === 'same_day'
+      ? 'Te recordamos que tu cita es <strong>hoy en unas horas</strong>. ¡Te esperamos!'
+      : 'Te recordamos que tu cita es <strong>mañana</strong>. ¡Te esperamos!';
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -279,7 +284,7 @@ function buildReminderHTML({ clientName, treatment, startTime, endTime }) {
     <div style="background:${E.white};border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 2px 12px ${E.shadow};">
       <p style="color:${E.text};font-size:16px;margin:0 0 20px;">Hola <strong>${clientName}</strong>,</p>
       <p style="color:${E.text};font-size:14px;line-height:1.6;margin:0 0 24px;">
-        Te recordamos que tu cita es <strong>hoy en unas horas</strong>. ¡Te esperamos!
+        ${whenLine}
       </p>
 
       <div style="background:${E.panel};border-radius:12px;padding:20px;margin-bottom:16px;">
@@ -413,14 +418,15 @@ async function sendGoogleChangeNotice(opts) {
   });
 }
 
-async function sendReminder({ to, clientName, treatment, startTime, endTime }) {
+async function sendReminder({ to, clientName, treatment, startTime, endTime, kind = 'day_before' }) {
   const transport = getTransporter();
+  const whenLabel = kind === 'same_day' ? 'hoy' : 'mañana';
 
   await transport.sendMail({
     from: `"Nereida Martín Studio" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `⏰ Recordatorio: Tu cita es hoy – ${treatment.name} · ${formatTime(startTime)} | Nereida Martín Studio`,
-    html: buildReminderHTML({ clientName, treatment, startTime, endTime }),
+    subject: `⏰ Recordatorio: Tu cita es ${whenLabel} – ${treatment.name} · ${formatTime(startTime)} | Nereida Martín Studio`,
+    html: buildReminderHTML({ clientName, treatment, startTime, endTime, kind }),
   });
 }
 

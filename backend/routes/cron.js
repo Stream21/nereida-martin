@@ -20,48 +20,72 @@ router.get('/reminders', async (req, res) => {
   if (!authorizeCron(req, res)) return;
 
   try {
+    const emailService = require('../services/emailService');
     const now = new Date();
-    const sixAndHalfHours = new Date(now.getTime() + 6.5 * 60 * 60 * 1000);
+    // Day-before: ~20–24.5h away. Same-day: within the next 6.5h (*/30 cron buffer).
+    const dayBeforeStart = new Date(now.getTime() + 20 * 60 * 60 * 1000);
+    const dayBeforeEnd = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
+    const sameDayEnd = new Date(now.getTime() + 6.5 * 60 * 60 * 1000);
 
-    const result = await query(
-      `SELECT b.id, b.start_time, b.end_time,
+    const baseSelect = `SELECT b.id, b.start_time, b.end_time,
               c.name AS client_name, c.email AS client_email,
               t.name AS treatment_name, t.tag AS treatment_tag
        FROM bookings b
        JOIN clients c ON b.client_id = c.id
        LEFT JOIN treatments t ON b.treatment_id = t.id
        WHERE b.status = 'confirmed'
+         AND c.email != 'imported@studio.local'`;
+
+    const [dayBeforeResult, sameDayResult] = await Promise.all([
+      query(
+        `${baseSelect}
+         AND b.reminder_day_before_sent = false
+         AND b.start_time > $1
+         AND b.start_time <= $2`,
+        [dayBeforeStart.toISOString(), dayBeforeEnd.toISOString()]
+      ),
+      query(
+        `${baseSelect}
          AND b.reminder_sent = false
          AND b.start_time > $1
-         AND b.start_time <= $2
-         AND c.email != 'imported@studio.local'`,
-      [now.toISOString(), sixAndHalfHours.toISOString()]
-    );
+         AND b.start_time <= $2`,
+        [now.toISOString(), sameDayEnd.toISOString()]
+      ),
+    ]);
 
-    let sent = 0;
+    let sentDayBefore = 0;
+    let sentSameDay = 0;
     const errors = [];
 
-    for (const row of result.rows) {
-      try {
-        const emailService = require('../services/emailService');
-        await emailService.sendReminder({
-          to: row.client_email,
-          clientName: row.client_name,
-          treatment: { name: row.treatment_name, tag: row.treatment_tag },
-          startTime: new Date(row.start_time),
-          endTime: new Date(row.end_time),
-        });
-
-        await query('UPDATE bookings SET reminder_sent = true WHERE id = $1', [row.id]);
-        sent++;
-      } catch (err) {
-        errors.push({ bookingId: row.id, error: err.message });
+    async function sendBatch(rows, kind, flagColumn) {
+      let sent = 0;
+      for (const row of rows) {
+        try {
+          await emailService.sendReminder({
+            to: row.client_email,
+            clientName: row.client_name,
+            treatment: { name: row.treatment_name, tag: row.treatment_tag },
+            startTime: new Date(row.start_time),
+            endTime: new Date(row.end_time),
+            kind,
+          });
+          await query(`UPDATE bookings SET ${flagColumn} = true WHERE id = $1`, [row.id]);
+          sent++;
+        } catch (err) {
+          errors.push({ bookingId: row.id, kind, error: err.message });
+        }
       }
+      return sent;
     }
 
+    sentDayBefore = await sendBatch(dayBeforeResult.rows, 'day_before', 'reminder_day_before_sent');
+    sentSameDay = await sendBatch(sameDayResult.rows, 'same_day', 'reminder_sent');
+
     res.json({
-      processed: result.rows.length,
-      sent,
+      processed: dayBeforeResult.rows.length + sameDayResult.rows.length,
+      sent: sentDayBefore + sentSameDay,
+      dayBefore: { processed: dayBeforeResult.rows.length, sent: sentDayBefore },
+      sameDay: { processed: sameDayResult.rows.length, sent: sentSameDay },
       errors: errors.length > 0 ? errors : undefined,
       timestamp: new Date().toISOString(),
     });
