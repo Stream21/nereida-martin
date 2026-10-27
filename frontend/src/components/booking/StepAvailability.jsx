@@ -80,7 +80,6 @@ export default function StepAvailability({
     : null
   const applyPerfiladoSpacing = isPerfiladoTreatment(treatmentId)
   const blockedWeeks = applyPerfiladoSpacing ? perfiladoBlockedWeeks : []
-  const hasBlockedWeeks = blockedWeeks.length > 0
 
   const jointQuery =
     jointMode && companionClientId
@@ -328,6 +327,16 @@ export default function StepAvailability({
     return eachDayOfInterval({ start: calStart, end: calEnd })
   }, [currentMonth])
 
+  const showPerfiladoWeekNotice = useMemo(() => {
+    if (!blockedWeeks.length) return false
+    return calendarDays.some(
+      (day) =>
+        isSameMonth(day, currentMonth) &&
+        !isBefore(day, goLiveDay) &&
+        isDateInBlockedPerfiladoWeek(day, blockedWeeks)
+    )
+  }, [blockedWeeks, calendarDays, currentMonth, goLiveDay])
+
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: es })
 
   const handleSelectDate = (day) => {
@@ -368,7 +377,7 @@ export default function StepAvailability({
 
   return (
     <div>
-      {hasBlockedWeeks && (
+      {showPerfiladoWeekNotice && (
         <motion.div
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
@@ -376,8 +385,8 @@ export default function StepAvailability({
         >
           <p className="text-sm text-on-surface">
             {jointMode
-              ? 'Una de vosotras ya tiene perfilado esta semana. Elige una fecha a partir de la semana siguiente.'
-              : 'Ya tienes un perfilado esta semana. Elige una fecha a partir de la semana siguiente.'}
+              ? 'Una de vosotras ya tiene perfilado en una semana de este mes. Elige otra semana.'
+              : 'Ya tienes un perfilado en una semana de este mes. Elige otra semana.'}
           </p>
         </motion.div>
       )}
